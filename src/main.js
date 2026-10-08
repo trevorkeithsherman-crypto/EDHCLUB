@@ -164,7 +164,7 @@ function newGame(keep) {
   if (keep && old) { S.players.forEach((p, i) => { p.name = old.players[i].name; p.deckText = old.players[i].deckText; }); S.motion = old.motion; S.sound = old.sound; S.view = old.view; }
   setFxState(S);
   S.players.forEach((p, i) => { if (p.bot) p.name = BOT_NAMES[i]; if (i < S.seats && net.isMine(i)) loadDeck(i, p.deckText); });
-  if (MODE !== 'hotseat') { const me = net.active ? net.seat : 0; P(me).name = ROOM.name; P(me).empty = false; }
+  if (MODE !== 'hotseat') { const me = net.active && net.seat != null ? net.seat : 0; P(me).name = ROOM.name; P(me).empty = false; }
   log('New game. Everyone shuffled and drew 7.');
 }
 
@@ -906,7 +906,11 @@ function onUp(e) {
   document.body.classList.remove('is-drag'); clearHot();
   ignoreClick = performance.now() + 350;
   if (d.lp) return;
-  if (!d.moved) { onCardClick(d.c); return; }
+  if (!d.moved) {
+    const slot = d.el.closest('.slot'); const z = slot && slot.dataset.zone;
+    if (z && /-(graveyard|exile)$/.test(z)) { const [pi, zone] = parseZone(z); openZone(pi, zone); return; }
+    onCardClick(d.c); return;
+  }
   drop(d, e.clientX, e.clientY, e.type === 'pointercancel');
 }
 function drop(d, x, y, cancel) {
@@ -937,7 +941,7 @@ function drop(d, x, y, cancel) {
 function onClick(e) {
   const a = e.target.closest('[data-act]'); if (!a || (a.closest('#modal') && a.dataset.act === 'close')) return;
   if (performance.now() < ignoreClick && e.target.closest('.card[data-id]')) return;
-  if (a.dataset.act === 'pileclick' && e.target.closest('.card[data-id]')) return;
+  if (a.dataset.act === 'pileclick' && e.target.closest('.card[data-id]') && !/-(graveyard|exile)$/.test(a.dataset.zone || '')) return;
   const act = a.dataset.act, p = +a.dataset.p; const r = a.getBoundingClientRect();
   switch (act) {
     case 'life': { const d = (+a.dataset.d) * (e.shiftKey ? 5 : 1); if (net.isMine(p)) changeLife(p, d, { manual: true }); else request(p, 'changeLife', d); break; }
@@ -1040,6 +1044,7 @@ async function boot() {
       if (!ROOM.host) { ROOM.seats = S.seats; }
       toast(ROOM.host ? `Table ${ROOM.code} is open. Share the code.` : `You're seated at ${ROOM.code}`, 4000);
     } catch (e) {
+      net.leave(); net.seat = null; net.ready = false;
       document.body.insertAdjacentHTML('afterbegin', `<div class="toast" style="position:fixed;left:50%;top:40%;transform:translateX(-50%);z-index:99;pointer-events:auto;max-width:460px">${esc(e.message)}<br><a href="/">Back to the lobby</a></div>`);
       S = null; newGame(false);
     }

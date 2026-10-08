@@ -18,9 +18,11 @@ export const net = {
   botSeats() { const out = []; for (let k = 0; k < this.seats; k++) if (k >= this.seats - this.bots) out.push(k); return out; },
   /** Join a room. Resolves once presence has settled and a seat is chosen. */
   async join({ code, name, isHost, seats, bots }) {
-    if (!supa) throw new Error('Rooms need the online service. Practice against bots works offline.');
+    if (!supa && !window.__edhChannel) throw new Error('Rooms need the online service. Practice against bots works offline.');
     this.code = code; this.name = name; this.isHost = isHost; this.seats = seats || 4; this.bots = bots || 0;
-    const ch = supa.channel('room:' + code, { config: { broadcast: { self: false, ack: false }, presence: { key: clientId } } });
+    // Tests can swap the transport for an in-browser bus (window.__edhChannel); production uses Supabase.
+    const make = window.__edhChannel || ((name, opts) => supa.channel(name, opts));
+    const ch = make('room:' + code, { config: { broadcast: { self: false, ack: false }, presence: { key: clientId } } });
     this.channel = ch;
     ch.on('broadcast', { event: 'seat' }, ({ payload }) => this.handlers.seat && this.handlers.seat(payload));
     ch.on('broadcast', { event: 'shared' }, ({ payload }) => { this.lastGotShared = payload.hash; this.handlers.shared && this.handlers.shared(payload); });
@@ -63,7 +65,7 @@ export const net = {
   },
   ownedSeats() { return this.isHost ? [this.seat, ...this.botSeats()] : [this.seat]; },
   resendAll() { this.lastSentSeatBy = {}; this.lastSentShared = ''; this.handlers.resend && this.handlers.resend(); },
-  leave() { if (this.channel) { supa.removeChannel(this.channel); this.channel = null; } },
+  leave() { if (this.channel) { if (this.channel.close) this.channel.close(); else supa.removeChannel(this.channel); this.channel = null; } },
 };
 
 function flatten(state) {

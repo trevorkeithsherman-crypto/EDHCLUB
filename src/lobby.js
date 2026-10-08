@@ -1,4 +1,4 @@
-import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile } from './supa.js';
+import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -13,7 +13,14 @@ async function refreshAccount() {
   nav.innerHTML = user
     ? `<span class="who">${esc(name)}${user.is_anonymous ? ' (guest)' : ''}</span><button type="button" class="btn ghost sm" data-go="signin">Account</button>`
     : `<button type="button" class="btn ghost" data-go="signin">Sign in</button>`;
-  renderClubs();
+  renderClubs(); renderDecks();
+}
+async function renderDecks() {
+  const body = $('#decksBody'); if (!online || !user) return;
+  const decks = await listDecks(); const last = lastDeckId();
+  body.innerHTML = decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · seated automatically' : ''}</small></span><span class="row">${d.id !== last ? `<button type="button" class="btn ghost sm" data-deck-use="${esc(d.id)}">Use next</button>` : ''}<button type="button" class="btn ghost sm" data-deck-del="${esc(d.id)}">Delete</button></span></li>`).join('')}</ul><p class="muted">Add or edit decks from the Decks button at any table.</p>` : '<p class="muted">No saved decks yet. Open a table, paste a list, and press "Save to my decks".</p>';
+  body.querySelectorAll('[data-deck-del]').forEach((b) => { b.onclick = async () => { await deleteDeck(b.dataset.deckDel); renderDecks(); }; });
+  body.querySelectorAll('[data-deck-use]').forEach((b) => { b.onclick = () => { setLastDeckId(b.dataset.deckUse); renderDecks(); }; });
 }
 
 function show(title, html) {

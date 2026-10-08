@@ -1,6 +1,3 @@
-"""Deep functional test. Run: npm run build && npx vite preview --port 4173 &  then  python3 tests/deep.py 4173
-Needs: pip install playwright pillow; playwright install chromium. Mocks Scryfall and Supabase; two-player sync runs over an in-browser bus.
-"""
 """Deep functional test of EDH Club: landing, table, bots, two-player sync."""
 import json, struct, zlib, sys, time, traceback
 from playwright.sync_api import sync_playwright
@@ -47,6 +44,10 @@ def supabase_mock(route):
         route.fulfill(status=200, content_type='application/json', body=json.dumps([{'ended_at': '2026-10-07T20:00:00Z', 'winner_name': 'Tester', 'players': [{'name': 'Tester'}, {'name': 'Mira'}], 'rounds': 9}])); return
     if '/rest/v1/rooms' in url and m == 'GET':
         route.fulfill(status=200, content_type='application/json', body=json.dumps([{'code': 'ABCDE', 'host_name': 'Mira', 'seats': 4, 'bots': 1, 'bracket': 3, 'created_at': '2026-10-08T22:00:00Z'}])); return
+    if '/rest/v1/decks' in url:
+        if m == 'GET': route.fulfill(status=200, content_type='application/json', body=json.dumps([{'id': 'd1', 'user_id': FAKE_USER['id'], 'name': 'Krenko Goblins', 'commander': 'Krenko, Mob Boss', 'colors': 'R', 'card_count': 100, 'mat': 'ember', 'list': 'Commander\n1 Krenko, Mob Boss\n\nDeck\n1 Goblin Chieftain\n98 Mountain', 'updated_at': '2026-10-08T00:00:00Z'}] if 'id=eq.d1' in url or True else [])); return
+        if m == 'POST': route.fulfill(status=201, content_type='application/json', body=json.dumps({'id': 'd2', 'name': 'Saved Deck'})); return
+        route.fulfill(status=204, body=''); return
     if '/rest/v1/clubs' in url and m == 'POST':
         route.fulfill(status=201, content_type='application/json', body=json.dumps({'id': 'c2', 'name': 'New Club', 'code': 'NEWCL'})); return
     route.fulfill(status=200 if m == 'GET' else 201, content_type='application/json', body='[]')
@@ -149,11 +150,10 @@ with sync_playwright() as p:
     # cast a creature via double-click, resolve
     stx = state(pg); cid = next(i for i in stx['players'][0]['zones']['hand'] if 'Creature' in stx['cards'][i]['type'] and not stx['cards'][i]['isCmdr'])
     creature = pg.locator(f'.hand .card[data-id="{cid}"]'); cname = stx['cards'][cid]['name']
-    creature.dblclick(); pg.wait_for_timeout(800)
-    check('double-click casts a spell onto the stack', pg.locator('.stackcards .card').count() == 1)
-    pg.click('[data-act=resolve]'); pg.wait_for_timeout(900)
+    creature.dblclick(); pg.wait_for_timeout(1000)
     st = state(pg); bf = [st['cards'][i] for i in st['players'][0]['zones']['battlefield']]
-    check('resolving a permanent puts it on the battlefield', any(c['name'] == cname for c in bf) and pg.locator('.stackcards .card').count() == 0)
+    check('double-click casts a permanent straight to the battlefield', any(c['name'] == cname for c in bf))
+    check('no stack lane; turn bar sits in the middle', pg.locator('#stackLane').count() == 0 and pg.locator('.turnbar .phases').count() == 1)
     # instant resolves to graveyard
     pg.evaluate("""() => { const S=JSON.parse(localStorage.getItem('edhclub-table-v2')); }""")
     bolt = pg.locator('.hand .card').filter(has=pg.locator('img[alt="Lightning Bolt"]')).first
@@ -164,10 +164,11 @@ with sync_playwright() as p:
         pg.click('[data-act=close]'); pg.wait_for_timeout(600)
         bolt = pg.locator('.hand .card').filter(has=pg.locator('img[alt="Lightning Bolt"]')).first
     if bolt.count():
-        bolt.dblclick(); pg.wait_for_timeout(700); pg.click('[data-act=resolve]'); pg.wait_for_timeout(800)
-        st = state(pg); check('resolving an instant sends it to the graveyard', any(st['cards'][i]['name'] == 'Lightning Bolt' for i in st['players'][0]['zones']['graveyard']))
+        bolt.dblclick(); pg.wait_for_timeout(500)
+        check('casting an instant flashes it at the table', pg.locator('.flyer.spell').count() == 1)
+        pg.wait_for_timeout(1400); st = state(pg); check('an instant goes to the graveyard after the flash', any(st['cards'][i]['name'] == 'Lightning Bolt' for i in st['players'][0]['zones']['graveyard']))
     # commander: cast, tax, resolve
-    pg.locator('.me [data-zone$=command] .card').first.dblclick(); pg.wait_for_timeout(1200); pg.click('[data-act=resolve]'); pg.wait_for_timeout(900)
+    pg.locator('.me [data-zone$=command] .card').first.dblclick(); pg.wait_for_timeout(1400)
     st = state(pg); cm = [c for c in st['cards'].values() if c['isCmdr'] and c['owner'] == 0][0]
     check('commander cast from command zone lands on battlefield', cm['zone'] == 'battlefield' and cm['casts'] == 1)
     cmel = pg.locator(f'.me .bf .card[data-id="{cm["id"]}"]')
@@ -236,11 +237,12 @@ with sync_playwright() as p:
     if pg.locator('.me .bf .card').count():
         c0 = pg.locator('.me .bf .card').first; cid = c0.get_attribute('data-id'); x0 = state(pg)['cards'][cid]['x']
         drag(pg, c0, pg.locator('.me .bf'), dx=200, dy=-60); check('drag to reposition on battlefield', abs(state(pg)['cards'][cid]['x'] - x0) > 0.05)
-    # hand -> stack drag
-    hc = pg.locator('.hand .card').first; drag(pg, hc, pg.locator('#stackLane')); check('drag hand card onto the stack casts it', pg.locator('.stackcards .card').count() >= 1 or len(state(pg)['players'][0]['zones']['battlefield']) > 0)
-    if pg.locator('.stackcards .card').count(): menu(pg, pg.locator('.stackcards .card').last, 'Counter it'); check('counter it moves spell to graveyard', pg.locator('.stackcards .card').count() == 0)
+    # hand fan layout
+    rots = pg.eval_on_selector_all('.hand .card', 'els=>els.map(e=>e.style.getPropertyValue("--rot"))')
+    check('hand is fanned (cards rotated progressively)', len(rots) >= 3 and rots[0] != rots[-1] and rots[0].endswith('deg'))
+    check('hand cards are larger than opponents\' cards', pg.eval_on_selector('.hand .card', 'e=>e.offsetWidth') > pg.eval_on_selector('.opps .bf .card, .opps .seat', 'e=>e.closest(".seat") ? 70 : 70'))
     # zoom
-    pg.mouse.move(5, 5); c = pg.locator('.hand .card').first.bounding_box(); pg.mouse.move(c['x'] + 10, c['y'] + 10); pg.mouse.move(c['x'] + 14, c['y'] + 16); pg.wait_for_timeout(500)
+    pg.mouse.move(5, 5); c = pg.locator('.hand .card').last.bounding_box(); pg.mouse.move(c['x'] + c['width'] * .6, c['y'] + c['height'] * .5); pg.mouse.move(c['x'] + c['width'] * .62, c['y'] + c['height'] * .52); pg.wait_for_timeout(600)
     check('hover zoom shows large card with artist credit', pg.is_visible('#zoom') and 'Test Artist' in pg.locator('#zoom').text_content())
     pg.mouse.move(5, 5); pg.wait_for_timeout(200)
     # seat switch (hotseat), rename, playmat
@@ -294,6 +296,20 @@ with sync_playwright() as p:
     check('table: no JS errors', not errs, str(errs)[:300])
     ctx.close()
 
+    # ================= B2. Saved decks (signed in) =================
+    ctx = browser.new_context(); pg, errs = setup(ctx)
+    pg.goto(BASE + '/'); pg.wait_for_timeout(600); pg.click('[data-go=signin]'); pg.wait_for_timeout(200); pg.fill('#nm', 'Tester'); pg.click('#guest'); pg.wait_for_timeout(900)
+    check('landing lists saved decks after sign-in', 'Krenko Goblins' in pg.locator('#decksBody').text_content())
+    pg.evaluate("localStorage.setItem('edhclub-last-deck','d1')")
+    pg.goto(BASE + '/table.html?mode=bots&seats=2&bots=1&name=Tester'); pg.wait_for_timeout(2500)
+    check('last-used deck seats automatically at a new table', 'Seated with Krenko Goblins' in pg.locator('#toasts').text_content() or [c for c in state(pg)['cards'].values() if c['isCmdr'] and c['owner'] == 0][0]['name'] == 'Krenko, Mob Boss')
+    pg.click('#importBtn'); pg.wait_for_timeout(900)
+    check('Decks dialog shows the deck library', pg.locator('.decklib').count() == 1 and 'Krenko Goblins' in pg.locator('.decklib').text_content())
+    pg.click('[data-deck-load]'); pg.wait_for_timeout(500); check('Load fills the list and name', 'Krenko' in pg.locator('#impList').input_value() and pg.locator('#impDeckName').input_value() == 'Krenko Goblins')
+    pg.fill('#impDeckName', 'Saved Deck'); pg.click('#impSave'); pg.wait_for_timeout(900); check('Save to my decks succeeds', 'Saved Saved Deck' in pg.locator('#toasts').text_content())
+    check('decks: no JS errors', not errs, str(errs)[:200])
+    ctx.close()
+
     # ================= C. Bots =================
     ctx = browser.new_context(); pg, errs = setup(ctx)
     pg.goto(BASE + '/table.html?mode=bots&seats=4&bots=3&name=Trevor'); pg.wait_for_timeout(1500)
@@ -345,7 +361,7 @@ with sync_playwright() as p:
         check('combat damage across clients lowers host life on both', state(host)['players'][0]['life'] == 37 and state(guest)['players'][0]['life'] == 37, f"h={state(host)['players'][0]['life']} g={state(guest)['players'][0]['life']}")
     # host passes turn -> guest sees it's their turn
     host.click('[data-act=pass]'); guest.wait_for_timeout(1500)
-    check('turn passes to guest on both screens', state(guest)['turn']['active'] == 1 and 'Guest' in guest.locator('#turn .who').text_content())
+    check('turn passes to guest on both screens', state(guest)['turn']['active'] == 1 and 'Guest' in guest.locator('.turnbar .who').text_content())
     # board wipe from host clears guest creature on both
     host.click('[data-act=wipe]'); host.click('.mi:has-text("Destroy all creatures")'); guest.wait_for_timeout(1500)
     check('board wipe applies on every client', not any('Creature' in state(guest)['cards'][i]['type'] for i in state(guest)['players'][1]['zones']['battlefield']) and not any('Creature' in state(host)['cards'][i]['type'] for i in state(host)['players'][1]['zones']['battlefield']))

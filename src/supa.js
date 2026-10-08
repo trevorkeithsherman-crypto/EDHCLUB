@@ -111,3 +111,27 @@ export async function recordGame({ code, clubId, winnerName, players, rounds }) 
   if (!supa) return;
   await supa.from('games').insert({ room_code: code, club_id: clubId || null, winner_name: winnerName, players, rounds });
 }
+
+/* ---------- Saved decks ---------- */
+const LAST_DECK_KEY = 'edhclub-last-deck';
+export function lastDeckId() { try { return localStorage.getItem(LAST_DECK_KEY) || ''; } catch { return ''; } }
+export function setLastDeckId(id) { try { if (id) localStorage.setItem(LAST_DECK_KEY, id); else localStorage.removeItem(LAST_DECK_KEY); } catch { /* ignore */ } }
+export async function listDecks() {
+  const user = await currentUser(); if (!supa || !user) return [];
+  const { data } = await supa.from('decks').select('id, name, commander, colors, card_count, mat, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false });
+  return data || [];
+}
+export async function getDeck(id) {
+  if (!supa || !id) return null;
+  const { data } = await supa.from('decks').select('*').eq('id', id).maybeSingle();
+  return data;
+}
+export async function saveDeck({ id, name, commander, colors, cardCount, list, mat }) {
+  const user = await currentUser(); if (!supa || !user) throw new Error('Sign in to save decks');
+  const row = { user_id: user.id, name, commander, colors, card_count: cardCount, list, mat: mat || 'auto', updated_at: new Date().toISOString() };
+  if (id) row.id = id;
+  const { data, error } = await supa.from('decks').upsert(row, { onConflict: 'id' }).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function deleteDeck(id) { if (supa && id) await supa.from('decks').delete().eq('id', id); if (lastDeckId() === id) setLastDeckId(''); }

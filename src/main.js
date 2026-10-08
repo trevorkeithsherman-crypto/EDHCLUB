@@ -3,7 +3,7 @@ import { DB, buildSample } from './decks.js';
 import { FX, SFX, Ambient, setFxState } from './fx.js';
 import { net } from './net.js';
 import { makeBot } from './bots.js';
-import { online, currentUser, recordGame, setRoomStatus, localName } from './supa.js';
+import { online, currentUser, recordGame, setRoomStatus, localName, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
 
 /* ---------- Mode from the URL ---------- */
 const Q = new URLSearchParams(location.search);
@@ -326,11 +326,30 @@ function castToStack(id, fromRect) {
   if (/Land/.test(c.type) && !fromCmd) { log(`${who} played ${c.name}`); moveCard(id, c.controller, 'battlefield', { anim: 'land', fromRect }); return; }
   S.stats.casts[c.controller] = (S.stats.casts[c.controller] || 0) + 1;
   if (fromCmd) log(`${who} cast ${c.name} from the command zone (tax ${2 * (c.casts || 0)})`); else log(`${who} cast ${c.name}`);
-  moveCard(id, c.controller, 'stack', { anim: fromCmd ? 'commander' : 'cast', fromRect });
+  if (isPerm(c)) { moveCard(id, c.controller, 'battlefield', { anim: fromCmd ? 'commander' : 'cast', fromRect }); return; }
+  // Instants and sorceries: announce, flash the card at the table, then it goes to the graveyard.
+  const from = fromRect || visRect(cardEl(id)); const dest = c.isCmdr ? 'command' : 'graveyard';
+  S.lastSpell = { id, t: Date.now() };
+  spellFlash(c, from);
+  moveCard(id, c.owner, dest, { anim: 'none', fromRect: from });
+}
+function spellFlash(c, from) {
+  if (!motionMul() || !from) { SFX.play('chime', firstColor(c)); return; }
+  SFX.play('chime', firstColor(c));
+  const size = Math.min(220, innerWidth * 0.16); const g = makeGhost(c, size); g.classList.add('spell');
+  const x0 = from.left + from.width / 2 - size / 2, y0 = from.top + from.height / 2 - size * RATIO / 2;
+  const x1 = innerWidth / 2 - size / 2, y1 = innerHeight * 0.42 - size * RATIO / 2;
+  const col = colorHex(c);
+  g.animate([
+    { transform: `translate(${x0}px,${y0}px) scale(.4)`, opacity: 0 },
+    { transform: `translate(${x1}px,${y1}px) scale(1)`, opacity: 1, filter: `drop-shadow(0 0 24px ${col})`, offset: 0.25 },
+    { transform: `translate(${x1}px,${y1}px) scale(1.02)`, opacity: 1, filter: `drop-shadow(0 0 30px ${col})`, offset: 0.7 },
+    { transform: `translate(${x1}px,${y1 - 40}px) scale(.9)`, opacity: 0, filter: `drop-shadow(0 0 0 ${col})` },
+  ], { duration: 1500 * (motionMul() >= 1 ? 1 : 0.5), easing: 'ease-in-out', fill: 'forwards' }).onfinish = () => g.remove();
+  FX.burst({ left: innerWidth / 2 - 40, top: innerHeight * 0.42 - 40, width: 80, height: 80 }, [col, css('--gold'), css('--parch')]);
 }
 function resolveTop() {
   const id = S.stack[S.stack.length - 1]; if (!id) return; const c = S.cards[id];
-  log(`${c.name} resolved`);
   if (isPerm(c)) moveCard(id, c.controller, 'battlefield', { anim: 'land' });
   else moveCard(id, c.owner, c.isCmdr ? 'command' : 'graveyard', { anim: 'fly' });
 }
@@ -534,18 +553,16 @@ function seatHTML(i, full) {
   const labels = full ? '<span class="zl top">Battlefield</span><span class="zl bot">Lands</span>' : '';
   return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''}" data-seat="${i}" data-mat="${mat}"${matStyle}>${head}<div class="bf" data-zone="p${i}-battlefield">${labels}${empty}${bf}</div>${dock}${crack}</div>`;
 }
-function renderTurn() {
-  const p = P(S.turn.active);
-  $('#turn').innerHTML = `<span class="tn">Round ${S.turn.number}</span><span class="who">${identityPips(S.turn.active)}${esc(p.name)}'s turn</span>
-  <div class="phases" role="group" aria-label="Phase">${PHASES.map((ph, k) => `<button type="button" class="ph ${k === S.turn.phase ? 'on' : ''}" data-act="phase" data-k="${k}">${ph}</button>`).join('')}</div>
-  <button type="button" class="btn sm" data-act="next">Next phase</button><button type="button" class="btn ghost sm" data-act="pass">Pass turn</button>`;
-}
+function renderTurn() { $('#turn').innerHTML = ''; }
 function renderMid() {
-  const ids = S.stack; const top = S.cards[ids[ids.length - 1]];
-  const cards = ids.map((id, k) => { const c = S.cards[id]; const isTop = k === ids.length - 1; return cardHTML(c, { cls: isTop ? 'top' : '', style: isTop ? `--g:${MANA[firstColor(c)] || MANA.C}` : '' }); }).join('');
+  const p = P(S.turn.active); const mine = net.isMine(S.turn.active);
   const last = S.log[0] ? S.log[0].text : 'Game log';
-  $('#mid').innerHTML = `<div class="lane" id="stackLane" data-zone="stack" data-pile="stack"><span class="lane-l">The Stack</span><div class="stackcards">${cards || '<span class="hint">Drag a spell here to cast it, or double-click it in your hand</span>'}</div>${top ? `<button type="button" class="btn" data-act="resolve">Resolve ${esc(top.name)}</button>` : ''}</div>
-  <div class="midtools"><button type="button" class="btn ghost sm" data-act="token">Token</button><button type="button" class="btn ghost sm" data-act="wipe">Board wipe</button><button type="button" class="btn ghost sm" data-act="d20">Roll d20</button><button type="button" class="ticker" data-act="log" title="Open the game log">${esc(last)}</button></div>`;
+  $('#mid').innerHTML = `<div class="turnbar ${mine ? 'mine' : ''}">
+    <div class="tb-who"><span class="tn">Round ${S.turn.number}</span><span class="who">${identityPips(S.turn.active)}${esc(p.name)}'s turn</span></div>
+    <div class="phases" role="group" aria-label="Phase">${PHASES.map((ph, k) => `<button type="button" class="ph ${k === S.turn.phase ? 'on' : ''}" data-act="phase" data-k="${k}">${ph}</button>`).join('')}</div>
+    <div class="tb-act"><button type="button" class="btn sm" data-act="next">Next phase</button><button type="button" class="btn ghost sm" data-act="pass">Pass turn</button></div>
+    <div class="midtools"><button type="button" class="btn ghost sm" data-act="token">Token</button><button type="button" class="btn ghost sm" data-act="wipe">Board wipe</button><button type="button" class="btn ghost sm" data-act="d20">Roll d20</button><button type="button" class="ticker" data-act="log" title="Open the game log">${esc(last)}</button></div>
+  </div>`;
 }
 function syncTools() {
   $('#viewSel').closest('label').hidden = MODE !== 'hotseat';
@@ -558,7 +575,7 @@ function render() {
   renderTurn();
   $('#opps').innerHTML = others().map((i) => seatHTML(i, false)).join('');
   $('#me').innerHTML = seatHTML(S.view, true);
-  renderMid(); syncTools();
+  renderMid(); syncTools(); fanHand();
   $('#opps').style.gridTemplateColumns = `repeat(${Math.max(1, (S.seats || 4) - 1)}, minmax(0, 1fr))`;
   sizeBattlefields(); Ambient.sync();
   net.queueSync(seatSnap, sharedSnap);
@@ -566,11 +583,27 @@ function render() {
   if (zoomId && !S.cards[zoomId]) hideZoom();
   requestAnimationFrame(drawArrows); queueSave();
 }
+// Lay the hand out as a fan: overlapping, rotated around a pivot below the cards.
+function fanHand() {
+  const hand = $('.me .hand'); if (!hand) return;
+  const cards = $$('.card', hand); const n = cards.length; if (!n) return;
+  const cw = cards[0].offsetWidth || 100;
+  const avail = Math.max(cw, hand.clientWidth - 24);
+  const step = n > 1 ? Math.min(cw * 0.72, (avail - cw) / (n - 1)) : 0;
+  const spread = Math.min(26, 3.2 * (n - 1));
+  hand.style.setProperty('--fan-h', `${cw * RATIO + 24 + spread * 1.2}px`);
+  const x0 = Math.max(12, (hand.clientWidth - ((n - 1) * step + cw)) / 2);
+  cards.forEach((el, i) => {
+    const t = n > 1 ? i / (n - 1) - 0.5 : 0;
+    const rot = t * spread; const lift = Math.abs(t) * Math.abs(t) * spread * 1.6;
+    el.style.left = `${x0 + i * step}px`; el.style.setProperty('--rot', `${rot.toFixed(2)}deg`); el.style.setProperty('--lift', `${lift.toFixed(1)}px`); el.style.zIndex = i + 1;
+  });
+}
 // Size battlefield cards so two rows (spells on top, lands below) always fit the mat.
 function sizeBattlefields() {
   $$('.bf').forEach((el) => {
     const h = el.clientHeight; if (!h) return;
-    const max = el.closest('.opps') ? (innerWidth < 760 ? 48 : 70) : (innerWidth < 760 ? 66 : 104);
+    const max = el.closest('.opps') ? Math.round(Math.min(80, Math.max(40, innerWidth * 0.048, innerHeight * 0.075))) : Math.round(Math.min(130, Math.max(56, Math.min(innerWidth * 0.075, innerHeight * 0.13))));
     el.style.setProperty('--cw', Math.max(30, Math.min(max, Math.floor((h * 0.45) / RATIO))) + 'px');
   });
 }
@@ -756,15 +789,37 @@ function renameModal(pi) {
   const go = () => { const v = $('#rnIn').value.trim(); if (v) P(pi).name = v; closeModal(); render(); };
   $('#rnGo').onclick = go; $('#rnIn').onkeydown = (e) => { if (e.key === 'Enter') go(); };
 }
-function importModal(pi) {
-  openModal(`<h2>Import a deck</h2><p>Paste a text export from Moxfield, Archidekt or any deck site, one card per line like "1 Sol Ring". Put the commander under a "Commander" heading, or type it below. Card art loads from Scryfall. Importing resets that seat's board and life.</p>
+async function deckLibraryHTML() {
+  if (!online) return '';
+  const user = await currentUser(); if (!user) return '<div class="summary">Sign in on the <a href="/">lobby</a> to keep decks on your account.</div>';
+  const decks = await listDecks(); const last = lastDeckId();
+  return `<div class="decklib"><div class="eyebrow">Your decks</div>${decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · last used' : ''}</small></span><span class="row"><button type="button" class="btn sm" data-deck-load="${d.id}">Load</button><button type="button" class="btn ghost sm" data-deck-del="${d.id}">Delete</button></span></li>`).join('')}</ul>` : '<p class="muted">No saved decks yet. Paste a list below and save it.</p>'}</div>`;
+}
+async function importModal(pi) {
+  const lib = await deckLibraryHTML();
+  openModal(`<h2>Decks</h2>${lib}<p>Paste a text export from Moxfield, Archidekt or any deck site, one card per line like "1 Sol Ring". Put the commander under a "Commander" heading, or type it below. Seating a deck resets that seat's board and life.</p>
   <div class="grid2"><label for="impSeat" ${MODE === 'hotseat' ? '' : 'hidden'}>Seat<select id="impSeat">${S.players.filter((p, i) => i < S.seats && net.isMine(i)).map((p) => { const i = S.players.indexOf(p); return `<option value="${i}" ${i === pi ? 'selected' : ''}>${esc(p.name)}</option>`; }).join('')}</select></label>
   <label for="impName">Player name<input id="impName" maxlength="24" value="${esc(P(pi).name)}"></label></div>
   <label for="impCmd">Commander (optional)<input id="impCmd" placeholder="Taken from the list if left blank"></label>
-  <label for="impList">Decklist<textarea id="impList" rows="11" spellcheck="false" data-autofocus></textarea></label>
+  <label for="impList">Decklist<textarea id="impList" rows="9" spellcheck="false" data-autofocus></textarea></label>
   <div class="summary" id="impSum"></div>
-  <div class="row"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn" id="impGo">Shuffle up and seat</button></div>`);
+  <div class="grid2"><label for="impDeckName">Deck name (to save)<input id="impDeckName" maxlength="40" placeholder="Krenko goblins"></label></div>
+  <div class="row"><button type="button" class="btn ghost" data-act="close">Cancel</button>${online ? '<button type="button" class="btn ghost" id="impSave">Save to my decks</button>' : ''}<button type="button" class="btn" id="impGo">Shuffle up and seat</button></div>`);
   const ta = $('#impList'); ta.value = P(pi).deckText || '';
+  let editingId = P(pi).deckId || '';
+  $('#impDeckName').value = P(pi).deckName || '';
+  $$('[data-deck-load]').forEach((b) => { b.onclick = async () => { const d = await getDeck(b.dataset.deckLoad); if (!d) return; ta.value = d.list; $('#impDeckName').value = d.name; editingId = d.id; $('#impCmd').value = ''; sum(); toast(`Loaded ${d.name}`); }; });
+  $$('[data-deck-del]').forEach((b) => { b.onclick = async () => { await deleteDeck(b.dataset.deckDel); toast('Deck deleted'); importModal(pi); }; });
+  const saveBtn = $('#impSave'); if (saveBtn) saveBtn.onclick = async () => {
+    const d = parseDeck(ta.value, $('#impCmd').value); const nm = $('#impDeckName').value.trim() || d.cmd[0] || 'Untitled deck';
+    if (!d.count && !d.cmd.length) { toast('Paste a decklist first'); return; }
+    try {
+      const cols = [...new Set(d.cmd.flatMap((n) => (lookup(n).colors || '').split('')))].join('');
+      const list = `Commander\n${d.cmd.map((n) => '1 ' + n).join('\n')}\n\nDeck\n${d.main.map((e) => e.n + ' ' + e.name).join('\n')}`;
+      const row = await saveDeck({ id: editingId || undefined, name: nm, commander: d.cmd.join(' + '), colors: cols, cardCount: d.count + d.cmd.length, list, mat: P(pi).mat });
+      editingId = row.id; setLastDeckId(row.id); P(pi).deckId = row.id; P(pi).deckName = nm; toast(`Saved ${nm}`); importModal(pi);
+    } catch (e) { toast('Could not save: ' + e.message, 5000); }
+  };
   const sum = () => {
     const d = parseDeck(ta.value, $('#impCmd').value);
     if (!d.cmd.length && !d.count) { $('#impSum').innerHTML = 'Paste a list to see what will load.'; return; }
@@ -785,7 +840,7 @@ function importModal(pi) {
     const d = parseDeck(ta.value, $('#impCmd').value); if (!d.count && !d.cmd.length) { toast('The decklist is empty'); return; }
     if (!d.cmd.length) { toast('Pick a commander first'); $('#impCmdPick')?.focus(); return; }
     const text = `Commander\n${d.cmd.map((n) => '1 ' + n).join('\n')}\n\nDeck\n${d.main.map((e) => e.n + ' ' + e.name).join('\n')}`;
-    loadDeck(k, text, null); closeModal(); SFX.play('shuffle'); log(`${P(k).name} sat down with ${d.cmd.join(' + ')}`); toast(`${P(k).name} shuffled up and drew 7`); render();
+    loadDeck(k, text, null); P(k).deckId = editingId || ''; P(k).deckName = $('#impDeckName').value.trim(); if (editingId) setLastDeckId(editingId); closeModal(); SFX.play('shuffle'); log(`${P(k).name} sat down with ${d.cmd.join(' + ')}`); toast(`${P(k).name} shuffled up and drew 7`); render();
     ensureArt([...d.cmd, ...d.main.map((e) => e.name)]);
   };
 }
@@ -866,7 +921,7 @@ function tilt(e, el) {
   if (tiltEl && tiltEl !== el) untilt();
   if (!el || !motionMul() || el.classList.contains('facedown')) { if (tiltEl) untilt(); return; }
   const r = el.getBoundingClientRect(); const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
-  const tapped = el.classList.contains('tapped'); const lift = el.closest('.hand') ? 'translateY(-16px) ' : '';
+  const tapped = el.classList.contains('tapped'); const lift = el.closest('.hand') ? 'translateY(-34px) ' : '';
   el.style.transform = `${lift}perspective(700px) rotateX(${((0.5 - py) * 18).toFixed(1)}deg) rotateY(${((px - 0.5) * (tapped ? -18 : 18)).toFixed(1)}deg) scale(1.05)`;
   el.style.setProperty('--gx', (px * 100).toFixed(0) + '%'); el.style.setProperty('--gy', (py * 100).toFixed(0) + '%');
   if (!el.querySelector('.glare')) { const g = document.createElement('div'); g.className = 'glare'; el.appendChild(g); }
@@ -928,10 +983,6 @@ function drop(d, x, y, cancel) {
     const fromCmd = c.zone === 'command';
     if (c.zone === 'hand' && /Land/.test(c.type)) log(`${P(c.controller).name} played ${c.name}`); else moveLog(c, 'battlefield');
     moveCard(c.id, pi, 'battlefield', { x: nx, y: ny, fromRect: r1, anim: fromCmd ? 'commander' : 'land' });
-  } else if (z === 'stack') {
-    if (c.zone === 'stack') { d.el.style.visibility = ''; return; }
-    if (c.zone === 'battlefield') { back(); toast('Permanents stay on the battlefield. Use the menu to move them.'); return; }
-    castToStack(c.id, r1);
   } else {
     const dest = z === 'hand' ? pi : c.owner;
     if (c.zone === z && c.controller === dest) { d.el.style.visibility = ''; render(); return; }
@@ -1013,7 +1064,7 @@ function bindUI() {
     if (t.closest('.ci.pic')) t.closest('.ci').classList.add('loading');
   }, true);
   const probe = new Image(); probe.onerror = () => { backOk = false; render(); }; probe.src = CARD_BACK;
-  addEventListener('resize', () => requestAnimationFrame(() => { sizeBattlefields(); drawArrows(); }));
+  addEventListener('resize', () => requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }));
   $('#table').addEventListener('scroll', () => requestAnimationFrame(drawArrows), true);
   addEventListener('scroll', () => requestAnimationFrame(drawArrows));
 }
@@ -1053,6 +1104,12 @@ async function boot() {
   if (MODE !== 'hotseat') bot = makeBot(botApi());
   bindUI(); hydrate(); render(); roomBar();
   ensureArt(allNames());
+  if (MODE !== 'hotseat' && online && lastDeckId()) {
+    try {
+      const d = await getDeck(lastDeckId());
+      if (d) { const me = net.active ? net.seat : 0; loadDeck(me, d.list, null); P(me).deckId = d.id; P(me).deckName = d.name; if (d.mat && d.mat !== 'auto') P(me).mat = d.mat; render(); toast(`Seated with ${d.name}`); ensureArt(allNames(), { quiet: true }); }
+    } catch { /* deck library unavailable */ }
+  }
   if (net.active) net.resendAll();
 }
 boot();

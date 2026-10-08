@@ -1,4 +1,4 @@
-import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
+import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest } from './supa.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -12,7 +12,7 @@ async function refreshAccount() {
   const nav = $('#account');
   nav.innerHTML = user
     ? `<span class="who">${esc(name)}${user.is_anonymous ? ' (guest)' : ''}</span><button type="button" class="btn ghost sm" data-go="signin">Account</button>`
-    : `<button type="button" class="btn ghost" data-go="signin">Sign in</button>`;
+    : `<button type="button" class="btn ghost" data-go="signin">Sign in</button><button type="button" class="btn" data-go="signup">Create account</button>`;
   renderClubs(); renderDecks();
 }
 async function renderDecks() {
@@ -31,20 +31,73 @@ const nameField = () => `<label>Your name at the table<input id="nm" maxlength="
 const takeName = () => { const v = ($('#nm')?.value || '').trim(); if (v) { name = v; setLocalName(v); } return name || 'Planeswalker'; };
 
 /* ---------- Views ---------- */
-function viewSignIn() {
-  if (!online) { show('Sign in', '<p>Sign-in needs the online service, which isn’t configured on this build yet. Practice against bots works without it.</p>'); return; }
-  if (user) {
-    show('Your account', `${nameField()}<div class="row"><button type="button" class="btn" id="saveName">Save name</button><button type="button" class="btn ghost" id="out">Sign out</button></div>${user.is_anonymous ? '<p style="margin-top:12px">You’re playing as a guest. Add an email to keep your clubs and history across devices.</p><label>Email<input id="em" type="email" placeholder="you@example.com"></label><div class="row"><button type="button" class="btn ghost" id="link">Send sign-in link</button></div>' : ''}`);
-    $('#saveName').onclick = async () => { const n = takeName(); await upsertProfile(user, n); await refreshAccount(); toast('Name saved'); };
-    $('#out').onclick = async () => { await signOut(); await refreshAccount(); go('home'); };
-    const link = $('#link'); if (link) link.onclick = async () => { try { await signInEmail($('#em').value.trim(), takeName()); toast('Check your email for the sign-in link'); } catch (e) { toast(e.message); } };
-    return;
+const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+function viewSignIn(tab = 'signin') {
+  if (!online) { show('Sign in', '<p>Accounts need the online service, which isn\u2019t configured on this build yet. Practice against bots works without it.</p>'); return; }
+  if (user) return viewAccount();
+  const tabs = `<div class="tabs"><button type="button" class="tab ${tab === 'signup' ? 'on' : ''}" data-tab="signup">Create account</button><button type="button" class="tab ${tab === 'signin' ? 'on' : ''}" data-tab="signin">Sign in</button><button type="button" class="tab ${tab === 'guest' ? 'on' : ''}" data-tab="guest">Play as guest</button></div>`;
+  let body = '';
+  if (tab === 'signup') body = `${nameField()}<div class="grid2"><label>Email<input id="em" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="pw" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></label></div>
+    <div class="row"><button type="button" class="btn big" id="signup">Create my account</button><button type="button" class="btn ghost" id="discord">Continue with Discord</button></div>
+    <p class="muted" style="margin-top:10px">Your decks, clubs and game history stay on your account across devices.</p>`;
+  else if (tab === 'signin') body = `<div class="grid2"><label>Email<input id="em" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="pw" type="password" autocomplete="current-password"></label></div>
+    <div class="row"><button type="button" class="btn big" id="login">Sign in</button><button type="button" class="btn ghost" id="discord">Continue with Discord</button><button type="button" class="link" id="forgot">Forgot password?</button><button type="button" class="link" id="magic">Email me a sign-in link instead</button></div>`;
+  else body = `${nameField()}<p>No email needed. Your name and decks stay on this browser until you create an account; you can upgrade any time without losing them.</p><div class="row"><button type="button" class="btn big" id="guest">Continue as guest</button></div>`;
+  show(tab === 'signup' ? 'Create your account' : tab === 'signin' ? 'Sign in' : 'Play as a guest', tabs + body);
+  $('#lobbyBody').querySelectorAll('[data-tab]').forEach((b) => { b.onclick = () => viewSignIn(b.dataset.tab); });
+  const em = () => ($('#em')?.value || '').trim().toLowerCase(); const pw = () => $('#pw')?.value || '';
+  const busy = (id, on) => { const b = $('#' + id); if (b) { b.disabled = on; b.style.opacity = on ? .6 : 1; } };
+  const onEnter = (id) => { $('#lobbyBody').querySelectorAll('input').forEach((i) => { i.onkeydown = (e) => { if (e.key === 'Enter') $('#' + id)?.click(); }; }); };
+  if (tab === 'signup') {
+    onEnter('signup');
+    $('#signup').onclick = async () => {
+      const n = takeName(); if (!emailOk(em())) { toast('Enter a valid email address'); $('#em').focus(); return; } if (pw().length < 8) { toast('Passwords need at least 8 characters'); $('#pw').focus(); return; }
+      busy('signup', true);
+      try {
+        const data = await signUpEmail(em(), pw(), n);
+        if (data.session) { await refreshAccount(); toast(`Welcome to EDH Club, ${n}`); go('home'); }
+        else show('Check your email', `<p>We sent a confirmation link to <b>${esc(em())}</b>. Open it to finish creating your account, then come back and sign in.</p><div class="row"><button type="button" class="btn" data-go="signin">Sign in</button></div>`);
+      } catch (e) { toast(friendlyAuthError(e), 6000); }
+      busy('signup', false);
+    };
+  } else if (tab === 'signin') {
+    onEnter('login');
+    $('#login').onclick = async () => {
+      if (!emailOk(em())) { toast('Enter a valid email address'); return; } if (!pw()) { toast('Enter your password'); return; }
+      busy('login', true);
+      try { await signInPassword(em(), pw()); await refreshAccount(); toast(`Welcome back, ${name}`); go('home'); } catch (e) { toast(friendlyAuthError(e), 6000); }
+      busy('login', false);
+    };
+    $('#forgot').onclick = async () => { if (!emailOk(em())) { toast('Enter your email first, then press Forgot password'); $('#em').focus(); return; } try { await resetPassword(em()); toast('Password reset email sent'); } catch (e) { toast(friendlyAuthError(e), 6000); } };
+    $('#magic').onclick = async () => { if (!emailOk(em())) { toast('Enter your email first'); $('#em').focus(); return; } try { await signInEmail(em(), name); toast('Check your email for the sign-in link'); } catch (e) { toast(friendlyAuthError(e), 6000); } };
+  } else {
+    $('#guest').onclick = async () => { try { await signInGuest(takeName()); await refreshAccount(); toast(`Welcome, ${name}`); go('home'); } catch (e) { toast('Guest sign-in is off. ' + friendlyAuthError(e), 6000); } };
   }
-  show('Sign in', `${nameField()}<div class="grid2"><div><p><b>Quick start.</b> No email needed. Your name and clubs stay in this browser.</p><button type="button" class="btn" id="guest">Continue as guest</button></div>
-  <div><p><b>Keep it forever.</b> We email you a sign-in link; no password.</p><label>Email<input id="em" type="email" placeholder="you@example.com"></label><div class="row"><button type="button" class="btn ghost" id="email">Send link</button><button type="button" class="btn ghost" id="discord">Discord</button></div></div></div>`);
-  $('#guest').onclick = async () => { try { await signInGuest(takeName()); await refreshAccount(); toast(`Welcome, ${name}`); go('home'); } catch (e) { toast('Guest sign-in is off. ' + e.message, 6000); } };
-  $('#email').onclick = async () => { try { await signInEmail($('#em').value.trim(), takeName()); toast('Check your email for the sign-in link'); } catch (e) { toast(e.message); } };
-  $('#discord').onclick = async () => { try { await signInDiscord(); } catch (e) { toast('Discord sign-in isn’t enabled yet. ' + e.message, 6000); } };
+  const dc = $('#discord'); if (dc) dc.onclick = async () => { try { await signInDiscord(); } catch (e) { toast('Discord sign-in isn\u2019t enabled yet. ' + friendlyAuthError(e), 6000); } };
+}
+function friendlyAuthError(e) {
+  const m = (e && e.message) || String(e);
+  if (/already registered|already exists/i.test(m)) return 'That email already has an account. Try signing in, or use Forgot password.';
+  if (/invalid login credentials/i.test(m)) return 'Wrong email or password.';
+  if (/email not confirmed/i.test(m)) return 'Confirm your email first; check your inbox for the link.';
+  if (/anonymous sign-ins are disabled/i.test(m)) return 'Guest play is turned off right now. Create an account instead.';
+  if (/rate limit/i.test(m)) return 'Too many attempts; wait a minute and try again.';
+  return m;
+}
+function viewAccount() {
+  const guest = user.is_anonymous;
+  show('Your account', `${nameField()}<div class="row"><button type="button" class="btn" id="saveName">Save name</button><button type="button" class="btn ghost" id="out">Sign out</button></div>
+  ${guest ? `<hr style="border:0;border-top:1px solid rgba(36,28,18,.25);margin:18px 0"><h3 style="font:400 20px var(--f-display);margin:0 0 6px">Make this account permanent</h3><p>You\u2019re playing as a guest. Add an email and password to keep your decks, clubs and history on any device.</p>
+  <div class="grid2"><label>Email<input id="em" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="pw" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></label></div>
+  <div class="row"><button type="button" class="btn" id="upgrade">Create my account</button></div>` : `<hr style="border:0;border-top:1px solid rgba(36,28,18,.25);margin:18px 0"><h3 style="font:400 20px var(--f-display);margin:0 0 6px">Change password</h3><div class="grid2"><label>New password<input id="pw" type="password" autocomplete="new-password" minlength="8"></label></div><div class="row"><button type="button" class="btn ghost" id="chpw">Update password</button></div>`}`);
+  $('#saveName').onclick = async () => { const n = takeName(); await upsertProfile(user, n); await refreshAccount(); toast('Name saved'); };
+  $('#out').onclick = async () => { await signOut(); await refreshAccount(); go('home'); };
+  const up = $('#upgrade'); if (up) up.onclick = async () => {
+    const e = $('#em').value.trim().toLowerCase(), p = $('#pw').value;
+    if (!emailOk(e)) { toast('Enter a valid email address'); return; } if (p.length < 8) { toast('Passwords need at least 8 characters'); return; }
+    try { await upgradeGuest(e, p, takeName()); await refreshAccount(); toast('Account created. If we sent a confirmation email, open it to finish.', 6000); go('home'); } catch (err) { toast(friendlyAuthError(err), 6000); }
+  };
+  const ch = $('#chpw'); if (ch) ch.onclick = async () => { const p = $('#pw').value; if (p.length < 8) { toast('Passwords need at least 8 characters'); return; } try { await updatePassword(p); toast('Password updated'); } catch (err) { toast(friendlyAuthError(err), 6000); } };
 }
 
 function viewCreate() {
@@ -106,7 +159,8 @@ const timeAgo = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 6
 
 function go(where) {
   if (where === 'home') { $('#lobby').hidden = true; return; }
-  if (where === 'signin') return viewSignIn();
+  if (where === 'signin') return viewSignIn('signin');
+  if (where === 'signup') return viewSignIn('signup');
   if (where === 'create') return viewCreate();
   if (where === 'join') return viewJoin();
   return undefined;
@@ -120,4 +174,6 @@ document.addEventListener('click', (e) => { const b = e.target.closest('[data-go
   renderOpen();
   const q = new URLSearchParams(location.search);
   if (q.get('join')) viewJoin(q.get('join').toUpperCase());
+  if (q.get('reset')) { setTimeout(async () => { await refreshAccount(); if (user) { viewAccount(); toast('Set your new password below'); } }, 800); }
+  if (!user && q.get('signup') != null) viewSignIn('signup');
 })();

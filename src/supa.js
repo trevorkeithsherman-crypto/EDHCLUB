@@ -135,3 +135,36 @@ export async function saveDeck({ id, name, commander, colors, cardCount, list, m
   return data;
 }
 export async function deleteDeck(id) { if (supa && id) await supa.from('decks').delete().eq('id', id); if (lastDeckId() === id) setLastDeckId(''); }
+
+/* ---------- Email + password accounts ---------- */
+export async function signUpEmail(email, password, name) {
+  if (!supa) throw new Error('offline');
+  const { data, error } = await supa.auth.signUp({ email, password, options: { data: { display_name: name }, emailRedirectTo: location.origin + '/' } });
+  if (error) throw error;
+  if (data.session) await upsertProfile(data.user, name);
+  return data; // data.session is null when email confirmation is required
+}
+export async function signInPassword(email, password) {
+  if (!supa) throw new Error('offline');
+  const { data, error } = await supa.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+export async function resetPassword(email) {
+  if (!supa) throw new Error('offline');
+  const { error } = await supa.auth.resetPasswordForEmail(email, { redirectTo: location.origin + '/?reset=1' });
+  if (error) throw error;
+}
+export async function updatePassword(password) {
+  if (!supa) throw new Error('offline');
+  const { error } = await supa.auth.updateUser({ password });
+  if (error) throw error;
+}
+/** Turn a guest (anonymous) account into a permanent one, keeping its decks and clubs. */
+export async function upgradeGuest(email, password, name) {
+  if (!supa) throw new Error('offline');
+  const { data, error } = await supa.auth.updateUser({ email, password, data: { display_name: name } });
+  if (error) throw error;
+  await upsertProfile(data.user, name);
+  return data.user;
+}

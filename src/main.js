@@ -19,6 +19,24 @@ const MATS = {
   wild: { name: 'Wildheart', blurb: 'Forest canopy, fireflies' },
 };
 const MAT_BY_COLOR = { W: 'sun', U: 'tide', B: 'grave', R: 'ember', G: 'wild' };
+const CUSTOM_KEY = 'edhclub-custom-mats';
+let customMats = {};
+try { customMats = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '{}'); } catch { customMats = {}; }
+function saveCustomMats() { try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(customMats)); return true; } catch { return false; } }
+/** Shrink an uploaded image to playmat size and return a JPEG data URL. */
+function readMatFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file); const im = new Image();
+    im.onload = () => {
+      const scale = Math.min(1, 1600 / im.width, 1000 / im.height);
+      const cv = document.createElement('canvas'); cv.width = Math.round(im.width * scale); cv.height = Math.round(im.height * scale);
+      cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url); resolve(cv.toDataURL('image/jpeg', 0.84));
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('not an image')); };
+    im.src = url;
+  });
+}
 
 /* ---------- State ---------- */
 let S = null;
@@ -400,7 +418,9 @@ function wipe(kind) {
 
 /* ---------- Rendering ---------- */
 function matOf(i) {
-  const p = P(i); if (p.mat && p.mat !== 'auto' && MATS[p.mat]) return p.mat;
+  const p = P(i);
+  if (p.mat === 'custom' && customMats[i]) return 'custom';
+  if (p.mat && p.mat !== 'auto' && MATS[p.mat]) return p.mat;
   const c = commandersOf(i)[0]; const col = c ? (c.colors || '')[0] : '';
   return MAT_BY_COLOR[col] || ['wild', 'tide', 'grave', 'sun'][i % 4];
 }
@@ -436,7 +456,8 @@ function seatHTML(i, full) {
       <div class="handwrap"><div class="handbar"><span>Hand · ${p.zones.hand.length}</span><span class="sp"></span><button type="button" class="btn ghost sm" data-act="draw" data-p="${i}">Draw</button><button type="button" class="btn ghost sm" data-act="mull" data-p="${i}">Mulligan</button></div>
       <div class="hand" data-zone="p${i}-hand" data-pile="p${i}-hand">${hand}</div></div></div>`;
   }
-  return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''}" data-seat="${i}" data-mat="${matOf(i)}">${head}<div class="bf" data-zone="p${i}-battlefield">${empty}${bf}</div>${dock}${crack}</div>`;
+  const mat = matOf(i); const matStyle = mat === 'custom' ? ` style="background-image:var(--grain),url(${customMats[i]})"` : '';
+  return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''}" data-seat="${i}" data-mat="${mat}"${matStyle}>${head}<div class="bf" data-zone="p${i}-battlefield">${empty}${bf}</div>${dock}${crack}</div>`;
 }
 function renderTurn() {
   const p = P(S.turn.active);
@@ -627,10 +648,23 @@ function matModal(pi) {
   const p = P(pi); const cur = p.mat || 'auto';
   const opt = (k, name, blurb, extra = '') => `<button type="button" class="matopt ${k} ${cur === k ? 'on' : ''}" data-mat-pick="${k}" ${extra}><span>${name}<small>${blurb}</small></span></button>`;
   const seatStyle = (k) => { const el = document.createElement('div'); el.className = 'seat'; el.dataset.mat = k; document.body.appendChild(el); const bg = getComputedStyle(el).backgroundImage; el.remove(); return `style="background:${bg.replace(/"/g, '&quot;')}"`; };
-  openModal(`<h2>${esc(p.name)}'s playmat</h2><p>Each mat is its own corner of the multiverse, with its own weather. Auto matches the commander's colors.</p>
-  <div class="matgrid">${opt('auto', 'Auto', `Now: ${MATS[matOf(pi)].name}`)}${Object.entries(MATS).map(([k, m]) => opt(k, m.name, m.blurb, seatStyle(k))).join('')}</div>
-  <div class="row"><button type="button" class="btn" data-act="close">Done</button></div>`);
+  const now = matOf(pi); const nowName = now === 'custom' ? 'your upload' : MATS[now].name;
+  const custom = customMats[pi] ? opt('custom', 'Your mat', 'Uploaded image', `style="background-image:url(${customMats[pi]})"`) : '';
+  openModal(`<h2>${esc(p.name)}'s playmat</h2><p>Each mat is its own corner of the multiverse, with its own weather. Auto matches the commander's colors. Upload your own art to play on it; wide images (about 3:2) fit best.</p>
+  <div class="matgrid">${opt('auto', 'Auto', `Now: ${nowName}`)}${Object.entries(MATS).map(([k, m]) => opt(k, m.name, m.blurb, seatStyle(k))).join('')}${custom}</div>
+  <input type="file" id="matFile" accept="image/*" hidden>
+  <div class="row" style="justify-content:space-between"><span><button type="button" class="btn ghost" id="matUpload">${customMats[pi] ? 'Replace your mat' : 'Upload your own'}</button> ${customMats[pi] ? '<button type="button" class="btn ghost" id="matRemove">Remove</button>' : ''}</span><button type="button" class="btn" data-act="close">Done</button></div>`);
   $('#modal .mpanel').addEventListener('click', (e) => { const b = e.target.closest('[data-mat-pick]'); if (!b) return; p.mat = b.dataset.matPick; render(); matModal(pi); });
+  $('#matUpload').onclick = () => $('#matFile').click();
+  $('#matFile').onchange = async (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    try {
+      customMats[pi] = await readMatFile(f);
+      if (!saveCustomMats()) toast("Your browser's storage is full, so this mat lasts until you reload.", 5000);
+      p.mat = 'custom'; render(); matModal(pi); toast('Playmat updated');
+    } catch { toast("That file isn't an image this browser can read."); }
+  };
+  const rm = $('#matRemove'); if (rm) rm.onclick = () => { delete customMats[pi]; saveCustomMats(); if (p.mat === 'custom') p.mat = 'auto'; render(); matModal(pi); };
 }
 function renameModal(pi) {
   openModal(`<h2>Rename seat</h2><label for="rnIn">Player name<input id="rnIn" maxlength="24" value="${esc(P(pi).name)}"></label><div class="row"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn" id="rnGo">Save</button></div>`, { cls: 'narrow' });

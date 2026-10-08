@@ -99,3 +99,84 @@ export const SFX = {
     } catch { /* ignore */ }
   },
 };
+
+/* ---------- Ambient worlds: one small canvas per playmat ---------- */
+const R = (a, b) => a + Math.random() * (b - a);
+const WORLDS = {
+  ember: {
+    density: 0.00035,
+    spawn: (w, h) => ({ x: R(0, w), y: h + 6, vx: R(-0.15, 0.15), vy: R(-0.9, -0.35), s: R(1, 3), life: 0, max: R(120, 260), c: Math.random() < 0.3 ? '#ffd08a' : '#ff7a2a', wob: R(0, 6.3) }),
+    step: (p, t) => { p.x += p.vx + Math.sin(t / 25 + p.wob) * 0.25; p.y += p.vy; },
+    draw: (cx, p, a) => { cx.globalAlpha = a * 0.9; cx.fillStyle = p.c; cx.shadowColor = p.c; cx.shadowBlur = 8; cx.beginPath(); cx.arc(p.x, p.y, p.s * (0.6 + 0.4 * a), 0, 6.3); cx.fill(); },
+    glow: (cx, w, h, t) => { const g = cx.createRadialGradient(w * 0.5, h * 1.05, 0, w * 0.5, h * 1.05, h * 0.7); const k = 0.1 + Math.sin(t / 90) * 0.04; g.addColorStop(0, `rgba(255,120,50,${k})`); g.addColorStop(1, 'rgba(255,120,50,0)'); cx.fillStyle = g; cx.fillRect(0, 0, w, h); },
+  },
+  tide: {
+    density: 0.00025,
+    spawn: (w, h) => ({ x: R(0, w), y: h + 6, vx: 0, vy: R(-0.5, -0.2), s: R(1.5, 4), life: 0, max: R(200, 380), c: '#9fe3ff', wob: R(0, 6.3) }),
+    step: (p, t) => { p.x += Math.sin(t / 30 + p.wob) * 0.35; p.y += p.vy; },
+    draw: (cx, p, a) => { cx.globalAlpha = a * 0.55; cx.strokeStyle = p.c; cx.lineWidth = 1; cx.beginPath(); cx.arc(p.x, p.y, p.s, 0, 6.3); cx.stroke(); cx.globalAlpha = a * 0.5; cx.fillStyle = '#fff'; cx.beginPath(); cx.arc(p.x - p.s * 0.35, p.y - p.s * 0.35, p.s * 0.25, 0, 6.3); cx.fill(); },
+    glow: (cx, w, h, t) => { cx.globalAlpha = 0.07; cx.strokeStyle = '#bfefff'; cx.lineWidth = 1.5; for (let i = 0; i < 5; i++) { cx.beginPath(); for (let x = 0; x <= w; x += 12) { const y = h * (0.15 + i * 0.18) + Math.sin(x / 70 + t / 60 + i) * 9 + Math.cos(x / 31 - t / 80) * 4; x ? cx.lineTo(x, y) : cx.moveTo(x, y); } cx.stroke(); } },
+  },
+  grave: {
+    density: 0.00006,
+    spawn: (w, h) => ({ x: R(-80, w), y: R(h * 0.45, h * 1.05), vx: R(0.12, 0.35), vy: R(-0.04, 0.02), s: R(50, 130), life: 0, max: R(500, 900), c: '#c8d8cc', wob: R(0, 6.3) }),
+    step: (p, t) => { p.x += p.vx; p.y += p.vy + Math.sin(t / 90 + p.wob) * 0.05; },
+    draw: (cx, p, a) => { const g = cx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.s); g.addColorStop(0, `rgba(200,216,204,${0.13 * a})`); g.addColorStop(1, 'rgba(200,216,204,0)'); cx.globalAlpha = 1; cx.fillStyle = g; cx.fillRect(p.x - p.s, p.y - p.s, p.s * 2, p.s * 2); },
+    glow: (cx, w, h, t) => { if (Math.random() < 0.004) { cx.globalAlpha = 0.5; cx.fillStyle = '#b6ffc0'; cx.shadowColor = '#b6ffc0'; cx.shadowBlur = 12; cx.beginPath(); cx.arc(R(0, w), R(h * 0.3, h), 1.5, 0, 6.3); cx.fill(); } },
+  },
+  sun: {
+    density: 0.0002,
+    spawn: (w, h) => ({ x: R(0, w * 1.2), y: -6, vx: R(-0.25, -0.1), vy: R(0.18, 0.45), s: R(1, 2.6), life: 0, max: R(220, 420), c: '#ffe9b0', wob: R(0, 6.3) }),
+    step: (p, t) => { p.x += p.vx + Math.sin(t / 40 + p.wob) * 0.15; p.y += p.vy; },
+    draw: (cx, p, a) => { cx.globalAlpha = a * (0.5 + 0.5 * Math.sin(p.life / 9 + p.wob)); cx.fillStyle = p.c; cx.shadowColor = p.c; cx.shadowBlur = 6; cx.beginPath(); cx.arc(p.x, p.y, p.s, 0, 6.3); cx.fill(); },
+    glow: (cx, w, h, t) => { cx.save(); cx.globalAlpha = 0.07 + Math.sin(t / 120) * 0.02; cx.translate(w * 0.72, -h * 0.4); cx.rotate(0.55); const g = cx.createLinearGradient(0, 0, 0, h * 2); g.addColorStop(0, '#fff2c4'); g.addColorStop(1, 'rgba(255,242,196,0)'); cx.fillStyle = g; for (let i = 0; i < 4; i++) cx.fillRect(i * 70 + Math.sin(t / 200 + i) * 10, 0, 18 + i * 6, h * 2.2); cx.restore(); },
+  },
+  wild: {
+    density: 0.00022,
+    spawn: (w, h) => (Math.random() < 0.65
+      ? { k: 'fly', x: R(0, w), y: R(h * 0.2, h), vx: R(-0.25, 0.25), vy: R(-0.2, 0.2), s: R(1.2, 2.2), life: 0, max: R(200, 400), c: '#d8ff7a', wob: R(0, 6.3) }
+      : { k: 'leaf', x: R(0, w), y: -8, vx: R(-0.3, 0.1), vy: R(0.3, 0.6), s: R(3, 6), life: 0, max: R(260, 420), c: Math.random() < 0.5 ? '#7fb35a' : '#b8933a', wob: R(0, 6.3), rot: R(0, 6.3) }),
+    step: (p, t) => { if (p.k === 'fly') { p.vx += R(-0.03, 0.03); p.vy += R(-0.03, 0.03); p.vx *= 0.98; p.vy *= 0.98; p.x += p.vx; p.y += p.vy; } else { p.x += p.vx + Math.sin(t / 35 + p.wob) * 0.5; p.y += p.vy; p.rot += 0.02; } },
+    draw: (cx, p, a) => { if (p.k === 'fly') { const b = Math.max(0, Math.sin(p.life / 14 + p.wob)); cx.globalAlpha = a * b; cx.fillStyle = p.c; cx.shadowColor = p.c; cx.shadowBlur = 10; cx.beginPath(); cx.arc(p.x, p.y, p.s, 0, 6.3); cx.fill(); } else { cx.globalAlpha = a * 0.7; cx.fillStyle = p.c; cx.save(); cx.translate(p.x, p.y); cx.rotate(p.rot); cx.beginPath(); cx.ellipse(0, 0, p.s, p.s * 0.45, 0, 0, 6.3); cx.fill(); cx.restore(); } },
+    glow: (cx, w, h, t) => { const g = cx.createRadialGradient(w * 0.85, 0, 0, w * 0.85, 0, h * 0.9); const k = 0.08 + Math.sin(t / 110) * 0.03; g.addColorStop(0, `rgba(200,255,150,${k})`); g.addColorStop(1, 'rgba(200,255,150,0)'); cx.fillStyle = g; cx.fillRect(0, 0, w, h); },
+  },
+};
+
+export const Ambient = {
+  seats: new Map(), raf: 0, t: 0,
+  sync() {
+    document.querySelectorAll('.seat[data-mat]').forEach((seat) => {
+      const key = seat.dataset.seat, world = seat.dataset.mat;
+      let cv = seat.querySelector('canvas.amb');
+      if (!cv) { cv = document.createElement('canvas'); cv.className = 'amb'; seat.prepend(cv); }
+      let st = this.seats.get(key);
+      if (!st || st.world !== world) { st = { world, parts: [] }; this.seats.set(key, st); }
+      st.cv = cv;
+    });
+    if (!this.raf) this.raf = requestAnimationFrame(() => this.tick());
+  },
+  tick() {
+    this.raf = 0; this.t++;
+    const m = mul();
+    if (m === 0 || document.hidden) { this.seats.forEach((st) => { if (st.cv) { const cx = st.cv.getContext('2d'); cx.clearRect(0, 0, st.cv.width, st.cv.height); } }); this.raf = requestAnimationFrame(() => this.tick()); return; }
+    if (m < 1 && this.t % 2) { this.raf = requestAnimationFrame(() => this.tick()); return; }
+    this.seats.forEach((st) => {
+      const cv = st.cv; if (!cv || !cv.isConnected) return;
+      const W = cv.clientWidth, H = cv.clientHeight; if (!W || !H) return;
+      if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+      const world = WORLDS[st.world]; if (!world) return;
+      const cx = cv.getContext('2d'); cx.clearRect(0, 0, W, H);
+      cx.save(); world.glow(cx, W, H, this.t); cx.restore();
+      const want = Math.round(W * H * world.density * (m < 1 ? 0.5 : 1));
+      while (st.parts.length < want && Math.random() < 0.3) st.parts.push(world.spawn(W, H));
+      for (let i = st.parts.length - 1; i >= 0; i--) {
+        const p = st.parts[i]; p.life++;
+        if (p.life > p.max || p.y < -40 || p.y > H + 60 || p.x < -150 || p.x > W + 150) { st.parts.splice(i, 1); continue; }
+        world.step(p, this.t);
+        const a = Math.min(1, p.life / 40, (p.max - p.life) / 60);
+        cx.save(); world.draw(cx, p, a); cx.restore();
+      }
+    });
+    this.raf = requestAnimationFrame(() => this.tick());
+  },
+};

@@ -81,7 +81,7 @@ img { max-width: 100%; }
 .me { min-height: 0; display: grid; }
 
 .seat {
-  --mat: var(--mat1);
+  --mat: #1d3a34; --mat-hi: #2d5a50; --mat-lo: #0b1a17; --mat-accent: #6fc2ac; --mat-line: rgba(255, 255, 255, .13);
   position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -90,19 +90,40 @@ img { max-width: 100%; }
   overflow: hidden;
   background:
     var(--grain),
-    radial-gradient(ellipse 120% 95% at 50% 25%, color-mix(in srgb, var(--mat) 80%, white) 0%, var(--mat) 42%, color-mix(in srgb, var(--mat) 55%, black) 100%);
+    radial-gradient(ellipse 120% 95% at 50% 25%, var(--mat-hi) 0%, var(--mat) 42%, var(--mat-lo) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 14px 30px rgba(0, 0, 0, .55), 0 0 0 1px rgba(0, 0, 0, .7);
   transition: box-shadow .35s;
 }
-.seat::before { content: ""; position: absolute; inset: 7px; border-radius: 13px; border: 1px dashed rgba(255, 255, 255, .13); pointer-events: none; z-index: 0; }
-.seat[data-seat="1"] { --mat: var(--mat2); }
-.seat[data-seat="2"] { --mat: var(--mat3); }
-.seat[data-seat="3"] { --mat: var(--mat4); }
-.seat.active { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 14px 30px rgba(0, 0, 0, .55), 0 0 0 2px var(--candle), 0 0 36px -4px rgba(227, 184, 102, .55); }
+.seat::before { content: ""; position: absolute; inset: 7px; border-radius: 13px; border: 1px dashed var(--mat-line); pointer-events: none; z-index: 1; }
+.seat .amb { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+
+/* Playmats: five worlds. Each sets the felt colors and a world layer painted under the grain. */
+.seat[data-mat="ember"] { --mat: #3a1c14; --mat-hi: #6a2f1c; --mat-lo: #140806; --mat-accent: #ff8a3d; --mat-line: rgba(255, 150, 80, .22);
+  background: var(--grain),
+    radial-gradient(ellipse 40% 18% at 20% 85%, rgba(255, 110, 40, .35), transparent 70%),
+    radial-gradient(ellipse 35% 14% at 75% 92%, rgba(255, 80, 30, .3), transparent 70%),
+    radial-gradient(ellipse 120% 95% at 50% 25%, var(--mat-hi) 0%, var(--mat) 42%, var(--mat-lo) 100%); }
+.seat[data-mat="tide"] { --mat: #12304a; --mat-hi: #1f5578; --mat-lo: #061119; --mat-accent: #5fd0ff; --mat-line: rgba(120, 210, 255, .2);
+  background: var(--grain),
+    radial-gradient(ellipse 60% 30% at 30% 10%, rgba(120, 210, 255, .18), transparent 70%),
+    radial-gradient(ellipse 120% 95% at 50% 25%, var(--mat-hi) 0%, var(--mat) 42%, var(--mat-lo) 100%); }
+.seat[data-mat="grave"] { --mat: #1e2320; --mat-hi: #33403a; --mat-lo: #070908; --mat-accent: #9fd9a4; --mat-line: rgba(170, 220, 180, .16);
+  background: var(--grain),
+    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(120, 170, 130, .16), transparent 70%),
+    radial-gradient(ellipse 120% 95% at 50% 25%, var(--mat-hi) 0%, var(--mat) 42%, var(--mat-lo) 100%); }
+.seat[data-mat="sun"] { --mat: #4a3d2c; --mat-hi: #7a6646; --mat-lo: #1d170f; --mat-accent: #ffe08a; --mat-line: rgba(255, 225, 150, .25);
+  background: var(--grain),
+    linear-gradient(115deg, transparent 30%, rgba(255, 230, 160, .12) 42%, transparent 46%, transparent 55%, rgba(255, 230, 160, .08) 63%, transparent 68%),
+    radial-gradient(ellipse 120% 95% at 50% 10%, var(--mat-hi) 0%, var(--mat) 45%, var(--mat-lo) 100%); }
+.seat[data-mat="wild"] { --mat: #1f3a1c; --mat-hi: #3a6a30; --mat-lo: #0a150a; --mat-accent: #b8ff7a; --mat-line: rgba(190, 255, 150, .18);
+  background: var(--grain),
+    radial-gradient(ellipse 50% 30% at 80% 0%, rgba(200, 255, 150, .14), transparent 70%),
+    radial-gradient(ellipse 120% 95% at 50% 25%, var(--mat-hi) 0%, var(--mat) 42%, var(--mat-lo) 100%); }
+.seat.active { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 14px 30px rgba(0, 0, 0, .55), 0 0 0 2px var(--mat-accent), 0 0 36px -4px var(--mat-accent); }
 .seat.out .bf, .seat.out .dock { filter: grayscale(.9) brightness(.5); }
 .me .seat { grid-template-rows: auto minmax(140px, 1fr) auto; }
 
-.seat-h { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 14px 6px; min-width: 0; }
+.seat-h { position: relative; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 14px 6px; min-width: 0; }
 .pname { display: inline-flex; align-items: center; gap: 7px; background: none; border: 0; padding: 2px 6px; border-radius: 6px; font: 700 18px/1.1 var(--f-display); letter-spacing: .02em; text-shadow: 0 1px 2px var(--ink); }
 .pname:hover { background: rgba(0, 0, 0, .25); }
 .cmdn { font-size: 13px; font-style: italic; color: color-mix(in srgb, var(--text) 70%, transparent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
@@ -120,7 +141,7 @@ img { max-width: 100%; }
 .mp b { color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
 .mp:hover { background: rgba(0, 0, 0, .4); color: var(--text); }
 
-.bf { position: relative; z-index: 1; min-height: 0; overflow: hidden; margin: 0 8px 8px; border-radius: 10px; }
+.bf { position: relative; z-index: 2; min-height: 0; overflow: hidden; margin: 0 8px 8px; border-radius: 10px; }
 .bf::after { content: ""; position: absolute; left: 14px; right: 14px; top: 55%; border-top: 1px solid rgba(255, 255, 255, .05); pointer-events: none; }
 .bf .card { position: absolute; }
 .bf .card:hover { z-index: 5; }
@@ -129,7 +150,7 @@ img { max-width: 100%; }
 .me .bf { --cw: 78px; }
 .bf-empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; font: italic 14px var(--f-body); color: rgba(255, 255, 255, .32); pointer-events: none; }
 
-.dock { position: relative; z-index: 1; display: flex; gap: 14px; padding: 6px 14px 14px; min-width: 0; --cw: 72px; background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, .22)); }
+.dock { position: relative; z-index: 2; display: flex; gap: 14px; padding: 6px 14px 14px; min-width: 0; --cw: 72px; background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, .22)); }
 .piles { display: flex; gap: 10px; flex: none; align-items: flex-end; }
 .pile { display: flex; flex-direction: column; align-items: center; gap: 4px; border-radius: 8px; padding: 2px; }
 .pl { background: none; border: 0; padding: 0; font: 700 12px var(--f-display); letter-spacing: .05em; color: var(--muted); }
@@ -172,6 +193,26 @@ img { max-width: 100%; }
 @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 .card.sel .ci { box-shadow: 0 0 0 2px var(--candle), 0 0 18px rgba(227, 184, 102, .65); }
 .card.cmdr .ci::before { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 calc(var(--cw) * .025) rgba(227, 184, 102, .85); z-index: 2; pointer-events: none; }
+.card.cmdr .ci::after { content: ""; position: absolute; inset: -40%; z-index: 2; pointer-events: none; mix-blend-mode: screen; opacity: .55;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 220, 160, .35) 46%, rgba(160, 220, 255, .3) 50%, rgba(255, 180, 220, .3) 54%, transparent 62%);
+  animation: foil 7s ease-in-out infinite; }
+@keyframes foil { 0%, 100% { transform: translateX(-30%) rotate(0deg); } 50% { transform: translateX(30%) rotate(0deg); } }
+.card.tilt { transform-style: preserve-3d; z-index: 6; transition: none; }
+.card .glare { position: absolute; inset: 0; border-radius: inherit; z-index: 4; pointer-events: none; opacity: 0; mix-blend-mode: screen;
+  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, .45), rgba(255, 255, 255, .08) 35%, transparent 65%); transition: opacity .2s; }
+.card.tilt .glare { opacity: 1; }
+.banner { position: fixed; left: 0; right: 0; top: 28%; z-index: 72; pointer-events: none; text-align: center; font: 800 clamp(40px, 7vw, 84px)/1 var(--f-display); color: var(--text); letter-spacing: .03em;
+  text-shadow: 0 2px 0 #000, 0 0 40px var(--bc, var(--candle)); }
+.banner::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1.5em; transform: translateY(-50%) scaleX(0); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bc, var(--candle)) 40%, transparent), transparent); z-index: -1; animation: bannerbar .9s ease-out forwards; }
+.banner span { display: inline-block; animation: bannertext 1.6s cubic-bezier(.2, .8, .2, 1) forwards; }
+.banner small { display: block; font: 700 clamp(14px, 1.6vw, 20px) var(--f-display); letter-spacing: .2em; color: var(--muted); margin-top: .3em; }
+@keyframes bannerbar { 0% { transform: translateY(-50%) scaleX(0); opacity: 1; } 30% { transform: translateY(-50%) scaleX(1); } 100% { transform: translateY(-50%) scaleX(1); opacity: 0; } }
+@keyframes bannertext { 0% { opacity: 0; transform: translateX(-60px) scale(.9); filter: blur(6px); } 20% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); } 75% { opacity: 1; transform: translateX(0) scale(1); } 100% { opacity: 0; transform: translateX(60px) scale(1.05); filter: blur(4px); } }
+.matgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin: 6px 0 14px; }
+.matopt { position: relative; aspect-ratio: 3 / 2; border-radius: 10px; border: 2px solid transparent; overflow: hidden; cursor: pointer; display: grid; place-items: end start; padding: 8px; font: 700 13px var(--f-display); text-shadow: 0 1px 3px #000; }
+.matopt.on { border-color: var(--candle); box-shadow: 0 0 0 1px var(--candle), 0 0 14px rgba(227, 184, 102, .5); }
+.matopt small { display: block; font: 12px var(--f-body); color: var(--muted); }
+.matopt.auto { background: var(--grain), linear-gradient(135deg, #3a1c14, #12304a 33%, #1e2320 50%, #4a3d2c 70%, #1f3a1c); }
 .stackcards .card.top .ci { box-shadow: 0 0 0 2px var(--g, var(--candle)), 0 0 24px var(--g, var(--candle)); }
 
 /* Fallback frame (unknown cards, tokens, art still loading) */
@@ -299,4 +340,4 @@ body.is-drag, body.is-drag * { cursor: grabbing !important; }
   .ticker { max-width: 100%; }
   #zoom { width: 220px; }
 }
-@media (prefers-reduced-motion: reduce) { .hand .card, .ci { transition: none; } .ci.pic.loading::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .hand .card, .ci { transition: none; } .ci.pic.loading::after, .card.cmdr .ci::after { animation: none; } }

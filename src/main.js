@@ -170,9 +170,21 @@ function frame(c) {
 const firstColor = (c) => ((c.colors || 'C')[0] || 'C');
 const colorHex = (c) => HEX[firstColor(c)] || HEX.C;
 const colorsHex = (c) => { const cs = (c.colors || '').split('').filter((k) => HEX[k]); return (cs.length ? cs : ['C']).map((k) => HEX[k]); };
+function manaClass(v) {
+  const k = v.toLowerCase().replace('/', '');
+  if (/^(w|u|b|r|g|c|s|x|y|z|\d+|wu|wb|ub|ur|br|bg|rg|rw|gw|gu|2w|2u|2b|2r|2g|wp|up|bp|rp|gp)$/.test(k)) return 'ms-' + k;
+  return null;
+}
 function pips(cost) {
   if (!cost) return '';
-  return (cost.match(/\{[^}]+\}/g) || []).map((t) => { const v = t.slice(1, -1); const cls = /^[WUBRG]$/.test(v) ? 'pip-' + v : 'pip-n'; return `<span class="pip ${cls}">${esc(v)}</span>`; }).join('');
+  return (cost.match(/\{[^}]+\}/g) || []).map((t) => { const v = t.slice(1, -1); const m = manaClass(v); return m ? `<i class="ms ${m} ms-cost"></i>` : `<span class="pip">${esc(v)}</span>`; }).join('');
+}
+function identityPips(i) {
+  const cs = [...new Set(commandersOf(i).flatMap((c) => (c.colors || '').split('')))].filter((k) => 'WUBRG'.includes(k));
+  const order = 'WUBRG';
+  cs.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  if (!cs.length) return '<span class="pips"><i class="ms ms-c ms-cost"></i></span>';
+  return `<span class="pips">${cs.map((k) => `<i class="ms ms-${k.toLowerCase()} ms-cost"></i>`).join('')}</span>`;
 }
 function ptOf(c) {
   if (!c.pt) return null;
@@ -433,7 +445,7 @@ function seatHTML(i, full) {
   const bf = p.zones.battlefield.map((id) => { const c = S.cards[id]; return cardHTML(c, { style: `left:${(c.x * 100).toFixed(2)}%;top:${(c.y * 100).toFixed(2)}%` }); }).join('');
   const mp = (z, label, n) => `<button type="button" class="mp" data-act="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}">${label} <b>${n}</b></button>`;
   const head = `<div class="seat-h">
-    <button type="button" class="pname" data-act="seatmenu" data-p="${i}"><i class="dot" style="--h:var(--s${i + 1})"></i><span>${esc(p.name)}</span></button>
+    <button type="button" class="pname" data-act="seatmenu" data-p="${i}"><span>${esc(p.name)}</span>${identityPips(i)}</button>
     ${p.out ? '<span class="outtag">Out</span>' : ''}
     <span class="cmdn">${esc(cmdNames)}</span>
     <div class="life" data-life="${i}"><button type="button" data-act="life" data-p="${i}" data-d="-1" aria-label="${esc(p.name)} loses 1 life" title="Shift-click for 5">−</button><span class="lv">${p.life}</span><button type="button" data-act="life" data-p="${i}" data-d="1" aria-label="${esc(p.name)} gains 1 life" title="Shift-click for 5">+</button></div>
@@ -457,11 +469,12 @@ function seatHTML(i, full) {
       <div class="hand" data-zone="p${i}-hand" data-pile="p${i}-hand">${hand}</div></div></div>`;
   }
   const mat = matOf(i); const matStyle = mat === 'custom' ? ` style="background-image:var(--grain),url(${customMats[i]})"` : '';
-  return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''}" data-seat="${i}" data-mat="${mat}"${matStyle}>${head}<div class="bf" data-zone="p${i}-battlefield">${empty}${bf}</div>${dock}${crack}</div>`;
+  const labels = full ? '<span class="zl top">Battlefield</span><span class="zl bot">Lands</span>' : '';
+  return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''}" data-seat="${i}" data-mat="${mat}"${matStyle}>${head}<div class="bf" data-zone="p${i}-battlefield">${labels}${empty}${bf}</div>${dock}${crack}</div>`;
 }
 function renderTurn() {
   const p = P(S.turn.active);
-  $('#turn').innerHTML = `<span class="tn">Round ${S.turn.number}</span><span class="who"><i class="dot" style="--h:var(--s${S.turn.active + 1})"></i>${esc(p.name)}'s turn</span>
+  $('#turn').innerHTML = `<span class="tn">Round ${S.turn.number}</span><span class="who">${identityPips(S.turn.active)}${esc(p.name)}'s turn</span>
   <div class="phases" role="group" aria-label="Phase">${PHASES.map((ph, k) => `<button type="button" class="ph ${k === S.turn.phase ? 'on' : ''}" data-act="phase" data-k="${k}">${ph}</button>`).join('')}</div>
   <button type="button" class="btn sm" data-act="next">Next phase</button><button type="button" class="btn ghost sm" data-act="pass">Pass turn</button>`;
 }
@@ -491,7 +504,7 @@ function render() {
 function sizeBattlefields() {
   $$('.bf').forEach((el) => {
     const h = el.clientHeight; if (!h) return;
-    const max = el.closest('.opps') ? (innerWidth < 760 ? 44 : 56) : (innerWidth < 760 ? 60 : 82);
+    const max = el.closest('.opps') ? (innerWidth < 760 ? 48 : 70) : (innerWidth < 760 ? 66 : 104);
     el.style.setProperty('--cw', Math.max(30, Math.min(max, Math.floor((h * 0.45) / RATIO))) + 'px');
   });
 }
@@ -897,6 +910,16 @@ function bindUI() {
   $('#viewSel').onchange = (e) => { S.view = +e.target.value; S.sel = null; render(); };
   $('#motionSel').onchange = (e) => { S.motion = e.target.value; render(); };
   $('#fxBtn').onclick = () => { S.fx = !S.fx; render(); toast(S.fx ? 'Playmat effects on' : 'Playmat effects off'); };
+  $('#settingsBtn').onclick = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    openMenu([
+      { label: `Playmat effects: ${S.fx ? 'on' : 'off'}`, fn: () => $('#fxBtn').click() },
+      { label: `Sound: ${S.sound ? 'on' : 'off'}`, fn: () => $('#soundBtn').click() },
+      { label: `Card motion: ${{ full: 'full', reduced: 'reduced', off: 'off' }[S.motion]}`, fn: () => { S.motion = { full: 'reduced', reduced: 'off', off: 'full' }[S.motion]; render(); toast(`Card motion ${S.motion}`); } },
+      { sep: true },
+      { label: 'Game log', fn: logModal },
+    ], r.left, r.bottom + 4, 'Settings');
+  };
   $('#soundBtn').onclick = () => { S.sound = !S.sound; if (S.sound) { SFX.init(); SFX.play('chime', 'U'); } render(); };
   $('#importBtn').onclick = () => importModal(S.view);
   $('#newBtn').onclick = () => confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); });

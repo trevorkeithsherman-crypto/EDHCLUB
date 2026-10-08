@@ -1,4 +1,4 @@
-import { fetchCards, cached } from './scryfall.js';
+import { fetchCards, cached, CARD_BACK } from './scryfall.js';
 import { DB, buildSample } from './decks.js';
 import { FX, SFX, Ambient, setFxState } from './fx.js';
 
@@ -25,6 +25,7 @@ let S = null;
 let modalClose = null, drag = null, lpTimer = 0, ignoreClick = 0, saveT = 0, lastClick = null;
 let zoomT = 0, zoomId = null, zoomPending = null;
 const mouse = { x: 0, y: 0 };
+let backOk = true; // falls back to the EDH Club back if Scryfall's card back can't load
 const defaultMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'full'; } catch { return 'full'; } };
 const emptyZones = () => ({ library: [], hand: [], battlefield: [], graveyard: [], exile: [], command: [] });
 function freshState() {
@@ -32,7 +33,7 @@ function freshState() {
     v: 2,
     players: [0, 1, 2, 3].map((i) => ({ name: SEAT_NAMES[i], life: 40, poison: 0, cmdDmg: {}, out: false, outAt: 0, mulls: 0, deckText: buildSample(i), mat: 'auto', zones: emptyZones() })),
     cards: {}, stack: [], turn: { active: 0, phase: 1, number: 1 }, view: 0, motion: defaultMotion(), sound: false, nextId: 1,
-    log: [], attacks: [], outOrder: [], stats: { casts: {}, big: null }, over: false, sel: null,
+    log: [], attacks: [], outOrder: [], stats: { casts: {}, big: null }, over: false, sel: null, fx: true,
   };
 }
 const motionMul = () => ({ full: 1, reduced: 0.5, off: 0 }[S.motion] ?? 1);
@@ -170,7 +171,7 @@ function cardHTML(c, o = {}) {
   const cls = ['card', f.cls, c.tapped && !o.flat ? 'tapped' : '', c.token ? 'token' : '', c.isCmdr ? 'cmdr' : '', S.sel === c.id && !o.noid ? 'sel' : '', o.cls || ''].join(' ');
   const st = (o.style || '') + ';' + f.style;
   const idA = o.noid ? '' : `data-id="${c.id}"`;
-  if (hidden) return `<div class="${cls} facedown" ${idA} style="${st}"><div class="ci back"><span>EC</span></div></div>`;
+  if (hidden) return `<div class="${cls} facedown" ${idA} style="${st}"><div class="ci back ${backOk ? 'pic' : ''}"><span>EC</span>${backOk ? `<img src="${CARD_BACK}" alt="" draggable="false" decoding="async">` : ''}</div></div>`;
   const sg = c.p1 > 0 ? '+' : '';
   const over = `${c.p1 ? `<div class="bp">${sg}${c.p1}/${sg}${c.p1}</div>` : ''}${c.ctr ? `<div class="bc">${c.ctr}</div>` : ''}${c.token ? '<div class="tk">Token</div>' : ''}`;
   const src = faceSrc(c, o.big);
@@ -425,7 +426,7 @@ function seatHTML(i, full) {
   if (full) {
     const slot = (z, label) => {
       const list = p.zones[z]; let inner;
-      if (z === 'library') inner = list.length ? '<div class="card"><div class="ci back stackback"><span>EC</span></div></div>' : '<span class="empty">Empty</span>';
+      if (z === 'library') inner = list.length ? `<div class="card"><div class="ci back stackback ${backOk ? 'pic' : ''}"><span>EC</span>${backOk ? `<img src="${CARD_BACK}" alt="" draggable="false">` : ''}</div></div>` : '<span class="empty">Empty</span>';
       else inner = list.length ? cardHTML(S.cards[list[list.length - 1]]) : `<span class="empty">${z === 'command' ? 'None' : 'Empty'}</span>`;
       const tax = z === 'command' ? commandersOf(i).filter((c) => c.zone === 'command').map((c) => `<span class="tax">Tax +${2 * (c.casts || 0)}</span>`).join('') : '';
       return `<div class="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}"><button type="button" class="pl" data-act="pile" data-zone="p${i}-${z}">${label} <b>${list.length}</b></button><div class="slot" data-act="pileclick" data-zone="p${i}-${z}" title="${z === 'library' ? 'Click to draw. Right-click for more.' : ''}">${inner}</div>${tax}</div>`;
@@ -454,6 +455,7 @@ function syncTools() {
   $('#viewSel').innerHTML = S.players.map((p, i) => `<option value="${i}" ${i === S.view ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
   $('#motionSel').value = S.motion;
   const sb = $('#soundBtn'); sb.textContent = S.sound ? 'Sound on' : 'Sound off'; sb.setAttribute('aria-pressed', String(S.sound));
+  const fb = $('#fxBtn'); fb.textContent = S.fx ? 'Effects on' : 'Effects off'; fb.setAttribute('aria-pressed', String(S.fx));
 }
 function render() {
   renderTurn();
@@ -614,7 +616,7 @@ function openModal(html, o = {}) {
   m.innerHTML = `<div class="scrim" data-close="1"></div><div class="mpanel ${o.cls || ''}" role="dialog" aria-modal="true">${html}</div>`;
   m.hidden = false; modalClose = o.onClose || null;
   m.onclick = (e) => { if (e.target.dataset.close || e.target.closest('[data-act="close"]')) closeModal(); };
-  setTimeout(() => m.querySelector('input,textarea,.btn:not(.ghost),button')?.focus({ preventScroll: true }), 30);
+  (m.querySelector('[data-autofocus]') || m.querySelector('input,textarea,.btn:not(.ghost),button'))?.focus({ preventScroll: true });
 }
 function closeModal() { const m = $('#modal'); if (m.hidden) return; m.hidden = true; m.innerHTML = ''; const cb = modalClose; modalClose = null; cb && cb(); }
 function confirmModal(text, ok, fn) {
@@ -640,7 +642,7 @@ function importModal(pi) {
   <div class="grid2"><label for="impSeat">Seat<select id="impSeat">${S.players.map((p, i) => `<option value="${i}" ${i === pi ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
   <label for="impName">Player name<input id="impName" maxlength="24" value="${esc(P(pi).name)}"></label></div>
   <label for="impCmd">Commander (optional)<input id="impCmd" placeholder="Taken from the list if left blank"></label>
-  <label for="impList">Decklist<textarea id="impList" rows="11" spellcheck="false"></textarea></label>
+  <label for="impList">Decklist<textarea id="impList" rows="11" spellcheck="false" data-autofocus></textarea></label>
   <div class="summary" id="impSum"></div>
   <div class="row"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn" id="impGo">Shuffle up and seat</button></div>`);
   const ta = $('#impList'); ta.value = P(pi).deckText || '';
@@ -860,6 +862,7 @@ function bindUI() {
   ['W', 'U', 'B', 'R', 'G', 'C'].forEach((k) => { HEX[k] = css('--m' + k) || '#aaa'; });
   $('#viewSel').onchange = (e) => { S.view = +e.target.value; S.sel = null; render(); };
   $('#motionSel').onchange = (e) => { S.motion = e.target.value; render(); };
+  $('#fxBtn').onclick = () => { S.fx = !S.fx; render(); toast(S.fx ? 'Playmat effects on' : 'Playmat effects off'); };
   $('#soundBtn').onclick = () => { S.sound = !S.sound; if (S.sound) { SFX.init(); SFX.play('chime', 'U'); } render(); };
   $('#importBtn').onclick = () => importModal(S.view);
   $('#newBtn').onclick = () => confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); });
@@ -870,7 +873,12 @@ function bindUI() {
   document.addEventListener('click', onClick);
   document.addEventListener('contextmenu', onContext);
   document.addEventListener('keydown', onKey);
-  document.addEventListener('error', (e) => { const t = e.target; if (t && t.tagName === 'IMG' && t.closest('.ci.pic')) t.closest('.ci').classList.add('loading'); }, true);
+  document.addEventListener('error', (e) => {
+    const t = e.target; if (!t || t.tagName !== 'IMG') return;
+    if (t.src === CARD_BACK) { if (backOk) { backOk = false; render(); } return; }
+    if (t.closest('.ci.pic')) t.closest('.ci').classList.add('loading');
+  }, true);
+  const probe = new Image(); probe.onerror = () => { backOk = false; render(); }; probe.src = CARD_BACK;
   addEventListener('resize', () => requestAnimationFrame(() => { sizeBattlefields(); drawArrows(); }));
   $('#table').addEventListener('scroll', () => requestAnimationFrame(drawArrows), true);
   addEventListener('scroll', () => requestAnimationFrame(drawArrows));
@@ -880,7 +888,7 @@ function bindUI() {
 function boot() {
   let restored = null;
   try { const raw = localStorage.getItem(KEY); if (raw) restored = JSON.parse(raw); } catch { /* ignore */ }
-  if (restored && restored.v === 2 && restored.players && restored.cards) { S = restored; setFxState(S); }
+  if (restored && restored.v === 2 && restored.players && restored.cards) { S = restored; if (S.fx == null) S.fx = true; S.players.forEach((p) => { if (!p.mat) p.mat = 'auto'; }); setFxState(S); }
   else { S = null; newGame(false); }
   bindUI(); hydrate(); render();
   ensureArt(allNames());

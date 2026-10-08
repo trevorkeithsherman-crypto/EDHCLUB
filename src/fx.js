@@ -158,7 +158,7 @@ export const Ambient = {
   tick() {
     this.raf = 0; this.t++;
     const m = mul();
-    if (m === 0 || document.hidden) { this.seats.forEach((st) => { if (st.cv) { const cx = st.cv.getContext('2d'); cx.clearRect(0, 0, st.cv.width, st.cv.height); } }); this.raf = requestAnimationFrame(() => this.tick()); return; }
+    if (m === 0 || S.fx === false || document.hidden) { this.seats.forEach((st) => { if (st.cv) { const cx = st.cv.getContext('2d'); cx.clearRect(0, 0, st.cv.width, st.cv.height); } }); this.raf = requestAnimationFrame(() => this.tick()); return; }
     if (m < 1 && this.t % 2) { this.raf = requestAnimationFrame(() => this.tick()); return; }
     this.seats.forEach((st) => {
       const cv = st.cv; if (!cv || !cv.isConnected) return;

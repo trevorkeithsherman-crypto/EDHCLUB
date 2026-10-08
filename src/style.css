@@ -95,30 +95,16 @@ img { max-width: 100%; }
   transition: box-shadow .35s;
 }
 .seat::before { content: ""; position: absolute; inset: 7px; border-radius: 13px; border: 1px dashed var(--mat-line); pointer-events: none; z-index: 1; }
-.seat .amb { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+.seat .amb { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
 
-/* Playmats: five worlds. Each sets the felt colors and a world layer painted under the grain. */
-.seat[data-mat="ember"] { --mat: #3a1c14; --mat-hi: #6a2f1c; --mat-lo: #140806; --mat-accent: #ff8a3d; --mat-line: rgba(255, 150, 80, .22);
-  background: var(--grain),
-    radial-gradient(ellipse 40% 18% at 20% 85%, rgba(255, 110, 40, .35), transparent 70%),
-    radial-gradient(ellipse 35% 14% at 75% 92%, rgba(255, 80, 30, .3), transparent 70%),
-    radial-gradient(ellipse 120% 95% at 50% 25%, var(--mat-hi) 0%, var(--mat) 42%, var(--mat-lo) 100%); }
-.seat[data-mat="tide"] { --mat: #12304a; --mat-hi: #1f5578; --mat-lo: #061119; --mat-accent: #5fd0ff; --mat-line: rgba(120, 210, 255, .2);
-  background: var(--grain),
-    radial-gradient(ellipse 60% 30% at 30% 10%, rgba(120, 210, 255, .18), transparent 70%),
-    radial-gradient(ellipse 120% 95% at 50% 25%, var(--mat-hi) 0%, var(--mat) 42%, var(--mat-lo) 100%); }
-.seat[data-mat="grave"] { --mat: #1e2320; --mat-hi: #33403a; --mat-lo: #070908; --mat-accent: #9fd9a4; --mat-line: rgba(170, 220, 180, .16);
-  background: var(--grain),
-    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(120, 170, 130, .16), transparent 70%),
-    radial-gradient(ellipse 120% 95% at 50% 25%, var(--mat-hi) 0%, var(--mat) 42%, var(--mat-lo) 100%); }
-.seat[data-mat="sun"] { --mat: #4a3d2c; --mat-hi: #7a6646; --mat-lo: #1d170f; --mat-accent: #ffe08a; --mat-line: rgba(255, 225, 150, .25);
-  background: var(--grain),
-    linear-gradient(115deg, transparent 30%, rgba(255, 230, 160, .12) 42%, transparent 46%, transparent 55%, rgba(255, 230, 160, .08) 63%, transparent 68%),
-    radial-gradient(ellipse 120% 95% at 50% 10%, var(--mat-hi) 0%, var(--mat) 45%, var(--mat-lo) 100%); }
-.seat[data-mat="wild"] { --mat: #1f3a1c; --mat-hi: #3a6a30; --mat-lo: #0a150a; --mat-accent: #b8ff7a; --mat-line: rgba(190, 255, 150, .18);
-  background: var(--grain),
-    radial-gradient(ellipse 50% 30% at 80% 0%, rgba(200, 255, 150, .14), transparent 70%),
-    radial-gradient(ellipse 120% 95% at 50% 25%, var(--mat-hi) 0%, var(--mat) 42%, var(--mat-lo) 100%); }
+/* Playmats: five painted worlds (public/mats, made by tools/paint-mats.py). A dark wash keeps cards readable. */
+.seat[data-mat] { background-size: cover; background-position: center; }
+.seat[data-mat]::after { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: radial-gradient(ellipse 80% 70% at 50% 45%, rgba(0, 0, 0, .18), rgba(0, 0, 0, .55)); }
+.seat[data-mat="ember"] { --mat-accent: #ff8a3d; --mat-line: rgba(255, 150, 80, .25); background-image: var(--grain), url(/mats/ember.jpg); }
+.seat[data-mat="tide"] { --mat-accent: #5fd0ff; --mat-line: rgba(120, 210, 255, .22); background-image: var(--grain), url(/mats/tide.jpg); }
+.seat[data-mat="grave"] { --mat-accent: #9fd9a4; --mat-line: rgba(170, 220, 180, .18); background-image: var(--grain), url(/mats/grave.jpg); }
+.seat[data-mat="sun"] { --mat-accent: #ffe08a; --mat-line: rgba(255, 225, 150, .28); background-image: var(--grain), url(/mats/sun.jpg); }
+.seat[data-mat="wild"] { --mat-accent: #b8ff7a; --mat-line: rgba(190, 255, 150, .2); background-image: var(--grain), url(/mats/wild.jpg); }
 .seat.active { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 14px 30px rgba(0, 0, 0, .55), 0 0 0 2px var(--mat-accent), 0 0 36px -4px var(--mat-accent); }
 .seat.out .bf, .seat.out .dock { filter: grayscale(.9) brightness(.5); }
 .me .seat { grid-template-rows: auto minmax(140px, 1fr) auto; }
@@ -212,7 +198,15 @@ img { max-width: 100%; }
 .matopt { position: relative; aspect-ratio: 3 / 2; border-radius: 10px; border: 2px solid transparent; overflow: hidden; cursor: pointer; display: grid; place-items: end start; padding: 8px; font: 700 13px var(--f-display); text-shadow: 0 1px 3px #000; }
 .matopt.on { border-color: var(--candle); box-shadow: 0 0 0 1px var(--candle), 0 0 14px rgba(227, 184, 102, .5); }
 .matopt small { display: block; font: 12px var(--f-body); color: var(--muted); }
-.matopt.auto { background: var(--grain), linear-gradient(135deg, #3a1c14, #12304a 33%, #1e2320 50%, #4a3d2c 70%, #1f3a1c); }
+.matopt { background-size: cover; background-position: center; }
+.matopt::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0, 0, 0, .7), transparent 55%); }
+.matopt > span { position: relative; z-index: 1; }
+.matopt.ember { background-image: url(/mats/ember-thumb.jpg); } .matopt.tide { background-image: url(/mats/tide-thumb.jpg); } .matopt.grave { background-image: url(/mats/grave-thumb.jpg); }
+.matopt.sun { background-image: url(/mats/sun-thumb.jpg); } .matopt.wild { background-image: url(/mats/wild-thumb.jpg); }
+.matopt.auto { background-image: var(--grain), linear-gradient(135deg, #3a1c14, #12304a 33%, #1e2320 50%, #4a3d2c 70%, #1f3a1c); }
+.ci.back img { display: block; width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; pointer-events: none; }
+.ci.back.pic { border: 0; background: #15110d; }
+.ci.back.pic span { display: none; }
 .stackcards .card.top .ci { box-shadow: 0 0 0 2px var(--g, var(--candle)), 0 0 24px var(--g, var(--candle)); }
 
 /* Fallback frame (unknown cards, tokens, art still loading) */

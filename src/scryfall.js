@@ -4,6 +4,8 @@
 // localStorage so a deck only hits the network the first time it is seated.
 
 const CACHE_KEY = 'edhclub-scryfall-v1';
+// The standard Magic card back, as hosted by Scryfall (card_back_id 0aeebaf5-8c7d-4636-9e82-8c27447861f7).
+export const CARD_BACK = 'https://backs.scryfall.io/normal/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg';
 const API = 'https://api.scryfall.com/cards/collection';
 
 let cache = load();

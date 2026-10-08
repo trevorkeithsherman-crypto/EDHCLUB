@@ -1,6 +1,17 @@
 import { fetchCards, cached, CARD_BACK } from './scryfall.js';
 import { DB, buildSample } from './decks.js';
 import { FX, SFX, Ambient, setFxState } from './fx.js';
+import { net } from './net.js';
+import { makeBot } from './bots.js';
+import { online, currentUser, recordGame, setRoomStatus, localName } from './supa.js';
+
+/* ---------- Mode from the URL ---------- */
+const Q = new URLSearchParams(location.search);
+const MODE = Q.get('room') ? 'room' : Q.get('mode') === 'bots' ? 'bots' : 'hotseat';
+const ROOM = { code: (Q.get('room') || '').toUpperCase(), host: Q.get('host') === '1', name: Q.get('name') || localName() || 'Planeswalker', seats: clampInt(Q.get('seats'), 2, 4, 4), bots: clampInt(Q.get('bots'), 0, 3, MODE === 'bots' ? 3 : 0), club: Q.get('club') || null };
+function clampInt(v, a, b, d) { const n = parseInt(v, 10); return isNaN(n) ? d : Math.max(a, Math.min(b, n)); }
+const BOT_NAMES = ['Goblin Bot', 'Sphinx Bot', 'Lich Bot', 'Druid Bot'];
+let bot = null;
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -47,9 +58,10 @@ let backOk = true; // falls back to the EDH Club back if Scryfall's card back ca
 const defaultMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'full'; } catch { return 'full'; } };
 const emptyZones = () => ({ library: [], hand: [], battlefield: [], graveyard: [], exile: [], command: [] });
 function freshState() {
+  const n = MODE === 'hotseat' ? 4 : ROOM.seats;
   return {
-    v: 2,
-    players: [0, 1, 2, 3].map((i) => ({ name: SEAT_NAMES[i], life: 40, poison: 0, cmdDmg: {}, out: false, outAt: 0, mulls: 0, deckText: buildSample(i), mat: 'auto', zones: emptyZones() })),
+    v: 2, seats: n,
+    players: [0, 1, 2, 3].map((i) => ({ name: SEAT_NAMES[i], life: 40, poison: 0, cmdDmg: {}, out: i >= n, outAt: 0, mulls: 0, deckText: buildSample(i), mat: 'auto', zones: emptyZones(), bot: MODE !== 'hotseat' && i >= n - ROOM.bots && i < n, empty: MODE === 'room' && i < n - ROOM.bots })),
     cards: {}, stack: [], turn: { active: 0, phase: 1, number: 1 }, view: 0, motion: defaultMotion(), sound: false, nextId: 1,
     log: [], attacks: [], outOrder: [], stats: { casts: {}, big: null }, over: false, sel: null, fx: true,
   };
@@ -126,7 +138,7 @@ function parseDeck(text, cmdOverride) {
   return { cmd, main: list, count };
 }
 function makeCard(def, owner) {
-  const id = 'c' + (S.nextId++);
+  const id = `c${net.active ? net.seat : 'l'}_${S.nextId++}`;
   const c = { id, name: def.name, cost: def.cost || '', type: def.type || 'Card', pt: def.pt || '', colors: def.colors || '', img: def.img || '', big: def.big || '', backImg: def.backImg || '', backBig: def.backBig || '', artist: def.artist || '', owner, controller: owner, zone: 'library', tapped: false, faceDown: false, flipped: false, p1: 0, ctr: 0, token: false, x: 0, y: 0, isCmdr: false, casts: 0 };
   S.cards[id] = c; return c;
 }
@@ -151,7 +163,8 @@ function newGame(keep) {
   const old = S; S = freshState();
   if (keep && old) { S.players.forEach((p, i) => { p.name = old.players[i].name; p.deckText = old.players[i].deckText; }); S.motion = old.motion; S.sound = old.sound; S.view = old.view; }
   setFxState(S);
-  S.players.forEach((p, i) => loadDeck(i, p.deckText));
+  S.players.forEach((p, i) => { if (p.bot) p.name = BOT_NAMES[i]; if (i < S.seats && net.isMine(i)) loadDeck(i, p.deckText); });
+  if (MODE !== 'hotseat') { const me = net.active ? net.seat : 0; P(me).name = ROOM.name; P(me).empty = false; }
   log('New game. Everyone shuffled and drew 7.');
 }
 
@@ -360,10 +373,9 @@ function attack(c, t) {
 }
 function combatDamage(c, t) {
   const n = powerOf(c); if (n <= 0) { toast(`${c.name} has no power to deal damage`); return; }
-  const p = P(t); if (c.isCmdr) p.cmdDmg[c.id] = (p.cmdDmg[c.id] || 0) + n;
   S.attacks = S.attacks.filter((a) => a.id !== c.id);
-  log(`${c.name} dealt ${n} damage to ${p.name}`);
-  changeLife(t, -n, { src: c });
+  if (!net.isMine(t)) { render(); request(t, 'combat', c.id); return; }
+  REQ.combat(t, c.id);
 }
 function changeLife(i, d, o = {}) {
   const p = P(i); if (!d) return; p.life += d;
@@ -386,12 +398,14 @@ function eliminate(i, why) {
   S.outOrder.push({ i, why, round: S.turn.number });
   S.attacks = S.attacks.filter((a) => a.target !== i);
   log(`${p.name} is out: ${why}`); SFX.play('gong'); render(); FX.shake(seatEl(i), true);
-  const alive = S.players.map((_, k) => k).filter((k) => !P(k).out);
+  const alive = S.players.map((_, k) => k).filter((k) => k < (S.seats || 4) && !P(k).out);
   if (alive.length === 1) setTimeout(() => win(alive[0]), motionMul() ? 1100 : 0);
   else if (S.turn.active === i) passTurn();
 }
-function win(i) {
-  S.over = true; const cols = []; commandersOf(i).forEach((c) => colorsHex(c).forEach((h) => cols.push(h))); cols.push(css('--candle'), css('--parch'));
+function win(i, fromRemote) {
+  if (S.over && !fromRemote) return;
+  S.over = true;
+  if (net.active && net.isHost && !fromRemote) { setRoomStatus(ROOM.code, 'finished'); recordGame({ code: ROOM.code, clubId: ROOM.club, winnerName: P(i).name, players: S.players.slice(0, S.seats).map((p, k) => ({ name: p.name, commander: commandersOf(k).map((c) => c.name).join(' + '), bot: !!p.bot })), rounds: S.turn.number }); } const cols = []; commandersOf(i).forEach((c) => colorsHex(c).forEach((h) => cols.push(h))); cols.push(css('--candle'), css('--parch'));
   FX.confetti(cols); SFX.play('victory'); log(`${P(i).name} wins the game`); render();
   const total = Object.values(S.stats.casts).reduce((a, b) => a + b, 0);
   const ccasts = S.players.map((p, k) => `${esc(p.name)} ${commandersOf(k).reduce((a, c) => a + (c.casts || 0), 0)}`).join(' · ');
@@ -405,7 +419,8 @@ function win(i) {
 function passTurn() {
   S.attacks = [];
   let n = S.turn.active;
-  for (let k = 1; k <= 4; k++) { const c = (S.turn.active + k) % 4; if (!P(c).out) { n = c; break; } }
+  const ns = S.seats || 4;
+  for (let k = 1; k <= ns; k++) { const c = (S.turn.active + k) % ns; if (!P(c).out && !P(c).empty) { n = c; break; } }
   if (n <= S.turn.active) S.turn.number++;
   S.turn.active = n; S.turn.phase = 0;
   const p = P(n); const tapped = p.zones.battlefield.filter((id) => S.cards[id].tapped);
@@ -416,16 +431,63 @@ function passTurn() {
   setTimeout(() => { S.turn.phase = 1; render(); draw(n, 1); }, tapped.length && motionMul() ? 300 : 0);
 }
 function nextPhase() { if (S.turn.phase >= PHASES.length - 1) { passTurn(); return; } if (S.turn.phase === 2) S.attacks = []; S.turn.phase++; render(); }
-function wipe(kind) {
+function wipe(kind) { if (net.active) net.send('all', { fn: 'wipe', kind }); wipeLocal(kind); }
+function wipeLocal(kind) {
   const victims = [];
-  S.players.forEach((p) => p.zones.battlefield.forEach((id) => { const c = S.cards[id]; if (kind === 'creatures' ? isCreature(c) : !/Land/.test(c.type)) victims.push(c); }));
-  if (!victims.length) { toast('Nothing on the battlefield to destroy'); return; }
+  S.players.forEach((p, k) => net.isMine(k) && p.zones.battlefield.forEach((id) => { const c = S.cards[id]; if (kind === 'creatures' ? isCreature(c) : !/Land/.test(c.type)) victims.push(c); }));
+  if (!victims.length) { if (!net.active) toast('Nothing on the battlefield to destroy'); return; }
   SFX.play('shatter');
   victims.forEach((c) => { const el = cardEl(c.id); const r = visRect(el); if (r && motionMul()) { FX.shatter(r, colorsHex(c)); el.style.transition = 'opacity .14s'; el.style.opacity = '0'; } });
   setTimeout(() => {
     victims.forEach((c) => { if (S.cards[c.id]) moveCard(c.id, c.owner, c.isCmdr ? 'command' : 'graveyard', { anim: 'none' }); });
     log(`Board wipe: ${victims.length} permanent${victims.length > 1 ? 's' : ''} destroyed${victims.some((c) => c.isCmdr) ? ' (commanders went to the command zone)' : ''}`); render();
   }, motionMul() ? 280 : 0);
+}
+
+/* ---------- Room sync ---------- */
+const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts'];
+function seatSnap(i) {
+  const p = P(i);
+  const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
+  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, mat: p.mat, bot: p.bot, empty: false }, zones: p.zones, cards };
+}
+function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40) }; }
+function applySeat(snap) {
+  const i = snap.seat; if (net.isMine(i)) return;
+  const p = P(i); Object.assign(p, snap.player); p.zones = snap.zones;
+  Object.values(S.cards).forEach((c) => { if (c.owner === i) delete S.cards[c.id]; });
+  snap.cards.forEach((c) => { S.cards[c.id] = { img: '', big: '', backImg: '', backBig: '', artist: '', ...c }; });
+  hydrate();
+  if (!drag) render();
+  ensureArt(snap.cards.filter((c) => !c.token).map((c) => c.name), { quiet: true });
+}
+function applyShared(sn) {
+  S.turn = sn.turn; S.stack = sn.stack; S.attacks = sn.attacks; S.outOrder = sn.outOrder; S.stats = sn.stats;
+  const was = S.over; S.over = sn.over;
+  if (sn.log && sn.log[0] && (!S.log[0] || S.log[0].t < sn.log[0].t)) S.log = sn.log;
+  if (!drag) render();
+  if (S.over && !was) { const alive = S.players.map((_, k) => k).filter((k) => k < S.seats && !P(k).out); if (alive.length === 1) win(alive[0], true); }
+}
+function request(to, fn, ...args) {
+  if (net.isMine(to)) { REQ[fn](to, ...args); return; }
+  net.send('req', { to, fn, args });
+}
+const REQ = {
+  changeLife: (to, d, src) => changeLife(to, d, { src: src ? S.cards[src] : null }),
+  poison: (to, d) => { const p = P(to); p.poison = Math.max(0, p.poison + d); render(); if (d > 0) { SFX.play('hit'); FX.shake(seatEl(to)); } checkOut(to); },
+  cmdDmg: (to, cardId, d) => { const p = P(to); const cur = p.cmdDmg[cardId] || 0; const nv = Math.max(0, cur + d); if (nv !== cur) { p.cmdDmg[cardId] = nv; changeLife(to, -(nv - cur), { src: S.cards[cardId] }); } },
+  combat: (to, cardId) => { const c = S.cards[cardId]; if (!c) return; const n = powerOf(c); if (n <= 0) return; const p = P(to); if (c.isCmdr) p.cmdDmg[c.id] = (p.cmdDmg[c.id] || 0) + n; log(`${c.name} dealt ${n} damage to ${p.name}`); changeLife(to, -n, { src: c }); },
+};
+const ALL = {
+  wipe: (kind) => wipeLocal(kind),
+  newGame: () => { newGame(true); render(); },
+  attackEnd: (cardId) => { S.attacks = S.attacks.filter((a) => a.id !== cardId); },
+};
+function maybeBot() {
+  if (!bot || S.over) return;
+  const i = S.turn.active; const p = P(i);
+  if (!p.bot || !net.isMine(i) || bot.busy || p.out) return;
+  if (!bot.scheduled) { bot.scheduled = true; setTimeout(() => { bot.scheduled = false; if (P(S.turn.active).bot && !S.over) bot.takeTurn(S.turn.active); }, 600); }
 }
 
 /* ---------- Rendering ---------- */
@@ -436,7 +498,7 @@ function matOf(i) {
   const c = commandersOf(i)[0]; const col = c ? (c.colors || '')[0] : '';
   return MAT_BY_COLOR[col] || ['wild', 'tide', 'grave', 'sun'][i % 4];
 }
-const others = () => [1, 2, 3].map((k) => (S.view + k) % 4);
+const others = () => [1, 2, 3].map((k) => (S.view + k) % 4).filter((k) => k < (S.seats || 4));
 function seatHTML(i, full) {
   const p = P(i); const active = S.turn.active === i;
   const cmdNames = commandersOf(i).map((c) => c.name).join(' + ');
@@ -446,7 +508,7 @@ function seatHTML(i, full) {
   const mp = (z, label, n) => `<button type="button" class="mp" data-act="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}">${label} <b>${n}</b></button>`;
   const head = `<div class="seat-h">
     <button type="button" class="pname" data-act="seatmenu" data-p="${i}"><span>${esc(p.name)}</span>${identityPips(i)}</button>
-    ${p.out ? '<span class="outtag">Out</span>' : ''}
+    ${p.out ? '<span class="outtag">Out</span>' : ''}${p.bot ? '<span class="chip" title="Practice bot">Bot</span>' : ''}${p.empty ? '<span class="chip">Waiting for a player…</span>' : ''}
     <span class="cmdn">${esc(cmdNames)}</span>
     <div class="life" data-life="${i}"><button type="button" data-act="life" data-p="${i}" data-d="-1" aria-label="${esc(p.name)} loses 1 life" title="Shift-click for 5">−</button><span class="lv">${p.life}</span><button type="button" data-act="life" data-p="${i}" data-d="1" aria-label="${esc(p.name)} gains 1 life" title="Shift-click for 5">+</button></div>
     <button type="button" class="chip ${warn ? 'warn' : ''}" data-act="dmg" data-p="${i}">Cmdr ${maxCmd} · Poison ${p.poison}</button>
@@ -486,6 +548,7 @@ function renderMid() {
   <div class="midtools"><button type="button" class="btn ghost sm" data-act="token">Token</button><button type="button" class="btn ghost sm" data-act="wipe">Board wipe</button><button type="button" class="btn ghost sm" data-act="d20">Roll d20</button><button type="button" class="ticker" data-act="log" title="Open the game log">${esc(last)}</button></div>`;
 }
 function syncTools() {
+  $('#viewSel').closest('label').hidden = MODE !== 'hotseat';
   $('#viewSel').innerHTML = S.players.map((p, i) => `<option value="${i}" ${i === S.view ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
   $('#motionSel').value = S.motion;
   const sb = $('#soundBtn'); sb.textContent = S.sound ? 'Sound on' : 'Sound off'; sb.setAttribute('aria-pressed', String(S.sound));
@@ -496,7 +559,10 @@ function render() {
   $('#opps').innerHTML = others().map((i) => seatHTML(i, false)).join('');
   $('#me').innerHTML = seatHTML(S.view, true);
   renderMid(); syncTools();
+  $('#opps').style.gridTemplateColumns = `repeat(${Math.max(1, (S.seats || 4) - 1)}, minmax(0, 1fr))`;
   sizeBattlefields(); Ambient.sync();
+  net.queueSync(seatSnap, sharedSnap);
+  maybeBot();
   if (zoomId && !S.cards[zoomId]) hideZoom();
   requestAnimationFrame(drawArrows); queueSave();
 }
@@ -568,6 +634,10 @@ function closeMenu() { const m = $('#menu'); if (!m.hidden) { m.hidden = true; m
 function cardMenu(c, x, y) {
   const items = []; const add = (label, fn, o = {}) => items.push({ label, fn, ...o }); const sep = () => items.push({ sep: true });
   const mv = (z, o = {}) => () => { moveLog(c, z, o); moveCard(c.id, c.owner, z, o); };
+  if (!net.isMine(c.controller)) {
+    if (canSee(c)) add('Look closer', () => closerModal(c));
+    openMenu(items.length ? items : [{ label: 'Not your card', fn: () => {} }], x, y, `${P(c.controller).name}'s card`); return;
+  }
   if (canSee(c)) { add('Look closer', () => closerModal(c)); sep(); }
   if (c.zone === 'battlefield') {
     add(c.tapped ? 'Untap' : 'Tap', () => toggleTap(c));
@@ -627,8 +697,9 @@ function commandMenu(pi, x, y) {
 }
 function seatMenu(pi, x, y) {
   const p = P(pi);
+  if (!net.isMine(pi)) { openMenu([{ label: `${p.name}'s seat`, fn: () => {} }], x, y, p.name); return; }
   openMenu([
-    ...(pi !== S.view ? [{ label: `Play as ${p.name}`, fn: () => { S.view = pi; S.sel = null; render(); }, hot: true }] : []),
+    ...(MODE === 'hotseat' && pi !== S.view ? [{ label: `Play as ${p.name}`, fn: () => { S.view = pi; S.sel = null; render(); }, hot: true }] : []),
     { label: 'Choose playmat', fn: () => matModal(pi) },
     { label: 'Rename', fn: () => renameModal(pi) },
     { label: 'Import a deck for this seat', fn: () => importModal(pi) },
@@ -638,6 +709,7 @@ function seatMenu(pi, x, y) {
 }
 function pileClick(zs, anchor) {
   const [pi, z] = parseZone(zs); if (pi < 0) return; const r = anchor.getBoundingClientRect();
+  if (!net.isMine(pi)) { if (z === 'graveyard' || z === 'exile') openZone(pi, z); else toast(`That's ${P(pi).name}'s ${ZLABEL[z].toLowerCase()}.`); return; }
   if (z === 'library') draw(pi, 1);
   else if (z === 'graveyard' || z === 'exile') openZone(pi, z);
   else if (z === 'command') commandMenu(pi, r.left, r.bottom + 4);
@@ -686,7 +758,7 @@ function renameModal(pi) {
 }
 function importModal(pi) {
   openModal(`<h2>Import a deck</h2><p>Paste a text export from Moxfield, Archidekt or any deck site, one card per line like "1 Sol Ring". Put the commander under a "Commander" heading, or type it below. Card art loads from Scryfall. Importing resets that seat's board and life.</p>
-  <div class="grid2"><label for="impSeat">Seat<select id="impSeat">${S.players.map((p, i) => `<option value="${i}" ${i === pi ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
+  <div class="grid2"><label for="impSeat" ${MODE === 'hotseat' ? '' : 'hidden'}>Seat<select id="impSeat">${S.players.filter((p, i) => i < S.seats && net.isMine(i)).map((p) => { const i = S.players.indexOf(p); return `<option value="${i}" ${i === pi ? 'selected' : ''}>${esc(p.name)}</option>`; }).join('')}</select></label>
   <label for="impName">Player name<input id="impName" maxlength="24" value="${esc(P(pi).name)}"></label></div>
   <label for="impCmd">Commander (optional)<input id="impCmd" placeholder="Taken from the list if left blank"></label>
   <label for="impList">Decklist<textarea id="impList" rows="11" spellcheck="false" data-autofocus></textarea></label>
@@ -745,8 +817,7 @@ function dmgModal(pi) {
   openModal(`<h2>Damage taken by ${esc(p.name)}</h2><p>Commander damage also lowers life. 21 from one commander or 10 poison knocks a player out.</p><div class="dmgrows">${rows.join('')}</div><div class="row"><button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'narrow' });
   $('#modal .mpanel').addEventListener('click', (e) => {
     const b = e.target.closest('[data-dm]'); if (!b) return; const d = +b.dataset.d; const k = b.dataset.dm;
-    if (k === 'poison') { p.poison = Math.max(0, p.poison + d); render(); if (d > 0) { SFX.play('hit'); FX.shake(seatEl(pi)); } checkOut(pi); }
-    else { const cur = p.cmdDmg[k] || 0; const nv = Math.max(0, cur + d); if (nv !== cur) { p.cmdDmg[k] = nv; changeLife(pi, -(nv - cur), { src: S.cards[k] }); } }
+    if (k === 'poison') request(pi, 'poison', d); else request(pi, 'cmdDmg', k, d);
     if (!$('#modal').hidden && !S.over) dmgModal(pi);
   });
 }
@@ -786,6 +857,7 @@ function onDown(e) {
   if (!e.target.closest('#menu')) closeMenu();
   const el = e.target.closest('#table .card[data-id]'); if (!el) return;
   const c = S.cards[el.dataset.id]; if (!c) return;
+  if (!net.isMine(c.controller)) return;
   drag = { c, el, sx: e.clientX, sy: e.clientY, moved: false, ghost: null, lp: false, off: { x: 0, y: 0 } };
   if (e.pointerType !== 'mouse') { clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (drag && !drag.moved) { drag.lp = true; cardMenu(c, drag.sx, drag.sy); } }, 480); }
 }
@@ -868,12 +940,12 @@ function onClick(e) {
   if (a.dataset.act === 'pileclick' && e.target.closest('.card[data-id]')) return;
   const act = a.dataset.act, p = +a.dataset.p; const r = a.getBoundingClientRect();
   switch (act) {
-    case 'life': changeLife(p, (+a.dataset.d) * (e.shiftKey ? 5 : 1), { manual: true }); break;
+    case 'life': { const d = (+a.dataset.d) * (e.shiftKey ? 5 : 1); if (net.isMine(p)) changeLife(p, d, { manual: true }); else request(p, 'changeLife', d); break; }
     case 'pile': case 'pileclick': pileClick(a.dataset.zone, a); break;
     case 'seatmenu': seatMenu(p, r.left, r.bottom + 4); break;
     case 'dmg': dmgModal(p); break;
-    case 'draw': draw(p, 1); break;
-    case 'mull': mulligan(p); break;
+    case 'draw': if (net.isMine(p)) draw(p, 1); break;
+    case 'mull': if (net.isMine(p)) mulligan(p); break;
     case 'phase': { const k = +a.dataset.k; if (S.turn.phase === 2 && k !== 2) S.attacks = []; S.turn.phase = k; render(); break; }
     case 'next': nextPhase(); break;
     case 'pass': passTurn(); break;
@@ -882,7 +954,7 @@ function onClick(e) {
     case 'wipe': openMenu([{ label: 'Destroy all creatures', fn: () => wipe('creatures'), hot: true }, { label: 'Destroy all nonland permanents', fn: () => wipe('nonland') }], r.left, r.bottom + 4, 'Board wipe'); break;
     case 'd20': { const n = 1 + Math.floor(Math.random() * 20); const who = P(S.view).name; toast(`${who} rolled ${n} on a d20`); log(`${who} rolled ${n} on a d20`); SFX.play('tick'); renderMid(); break; }
     case 'log': logModal(); break;
-    case 'again': closeModal(); newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); break;
+    case 'again': closeModal(); if (net.active && !net.isHost) { toast('Only the host can start a new game'); break; } if (net.active) net.send('all', { fn: 'newGame' }); newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); break;
     default: break;
   }
 }
@@ -893,6 +965,7 @@ function onContext(e) {
   const pile = e.target.closest('[data-pile]');
   if (pile) {
     const [pi, z] = parseZone(pile.dataset.pile); if (pi < 0) return; e.preventDefault();
+    if (!net.isMine(pi)) { if (z === 'graveyard' || z === 'exile') openZone(pi, z); return; }
     if (z === 'library') libraryMenu(pi, e.clientX, e.clientY);
     else if (z === 'command') commandMenu(pi, e.clientX, e.clientY);
     else if (z === 'graveyard' || z === 'exile') openZone(pi, z);
@@ -922,7 +995,7 @@ function bindUI() {
   };
   $('#soundBtn').onclick = () => { S.sound = !S.sound; if (S.sound) { SFX.init(); SFX.play('chime', 'U'); } render(); };
   $('#importBtn').onclick = () => importModal(S.view);
-  $('#newBtn').onclick = () => confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); });
+  $('#newBtn').onclick = () => { if (net.active && !net.isHost) { toast('Only the host can start a new game'); return; } confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { if (net.active) net.send('all', { fn: 'newGame' }); newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); }); };
   document.addEventListener('pointerdown', (e) => { if (S.sound) SFX.init(); onDown(e); });
   document.addEventListener('pointermove', onMove, { passive: false });
   document.addEventListener('pointerup', onUp);
@@ -942,12 +1015,39 @@ function bindUI() {
 }
 
 /* ---------- Boot ---------- */
-function boot() {
+function botApi() { return { S, P, moveCard, castToStack, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, log }; }
+function roomBar() {
+  if (MODE !== 'room') return;
+  const t = $('#roomBar'); if (!t) return;
+  const humans = Object.values(net.peers).filter((p) => p.seat != null).length;
+  t.innerHTML = `<span class="tn">Table</span><span class="code">${esc(ROOM.code)}</span><button type="button" class="btn ghost sm" id="copyInvite">Copy invite link</button><span class="tn">${humans} of ${S.seats - ROOM.bots} seated</span>`;
+  $('#copyInvite').onclick = async () => { const link = `${location.origin}/?join=${ROOM.code}`; try { await navigator.clipboard.writeText(link); toast('Invite link copied'); } catch { toast(link, 8000); } };
+}
+async function boot() {
   let restored = null;
-  try { const raw = localStorage.getItem(KEY); if (raw) restored = JSON.parse(raw); } catch { /* ignore */ }
-  if (restored && restored.v === 2 && restored.players && restored.cards) { S = restored; if (S.fx == null) S.fx = true; S.players.forEach((p) => { if (!p.mat) p.mat = 'auto'; }); setFxState(S); }
-  else { S = null; newGame(false); }
-  bindUI(); hydrate(); render();
+  if (MODE === 'hotseat') { try { const raw = localStorage.getItem(KEY); if (raw) restored = JSON.parse(raw); } catch { /* ignore */ } }
+  if (restored && restored.v === 2 && restored.players && restored.cards) { S = restored; if (S.fx == null) S.fx = true; if (!S.seats) S.seats = 4; S.players.forEach((p) => { if (!p.mat) p.mat = 'auto'; }); setFxState(S); }
+  if (MODE === 'room') {
+    try {
+      if (online) { const u = await currentUser(); if (!u) { const { signInGuest } = await import('./supa.js'); await signInGuest(ROOM.name); } }
+      const seat = await net.join({ code: ROOM.code, name: ROOM.name, isHost: ROOM.host, seats: ROOM.seats, bots: ROOM.bots });
+      S = null; newGame(false); S.view = seat;
+      net.on('seat', applySeat); net.on('shared', applyShared);
+      net.on('req', ({ fn, to, args }) => { if (REQ[fn]) REQ[fn](to, ...args); });
+      net.on('all', ({ fn, kind, cardId }) => { if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); });
+      net.on('peers', (peers) => { Object.values(peers).forEach((pr) => { if (pr.seat != null && pr.seat < S.seats && !net.isMine(pr.seat)) { const p = P(pr.seat); p.empty = false; if (p.name === SEAT_NAMES[pr.seat]) p.name = pr.name; } }); roomBar(); render(); });
+      net.on('resend', () => { net.queueSync(seatSnap, sharedSnap); });
+      if (!ROOM.host) { ROOM.seats = S.seats; }
+      toast(ROOM.host ? `Table ${ROOM.code} is open. Share the code.` : `You're seated at ${ROOM.code}`, 4000);
+    } catch (e) {
+      document.body.insertAdjacentHTML('afterbegin', `<div class="toast" style="position:fixed;left:50%;top:40%;transform:translateX(-50%);z-index:99;pointer-events:auto;max-width:460px">${esc(e.message)}<br><a href="/">Back to the lobby</a></div>`);
+      S = null; newGame(false);
+    }
+  } else if (MODE === 'bots') { S = null; newGame(false); S.view = 0; }
+  else if (!S) { S = null; newGame(false); }
+  if (MODE !== 'hotseat') bot = makeBot(botApi());
+  bindUI(); hydrate(); render(); roomBar();
   ensureArt(allNames());
+  if (net.active) net.resendAll();
 }
 boot();

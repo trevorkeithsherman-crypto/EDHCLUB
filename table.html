@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>EDH Club</title>
+  <meta name="description" content="Free Commander games in your browser. Bring your deck, sit at the table, play.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://api.scryfall.com">
+  <link rel="preconnect" href="https://cards.scryfall.io">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Metamorphous&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mana-font@1.18.0/css/mana.min.css">
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><a class="logo" href="/">EDH Club</a><span class="sub">Commander table</span></div>
+      <div class="turn" id="turn"></div>
+      <div class="turn" id="roomBar" style="flex:0 1 auto"></div>
+      <div class="tools">
+        <label class="sel" for="viewSel"><span>Seat</span><select id="viewSel"></select></label>
+        <button type="button" class="btn ghost" id="settingsBtn" aria-haspopup="menu">Settings</button>
+        <button type="button" class="btn ghost" id="newBtn">New game</button>
+        <button type="button" class="btn" id="importBtn">Import deck</button>
+        <span hidden><select id="motionSel"><option value="full">Full</option><option value="reduced">Reduced</option><option value="off">Off</option></select><button type="button" id="fxBtn"></button><button type="button" id="soundBtn"></button></span>
+      </div>
+    </header>
+    <main class="table" id="table">
+      <section class="opps" id="opps" aria-label="Opponents"></section>
+      <section class="mid" id="mid" aria-label="Stack"></section>
+      <section class="me" id="me" aria-label="Your seat"></section>
+    </main>
+    <footer class="fan">EDH Club is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC. Card images and data from <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a>.</footer>
+  </div>
+  <canvas id="fx"></canvas>
+  <svg id="arrows" aria-hidden="true"></svg>
+  <div id="layer"></div>
+  <div id="zoom" hidden></div>
+  <div id="menu" class="menu" hidden></div>
+  <div id="modal" hidden></div>
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

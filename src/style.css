@@ -49,6 +49,8 @@ img { max-width: 100%; }
 .ph:last-child { border-right: 0; }
 .ph:hover { color: var(--text); background: rgba(255, 255, 255, .04); }
 .ph.on { background: linear-gradient(180deg, var(--gold-3), var(--gold)); color: var(--frame); }
+#roomBar .code { font: 400 15px var(--f-display); letter-spacing: .16em; color: var(--gold-3); background: var(--frame); box-shadow: var(--bevel); border-radius: 3px; padding: 4px 9px; }
+.logo { text-decoration: none; }
 .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .sel { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
 .sel select { background: var(--frame); box-shadow: var(--bevel); border: 0; border-radius: 3px; padding: 5px 8px; font-family: var(--f-display); font-size: 12px; }

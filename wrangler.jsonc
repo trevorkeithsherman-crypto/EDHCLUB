@@ -1,0 +1,10 @@
+// Cloudflare Workers static-assets deploy for EDH Club.
+// Build with `npm run build`, then `npx wrangler deploy` serves ./dist.
+{
+  "name": "edhclub",
+  "compatibility_date": "2026-09-05",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

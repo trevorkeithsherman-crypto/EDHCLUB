@@ -960,7 +960,9 @@ async function deckLibraryHTML() {
 }
 async function importModal(pi) {
   const lib = await deckLibraryHTML();
-  openModal(`<h2>Decks</h2>${lib}<p>Paste a text export from Moxfield, Archidekt or any deck site, one card per line like "1 Sol Ring". Put the commander under a "Commander" heading, or type it below. Seating a deck resets that seat's board and life.</p>
+  openModal(`<h2>Decks</h2>${lib}
+  <div class="top100"><div class="eyebrow">Top 100 on Archidekt <button type="button" class="link" id="topToggle">Browse</button></div><div id="topBody" hidden><input id="topQ" type="search" placeholder="Search by name, builder or colors (e.g. UR)" autocomplete="off"><div class="toplist" id="topList"><p class="muted">Loading…</p></div></div></div>
+  <p>Paste a text export from Moxfield, Archidekt or any deck site, one card per line like "1 Sol Ring". Put the commander under a "Commander" heading, or type it below. Seating a deck resets that seat's board and life.</p>
   <div class="grid2"><label for="impSeat" ${MODE === 'hotseat' ? '' : 'hidden'}>Seat<select id="impSeat">${S.players.filter((p, i) => i < S.seats && net.isMine(i)).map((p) => { const i = S.players.indexOf(p); return `<option value="${i}" ${i === pi ? 'selected' : ''}>${esc(p.name)}</option>`; }).join('')}</select></label>
   <label for="impName">Player name<input id="impName" maxlength="24" value="${esc(P(pi).name)}"></label></div>
   <label for="impCmd">Commander (optional)<input id="impCmd" placeholder="Taken from the list if left blank"></label>
@@ -970,6 +972,28 @@ async function importModal(pi) {
   <div class="row"><button type="button" class="btn ghost" data-act="close">Cancel</button>${online ? '<button type="button" class="btn ghost" id="impSave">Save to my decks</button>' : ''}<button type="button" class="btn" id="impGo">Shuffle up and seat</button></div>`);
   const ta = $('#impList'); ta.value = P(pi).deckText || '';
   let editingId = P(pi).deckId || '';
+  let top = null;
+  const pipsOf = (cols) => (cols || 'C').split('').map((k) => `<i class="ms ms-${k.toLowerCase()} ms-cost"></i>`).join('');
+  const drawTop = () => {
+    const q = ($('#topQ').value || '').trim().toLowerCase(); const list = $('#topList'); if (!top) return;
+    const rows = top.filter((d) => !q || `${d.name} ${d.owner} ${d.colors}`.toLowerCase().includes(q) || (q.length <= 5 && /^[wubrgc]+$/.test(q) && [...q.toUpperCase()].every((c) => d.colors.includes(c)))).slice(0, 40);
+    list.innerHTML = rows.length ? rows.map((d) => `<div class="toprow"><span class="toprank">#${top.indexOf(d) + 1}</span><span class="topname"><b>${esc(d.name)}</b><small>${esc(d.owner)} · ${d.views >= 1000 ? Math.round(d.views / 1000) + 'k' : d.views} views${d.bracket ? ` · B${d.bracket}` : ''}</small></span><span class="pips">${pipsOf(d.colors)}</span><button type="button" class="btn ghost sm" data-top-load="${d.id}">Load</button><button type="button" class="btn sm" data-top-seat="${d.id}">Seat</button></div>`).join('') : '<p class="muted">No decks match.</p>';
+  };
+  const topDeck = async (id) => { const r = await fetch(`/api/deck/${id}`); const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || r.statusText); return d; };
+  $('#topToggle').onclick = async () => {
+    const body = $('#topBody'); body.hidden = !body.hidden; $('#topToggle').textContent = body.hidden ? 'Browse' : 'Hide';
+    if (!body.hidden && !top) { try { const r = await fetch('/api/top-decks'); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.statusText); top = j.decks; drawTop(); } catch (e) { $('#topList').innerHTML = `<p class="muted">Couldn't load the list (${esc(e.message)}).</p>`; } }
+  };
+  $('#topQ').oninput = drawTop;
+  $('#topList').onclick = async (e) => {
+    const b = e.target.closest('[data-top-load],[data-top-seat]'); if (!b) return;
+    const id = b.dataset.topLoad || b.dataset.topSeat; b.disabled = true; b.textContent = '…';
+    try {
+      const d = await topDeck(id);
+      ta.value = d.text; $('#impDeckName').value = d.name; $('#impCmd').value = ''; editingId = ''; sum();
+      if (b.dataset.topSeat) $('#impGo').click(); else { toast(`Loaded ${d.name}. Seat it, or save it to your decks.`); ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    } catch (err) { toast(`Couldn't load that deck: ${err.message}`, 5000); b.disabled = false; b.textContent = b.dataset.topSeat ? 'Seat' : 'Load'; }
+  };
   $('#impDeckName').value = P(pi).deckName || '';
   $$('[data-deck-load]').forEach((b) => { b.onclick = async () => { const d = await getDeck(b.dataset.deckLoad); if (!d) return; ta.value = d.list; $('#impDeckName').value = d.name; editingId = d.id; $('#impCmd').value = ''; sum(); toast(`Loaded ${d.name}`); }; });
   $$('[data-deck-del]').forEach((b) => { b.onclick = async () => { await deleteDeck(b.dataset.deckDel); toast('Deck deleted'); importModal(pi); }; });

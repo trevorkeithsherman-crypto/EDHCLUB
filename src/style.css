@@ -393,3 +393,15 @@ body.is-drag, body.is-drag * { cursor: grabbing !important; }
 @media (max-width: 760px) { .prompt { top: auto; bottom: 90px; width: calc(100vw - 24px); } .prompt.multi { min-width: 0; } }
 .small { font-size: 12px; } .mpanel .muted { color: var(--muted); }
 .avatar.photo { background-size: cover; background-position: center; }
+
+/* Top 100 browser inside the deck modal */
+.top100 { margin: 10px 0 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, .02); }
+.top100 .eyebrow { display: flex; justify-content: space-between; align-items: center; margin: 0; }
+.top100 .link { background: none; border: 0; color: var(--blue); font: 600 12px var(--f-ui); cursor: pointer; text-transform: none; letter-spacing: 0; }
+.top100 input[type=search] { width: 100%; margin: 10px 0 8px; background: rgba(0, 0, 0, .35); border: 1px solid var(--line-2); border-radius: 8px; padding: 8px 10px; color: var(--text); font: 500 13px var(--f-ui); }
+.toplist { max-height: 260px; overflow: auto; display: grid; gap: 4px; }
+.toprow { display: grid; grid-template-columns: 34px 1fr auto auto auto; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; border: 1px solid transparent; }
+.toprow:hover { background: rgba(255, 255, 255, .04); border-color: var(--line); }
+.toprank { font: 800 11px var(--f-ui); color: var(--gold-2); }
+.topname { min-width: 0; display: grid; } .topname b { font: 600 13px var(--f-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .topname small { color: var(--muted); font-size: 11px; }
+.toprow .pips { font-size: 13px; display: flex; gap: 2px; }

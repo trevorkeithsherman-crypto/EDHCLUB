@@ -36,6 +36,22 @@ with sync_playwright() as p:
     check('play link seats the deck at a bots table', any(c['name'] == 'Krenko, Mob Boss' and c['isCmdr'] for c in st['cards'].values() if c['owner'] == 0) and len(st['players'][0]['zones']['hand']) == 7)
     check('decks page: no JS errors', not errs, str(errs)[:300])
     browser.close()
+# ---- in-game Decks modal: Top 100 browser ----
+with sync_playwright() as p:
+    browser = p.chromium.launch(); ctx = browser.new_context(); pg, errs = setup(ctx); pg.route('**/api/**', api)
+    pg.goto(BASE + '/table.html?mode=bots'); pg.wait_for_timeout(2000)
+    pg.click('#importBtn'); pg.wait_for_timeout(300)
+    check('deck modal has a Top 100 section, collapsed', pg.locator('#topToggle').count() == 1 and pg.locator('#topBody').is_hidden())
+    pg.click('#topToggle'); pg.wait_for_timeout(800)
+    check('browsing lists decks (first 40 shown)', pg.locator('.toprow').count() == 40)
+    pg.fill('#topQ', 'ur'); pg.wait_for_timeout(200); check('color search narrows the list', pg.locator('.toprow').count() == 25)
+    pg.fill('#topQ', 'deck 3'); pg.wait_for_timeout(200)
+    pg.locator('[data-top-load]').first.click(); pg.wait_for_timeout(800)
+    check('Load fills the paste area and deck name', 'Krenko, Mob Boss' in pg.locator('#impList').input_value() and pg.locator('#impDeckName').input_value() == 'Deck 0')
+    pg.locator('[data-top-seat]').first.click(); pg.wait_for_timeout(1500); st = state(pg)
+    check('Seat shuffles the deck straight into my seat', any(c['name'] == 'Krenko, Mob Boss' and c['isCmdr'] for c in st['cards'].values() if c['owner'] == 0) and len(st['players'][0]['zones']['hand']) == 7 and pg.locator('#modal').is_hidden())
+    check('in-game Top 100: no JS errors', not errs, str(errs)[:300])
+    browser.close()
 fails = [r for r in results if not r[1]]
 print(f'\n{len(results) - len(fails)}/{len(results)} passed')
 for n, ok, note in fails: print('  FAIL', n, note)

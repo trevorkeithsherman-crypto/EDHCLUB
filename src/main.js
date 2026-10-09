@@ -1,7 +1,7 @@
 import { fetchCards, cached, CARD_BACK } from './scryfall.js';
 import { DB, buildSample } from './decks.js';
 import { FX, SFX, Ambient, setFxState } from './fx.js';
-import { net } from './net.js';
+import { net, rememberRoom, recallRoom } from './net.js';
 import { makeBot } from './bots.js';
 import { online, currentUser, recordGame, setRoomStatus, localName, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
 
@@ -579,6 +579,7 @@ function render() {
   $('#opps').style.gridTemplateColumns = `repeat(${Math.max(1, (S.seats || 4) - 1)}, minmax(0, 1fr))`;
   sizeBattlefields(); Ambient.sync();
   net.queueSync(seatSnap, sharedSnap);
+  if (net.active && net.ready) rememberRoom(ROOM.code, { seat: net.seat, clientId: undefined, ...recallRoom(ROOM.code), mine: net.ownedSeats().map(seatSnap), shared: sharedSnap(), deck: { id: P(net.seat).deckId, name: P(net.seat).deckName } });
   maybeBot();
   if (zoomId && !S.cards[zoomId]) hideZoom();
   requestAnimationFrame(drawArrows); queueSave();
@@ -1074,10 +1075,11 @@ function botApi() { return { S, P, moveCard, castToStack, resolveTop, attack, co
 function roomBar() {
   if (MODE !== 'room') return;
   const t = $('#roomBar'); if (!t) return;
-  const humans = Object.values(net.peers).filter((p) => p.seat != null).length;
+  const humans = new Set(Object.values(net.peers).filter((p) => p.seat != null).map((p) => p.seat)).size;
   t.innerHTML = `<span class="tn">Table</span><span class="code">${esc(ROOM.code)}</span><button type="button" class="btn ghost sm" id="copyInvite">Copy invite link</button><span class="tn">${humans} of ${S.seats - ROOM.bots} seated</span>`;
   $('#copyInvite').onclick = async () => { const link = `${location.origin}/?join=${ROOM.code}`; try { await navigator.clipboard.writeText(link); toast('Invite link copied'); } catch { toast(link, 8000); } };
 }
+let seatRestored = false;
 async function boot() {
   let restored = null;
   if (MODE === 'hotseat') { try { const raw = localStorage.getItem(KEY); if (raw) restored = JSON.parse(raw); } catch { /* ignore */ } }
@@ -1085,8 +1087,19 @@ async function boot() {
   if (MODE === 'room') {
     try {
       if (online) { const u = await currentUser(); if (!u) { const { signInGuest } = await import('./supa.js'); await signInGuest(ROOM.name); } }
+      if (!ROOM.host && online) { try { const { getRoom } = await import('./supa.js'); const row = await getRoom(ROOM.code); if (row) { ROOM.seats = row.seats; ROOM.bots = row.bots || 0; } } catch { /* fall back to presence */ } }
       const seat = await net.join({ code: ROOM.code, name: ROOM.name, isHost: ROOM.host, seats: ROOM.seats, bots: ROOM.bots });
+      ROOM.seats = net.seats; ROOM.bots = net.bots;
       S = null; newGame(false); S.view = seat;
+      const prior = recallRoom(ROOM.code);
+      if (prior && prior.mine && prior.mine.some((m) => m.seat === seat)) {
+        seatRestored = true;
+        prior.mine.forEach((snap) => { if (!net.isMine(snap.seat)) return; const p = P(snap.seat); Object.assign(p, snap.player); p.zones = snap.zones; Object.values(S.cards).forEach((c) => { if (c.owner === snap.seat) delete S.cards[c.id]; }); snap.cards.forEach((c) => { S.cards[c.id] = { img: '', big: '', backImg: '', backBig: '', artist: '', ...c }; }); });
+        if (prior.shared) { S.turn = prior.shared.turn; S.stack = prior.shared.stack; S.attacks = prior.shared.attacks; S.outOrder = prior.shared.outOrder; S.stats = prior.shared.stats; S.over = prior.shared.over; S.log = prior.shared.log || S.log; }
+        if (prior.deck) { P(seat).deckId = prior.deck.id; P(seat).deckName = prior.deck.name; }
+        S.nextId = Math.max(S.nextId, ...Object.keys(S.cards).map((id) => parseInt(id.split('_')[1], 10) + 1).filter((n) => !isNaN(n)));
+        toast('Welcome back. Your seat was kept.');
+      }
       net.on('seat', applySeat); net.on('shared', applyShared);
       net.on('req', ({ fn, to, args }) => { if (REQ[fn]) REQ[fn](to, ...args); });
       net.on('all', ({ fn, kind, cardId }) => { if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); });
@@ -1104,7 +1117,7 @@ async function boot() {
   if (MODE !== 'hotseat') bot = makeBot(botApi());
   bindUI(); hydrate(); render(); roomBar();
   ensureArt(allNames());
-  if (MODE !== 'hotseat' && online && lastDeckId()) {
+  if (MODE !== 'hotseat' && online && lastDeckId() && !seatRestored) {
     try {
       const d = await getDeck(lastDeckId());
       if (d) { const me = net.active ? net.seat : 0; loadDeck(me, d.list, null); P(me).deckId = d.id; P(me).deckName = d.name; if (d.mat && d.mat !== 'auto') P(me).mat = d.mat; render(); toast(`Seated with ${d.name}`); ensureArt(allNames(), { quiet: true }); }
@@ -1113,3 +1126,5 @@ async function boot() {
   if (net.active) net.resendAll();
 }
 boot();
+// Read-only hook for the test suite.
+window.__edhState = () => S;

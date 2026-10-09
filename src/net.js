@@ -7,7 +7,11 @@
 // client applies. Bots are seats owned by the host's client. Nothing here knows the rules of Magic.
 import { supa } from './supa.js';
 
-const clientId = Math.random().toString(36).slice(2, 10);
+// A stable identity per browser tab so a reload re-takes the same presence slot and seat.
+const clientId = (() => { try { const k = sessionStorage.getItem('edhclub-client'); if (k) return k; const n = Math.random().toString(36).slice(2, 10); sessionStorage.setItem('edhclub-client', n); return n; } catch { return Math.random().toString(36).slice(2, 10); } })();
+const memKey = (code) => 'edhclub-room-' + code;
+export function rememberRoom(code, data) { try { sessionStorage.setItem(memKey(code), JSON.stringify(data)); } catch { /* ignore */ } }
+export function recallRoom(code) { try { return JSON.parse(sessionStorage.getItem(memKey(code)) || 'null'); } catch { return null; } }
 
 export const net = {
   code: null, seat: null, name: '', isHost: false, channel: null, peers: {}, ready: false,
@@ -37,14 +41,19 @@ export const net = {
     // Let presence settle, then pick a seat.
     await new Promise((r) => setTimeout(r, 700));
     this.peers = flatten(ch.presenceState());
-    const taken = new Set(Object.values(this.peers).map((p) => p.seat).filter((s) => s != null));
+    const hostPeer = Object.values(this.peers).find((p) => p.isHost && p.seats);
+    if (!isHost && hostPeer) { this.seats = hostPeer.seats; this.bots = hostPeer.bots || 0; }
+    const taken = new Set(Object.entries(this.peers).filter(([k]) => k !== clientId).map(([, p]) => p.seat).filter((s) => s != null));
     const human = this.seats - this.bots;
     let seat = null;
+    const prior = recallRoom(code);
     if (isHost) seat = 0;
+    else if (prior && prior.seat != null && prior.seat < human && !taken.has(prior.seat)) seat = prior.seat;
     else for (let k = 0; k < human; k++) if (!taken.has(k)) { seat = k; break; }
     if (seat == null) throw new Error('This table is full');
     this.seat = seat;
-    await ch.track({ seat, name, isHost, clientId, ts: Date.now() });
+    await ch.track({ seat, name, isHost, clientId, seats: this.seats, bots: this.bots, ts: Date.now() });
+    rememberRoom(code, { ...(prior || {}), seat, clientId });
     this.ready = true;
     this.send('hello', { clientId });
     return seat;

@@ -101,7 +101,7 @@ def menu(pg, el, label):
     pg.wait_for_timeout(450); return ok
 
 def state(pg):
-    pg.wait_for_timeout(380); return pg.evaluate("JSON.parse(localStorage.getItem('edhclub-table-v2'))")
+    pg.wait_for_timeout(380); return pg.evaluate("window.__edhState ? JSON.parse(JSON.stringify(window.__edhState())) : JSON.parse(localStorage.getItem('edhclub-table-v2'))")
 
 with sync_playwright() as p:
     browser = p.chromium.launch()

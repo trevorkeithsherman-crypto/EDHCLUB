@@ -1,4 +1,5 @@
 import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest, myProfile, uploadAvatar, removeAvatar, localAvatar } from './supa.js';
+import { startHero } from './hero.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -182,3 +183,5 @@ document.addEventListener('click', (e) => { const b = e.target.closest('[data-go
   if (q.get('reset')) { setTimeout(async () => { await refreshAccount(); if (user) { viewAccount(); toast('Set your new password below'); } }, 800); }
   if (!user && q.get('signup') != null) viewSignIn('signup');
 })();
+
+startHero(document.getElementById('heroShot'));

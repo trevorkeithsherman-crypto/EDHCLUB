@@ -23,11 +23,11 @@ with sync_playwright() as p:
     g2.goto(BASE + '/table.html?room=ROOM4&name=Guest2'); g2.wait_for_timeout(2600)
     host.wait_for_timeout(800)
     seats = host.eval_on_selector_all('.seat .pname span:first-child', 'e=>e.map(x=>x.textContent)')
-    check('three humans seated with distinct seats; bot in the last seat', 'Guest1' in seats and 'Guest2' in seats and host.locator('.seat[data-seat="3"] .chip:has-text("Bot")').count() == 1, str(seats))
+    check('three humans seated with distinct seats; bot in the last seat', 'Guest1' in seats and 'Guest2' in seats and host.locator('.seat[data-seat="3"] .avatar.bot').count() == 1, str(seats))
     check('every client sees every other name', 'Guest2' in g1.locator('#opps').text_content() and 'Host' in g2.locator('#opps').text_content() and 'Guest1' in g2.locator('#opps').text_content())
     g3.goto(BASE + '/table.html?room=ROOM4&name=Guest3'); g3.wait_for_timeout(2600)
     check('a fourth human is told the table is full', 'full' in g3.locator('body').text_content().lower())
-    check('seated count shows 3 of 3', '3 of 3' in host.locator('#roomBar').text_content(), host.locator('#roomBar').text_content())
+    check('seated count shows 3 of 3', '3/3' in host.locator('#roomBar').text_content(), host.locator('#roomBar').text_content())
     # chain of plays visible everywhere
     for pg_, nm in ((host, 'Host'), (g1, 'Guest1'), (g2, 'Guest2')):
         menu(pg_, pg_.locator('.hand .card').first, 'Put onto battlefield')
@@ -40,7 +40,7 @@ with sync_playwright() as p:
     g2.click('[data-act=pass]'); host.wait_for_timeout(9000); g1.wait_for_timeout(500)
     check('bot (host-run) takes its turn and passes back to Host, seen by Guest1', state(g1)['turn']['active'] == 0 and state(g1)['turn']['number'] == 2, str(state(g1)['turn']))
     # cross damage from a guest to another guest
-    g1.locator('[data-life="2"] [data-d="-1"]').click(modifiers=['Shift']); host.wait_for_timeout(1200)
+    g1.locator('.seat[data-seat="2"] [data-act=life][data-d="-1"]').click(modifiers=['Shift'], force=True); host.wait_for_timeout(1200)
     check('guest-to-guest life request converges on all clients', state(host)['players'][2]['life'] == 35 and state(g2)['players'][2]['life'] == 35 and state(g1)['players'][2]['life'] == 35)
     # reconnect: guest2 reloads mid-game
     g2life = state(g2)['players'][2]['life']; g2.reload(); g2.wait_for_timeout(3200); host.wait_for_timeout(1500)
@@ -60,7 +60,7 @@ with sync_playwright() as p:
     check('a guest conceding is seen as Out by the host', host.locator('.seat[data-seat="1"] .outtag').count() == 1)
     g2.click('.me .pname'); g2.wait_for_timeout(150); g2.click('.mi:has-text("Concede")'); host.wait_for_timeout(1200)
     # eliminate bot via poison from host (host owns bot seat)
-    host.locator('[data-act=dmg][data-p="3"]').click(); host.wait_for_timeout(200)
+    host.locator('.lifebadge[data-p="3"]').click(); host.wait_for_timeout(200)
     for _ in range(10): host.locator('[data-dm=poison][data-d="1"]').click(); host.wait_for_timeout(60)
     host.wait_for_timeout(2500)
     check('last player standing: host sees the win recap', host.locator('.recap').count() == 1 and 'Host wins' in host.locator('.recap').text_content())

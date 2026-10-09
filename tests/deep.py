@@ -205,11 +205,11 @@ with sync_playwright() as p:
     check('attacking taps the creature and moves to Combat', state(pg)['cards'][att.get_attribute('data-id')]['tapped'] and state(pg)['turn']['phase'] == 2)
     check('combat damage lowers the target life', menu(pg, att, 'combat damage') and state(pg)['players'][1]['life'] == 37)
     # life buttons
-    lb = pg.locator('[data-life="1"] [data-d="-1"]'); lb.click(); pg.wait_for_timeout(150); lb.click(modifiers=['Shift']); pg.wait_for_timeout(300)
+    lb = pg.locator('.seat[data-seat="1"] [data-act=life][data-d="-1"]'); lb.click(force=True); pg.wait_for_timeout(150); lb.click(modifiers=['Shift'], force=True); pg.wait_for_timeout(300)
     check('life buttons: -1 and shift -5', state(pg)['players'][1]['life'] == 31)
-    pg.locator('[data-life="1"] [data-d="1"]').click(); pg.wait_for_timeout(300); check('life +1', state(pg)['players'][1]['life'] == 32)
+    pg.locator('.seat[data-seat="1"] [data-act=life][data-d="1"]').click(force=True); pg.wait_for_timeout(300); check('life +1', state(pg)['players'][1]['life'] == 32)
     # poison & commander damage dialog
-    pg.locator('[data-act=dmg][data-p="1"]').click(); pg.wait_for_timeout(200)
+    pg.locator('.lifebadge[data-p="1"]').click(); pg.wait_for_timeout(200)
     for _ in range(3): pg.locator('[data-dm=poison][data-d="1"]').click(); pg.wait_for_timeout(120)
     check('poison counters via damage dialog', state(pg)['players'][1]['poison'] == 3)
     cmdbtn = pg.locator(f'[data-dm="{cm["id"]}"][data-d="1"]')
@@ -254,7 +254,7 @@ with sync_playwright() as p:
     check('hand cards are larger than opponents\' cards', pg.eval_on_selector('.hand .card', 'e=>e.offsetWidth') > pg.eval_on_selector('.opps .bf .card, .opps .seat', 'e=>e.closest(".seat") ? 70 : 70'))
     # zoom
     pg.mouse.move(5, 5); c = pg.locator('.hand .card').last.bounding_box(); pg.mouse.move(c['x'] + c['width'] * .6, c['y'] + c['height'] * .5); pg.mouse.move(c['x'] + c['width'] * .62, c['y'] + c['height'] * .52); pg.wait_for_timeout(600)
-    check('hover zoom shows large card with artist credit', pg.is_visible('#zoom') and 'Test Artist' in pg.locator('#zoom').text_content())
+    check('hover zoom shows large card with artist credit', ('Test Artist' in pg.locator('#zoom').text_content() if pg.is_visible('#zoom') else 'Test Artist' in pg.locator('#sideCard').text_content()))
     pg.mouse.move(5, 5); pg.wait_for_timeout(200)
     # seat switch (hotseat), rename, playmat
     pg.select_option('#viewSel', '2'); pg.wait_for_timeout(500); check('Playing as switches seat', state(pg)['view'] == 2 and 'Dax' in pg.locator('.me .pname').text_content())
@@ -268,12 +268,12 @@ with sync_playwright() as p:
     pg.click('#settingsBtn'); pg.wait_for_timeout(200); pg.click('.mi:has-text("Game log")'); pg.wait_for_timeout(300); check('game log opens with entries', pg.locator('.loglist li').count() > 5); pg.keyboard.press('Escape')
     pg.click('[data-act=d20]'); pg.wait_for_timeout(200); check('d20 roll', 'd20' in pg.locator('#toasts').text_content())
     # elimination & win
-    pg.locator('[data-act=dmg][data-p="1"]').click(); pg.wait_for_timeout(200)
+    pg.locator('.lifebadge[data-p="1"]').click(); pg.wait_for_timeout(200)
     for _ in range(7): pg.locator('[data-dm=poison][data-d="1"]').click(); pg.wait_for_timeout(80)
     pg.wait_for_timeout(500); check('10 poison eliminates the player', state(pg)['players'][1]['out'] and pg.locator('.seat[data-seat="1"].out').count() == 1)
     if not pg.locator('#modal').is_hidden(): pg.keyboard.press('Escape')
-    pg.evaluate("document.querySelector('[data-life=\"2\"] [data-d=\"-1\"]').click()")
-    for _ in range(8): pg.locator('[data-life="2"] [data-d="-1"]').click(modifiers=['Shift']); pg.wait_for_timeout(60)
+    pg.evaluate("document.querySelector('.seat[data-seat=\"2\"] [data-act=life][data-d=\"-1\"]').click()")
+    for _ in range(8): pg.locator('.seat[data-seat="2"] [data-act=life][data-d="-1"]').click(modifiers=['Shift'], force=True); pg.wait_for_timeout(60)
     pg.wait_for_timeout(600); check('life 0 eliminates the player', state(pg)['players'][2]['out'])
     pg.click('.seat[data-seat="3"] .pname'); pg.wait_for_timeout(150); pg.click('.mi:has-text("Concede")'); pg.wait_for_timeout(2000)
     check('last player standing wins: recap dialog', pg.locator('.recap').count() == 1 and 'Ash wins' in pg.locator('.recap').text_content())
@@ -324,7 +324,7 @@ with sync_playwright() as p:
     # ================= C. Bots =================
     ctx = browser.new_context(); pg, errs = setup(ctx)
     pg.goto(BASE + '/table.html?mode=bots&seats=4&bots=3&name=Trevor'); pg.wait_for_timeout(1500)
-    check('bots mode seats me plus 3 bots', pg.locator('.chip:has-text("Bot")').count() == 3 and 'Trevor' in pg.locator('.me .pname').text_content())
+    check('bots mode seats me plus 3 bots', pg.locator('.avatar.bot').count() == 3 and 'Trevor' in pg.locator('.me .pname').text_content())
     check('Seat selector hidden outside hotseat', pg.locator('#viewSel').is_hidden())
     pg.click('[data-act=pass]'); t0 = time.time()
     while time.time() - t0 < 40:
@@ -350,7 +350,7 @@ with sync_playwright() as p:
     check('host seated at seat 0 with code shown', 'TESTR' in host.locator('#roomBar').text_content())
     check('guest takes seat 1 and host sees the name', 'Guest' in host.locator('.seat[data-seat="1"] .pname').text_content())
     check('guest sees host name on seat 0', 'Host' in guest.locator('.seat[data-seat="0"] .pname').text_content())
-    check('bot seat visible to guest', guest.locator('.seat[data-seat="2"] .chip:has-text("Bot")').count() == 1)
+    check('bot seat visible to guest', guest.locator('.seat[data-seat="2"] .avatar.bot').count() == 1)
     gh = len(state(guest)['players'][1]['zones']['hand'])
     check('guest hand is hidden on host (card backs)', host.locator('.seat[data-seat="1"] .minipiles').text_content().find(str(gh)) >= 0 and host.locator('.seat[data-seat="1"] .hand').count() == 0)
     # guest plays a card
@@ -363,7 +363,7 @@ with sync_playwright() as p:
         drag(host, gcel, host.locator('.me [data-pile$=graveyard] .slot')); check("host can't move the guest's card", len(state(host)['players'][1]['zones']['battlefield']) >= 1)
         gcel.click(button='right'); host.wait_for_timeout(150); check("host's menu on guest card is view-only", host.locator('.menu .mi').count() <= 1); host.keyboard.press('Escape')
     # host damages guest via life button -> request
-    host.locator('[data-life="1"] [data-d="-1"]').click(modifiers=['Shift']); host.wait_for_timeout(1200)
+    host.locator('.seat[data-seat="1"] [data-act=life][data-d="-1"]').click(modifiers=['Shift'], force=True); host.wait_for_timeout(1200)
     check('life request: guest applies and both agree', state(guest)['players'][1]['life'] == 35 and state(host)['players'][1]['life'] == 35, f"g={state(guest)['players'][1]['life']} h={state(host)['players'][1]['life']}")
     # guest attacks host with a creature
     gcr = guest.locator('.me .bf .card').first
@@ -372,7 +372,7 @@ with sync_playwright() as p:
         check('combat damage across clients lowers host life on both', state(host)['players'][0]['life'] == 37 and state(guest)['players'][0]['life'] == 37, f"h={state(host)['players'][0]['life']} g={state(guest)['players'][0]['life']}")
     # host passes turn -> guest sees it's their turn
     host.click('[data-act=pass]'); guest.wait_for_timeout(1500)
-    check('turn passes to guest on both screens', state(guest)['turn']['active'] == 1 and 'Guest' in guest.locator('.turnbar .who').text_content())
+    check('turn passes to guest on both screens', state(guest)['turn']['active'] == 1 and 'Your turn' in guest.locator('.turnbar .who').text_content())
     # board wipe from host clears guest creature on both
     host.click('[data-act=wipe]'); host.click('.mi:has-text("Destroy all creatures")'); guest.wait_for_timeout(1500)
     check('board wipe applies on every client', not any('Creature' in state(guest)['cards'][i]['type'] for i in state(guest)['players'][1]['zones']['battlefield']) and not any('Creature' in state(host)['cards'][i]['type'] for i in state(host)['players'][1]['zones']['battlefield']))

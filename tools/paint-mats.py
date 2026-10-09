@@ -96,23 +96,30 @@ def clouds(img, color, seed, scale=300, cover=0.55, ymax=0.55, soft=0.25, streng
 
 
 def painterly(im):
-    """Soften hard edges into something closer to brushwork."""
-    im = im.filter(ImageFilter.MedianFilter(5))
-    im = im.filter(ImageFilter.GaussianBlur(0.8))
-    im = im.filter(ImageFilter.UnsharpMask(radius=3, percent=60, threshold=2))
+    """Cinematic grade: soften edges into brushwork, bloom the highlights, deepen the blacks, add haze."""
+    from PIL import ImageEnhance, ImageChops
+    im = im.filter(ImageFilter.MedianFilter(5)).filter(ImageFilter.GaussianBlur(0.7))
+    im = im.filter(ImageFilter.UnsharpMask(radius=2.5, percent=50, threshold=2))
+    # bloom: blurred highlights added back
+    hi = im.point(lambda v: max(0, (v - 150)) * 2)
+    bloom = hi.filter(ImageFilter.GaussianBlur(28))
+    im = ImageChops.add(im, bloom.point(lambda v: int(v * 0.55)))
+    # tone: contrast + slight desaturation so cards and UI read on top
+    im = ImageEnhance.Contrast(im).enhance(1.18)
+    im = ImageEnhance.Color(im).enhance(0.9)
     return im
 
 
-def finish(img, name, vignette=0.55, grain=0.05, seed=99):
+def finish(img, name, vignette=0.55, grain=0.03, seed=99):
     strokes = noise(W, H, 18, 2, seed + 1)
     img = img * (1 + (strokes - 0.5) * grain * 2)[:, :, None]
     yy, xx = np.mgrid[0:H, 0:W]
     d = np.sqrt(((xx - W / 2) / (W / 2)) ** 2 + ((yy - H / 2) / (H / 2)) ** 2)
-    v = 1 - np.clip(d - 0.55, 0, 1) ** 1.6 * vignette
+    v = 1 - np.clip(d - 0.45, 0, 1) ** 1.5 * (vignette + 0.15)
     img = img * v[:, :, None]
     im = painterly(Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)))
-    im.save(os.path.join(OUT, f'{name}.jpg'), quality=84, optimize=True, progressive=True)
-    im.resize((480, 300), Image.LANCZOS).save(os.path.join(OUT, f'{name}-thumb.jpg'), quality=78, optimize=True)
+    im.save(os.path.join(OUT, f'{name}.jpg'), quality=86, optimize=True, progressive=True)
+    im.resize((480, 300), Image.LANCZOS).save(os.path.join(OUT, f'{name}-thumb.jpg'), quality=80, optimize=True)
     print(name, os.path.getsize(os.path.join(OUT, f'{name}.jpg')) // 1024, 'KB')
 
 

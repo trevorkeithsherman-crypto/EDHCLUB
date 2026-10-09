@@ -84,7 +84,7 @@ function lookup(name) {
   return { name, cost: '', type: 'Card', pt: '', colors: '', known: false };
 }
 function applyEntry(c, e) {
-  Object.assign(c, { name: e.name, cost: e.cost, type: e.type || c.type, pt: e.pt, colors: e.colors, img: e.img, big: e.big, backImg: e.backImg, backBig: e.backBig, artist: e.artist });
+  Object.assign(c, { name: e.name, cost: e.cost, type: e.type || c.type, pt: e.pt, colors: e.colors, img: e.img, big: e.big, backImg: e.backImg, backBig: e.backBig, artist: e.artist, art: e.art || '' });
 }
 function hydrate() {
   let n = 0;
@@ -139,7 +139,7 @@ function parseDeck(text, cmdOverride) {
 }
 function makeCard(def, owner) {
   const id = `c${net.active ? net.seat : 'l'}_${S.nextId++}`;
-  const c = { id, name: def.name, cost: def.cost || '', type: def.type || 'Card', pt: def.pt || '', colors: def.colors || '', img: def.img || '', big: def.big || '', backImg: def.backImg || '', backBig: def.backBig || '', artist: def.artist || '', owner, controller: owner, zone: 'library', tapped: false, faceDown: false, flipped: false, p1: 0, ctr: 0, token: false, x: 0, y: 0, isCmdr: false, casts: 0 };
+  const c = { id, name: def.name, cost: def.cost || '', type: def.type || 'Card', pt: def.pt || '', colors: def.colors || '', img: def.img || '', big: def.big || '', art: def.art || '', backImg: def.backImg || '', backBig: def.backBig || '', artist: def.artist || '', owner, controller: owner, zone: 'library', tapped: false, faceDown: false, flipped: false, p1: 0, ctr: 0, token: false, x: 0, y: 0, isCmdr: false, casts: 0 };
   S.cards[id] = c; return c;
 }
 function shuffleArr(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -402,7 +402,7 @@ function changeLife(i, d, o = {}) {
   if (!o.manual && amt > (S.stats.big?.amt || 0)) S.stats.big = { amt, text: o.src ? `${o.src.name} hit ${p.name} for ${amt}` : `${p.name} ${d < 0 ? 'lost' : 'gained'} ${amt} life at once` };
   render();
   FX.floatNum(lifeEl(i), d);
-  if (d < 0) { FX.shake(seatEl(i)); SFX.play('hit'); } else SFX.play('heal');
+  if (d < 0) { FX.shake(seatEl(i)); SFX.play('hit'); if (i === S.view) hurtFlash(); } else SFX.play('heal');
   checkOut(i);
 }
 function checkOut(i) {
@@ -518,23 +518,26 @@ function matOf(i) {
   return MAT_BY_COLOR[col] || ['wild', 'tide', 'grave', 'sun'][i % 4];
 }
 const others = () => [1, 2, 3].map((k) => (S.view + k) % 4).filter((k) => k < (S.seats || 4));
+function avatarHTML(i, big) {
+  const p = P(i); const c = commandersOf(i)[0];
+  const ring = c ? colorHex(c) : css('--gold');
+  const art = c && c.art ? ` style="background-image:url(${esc(c.art)});--ring:${ring}"` : ` style="--ring:${ring}"`;
+  return `<div class="avatar ${p.bot ? 'bot' : ''}"${art}>${c && c.art ? '' : `<span class="init">${esc((p.name || '?')[0].toUpperCase())}</span>`}<button type="button" class="lifebadge" data-life="${i}" data-act="dmg" data-p="${i}" title="Damage, poison and commander damage">${p.life}</button></div>`;
+}
 function seatHTML(i, full) {
   const p = P(i); const active = S.turn.active === i;
   const cmdNames = commandersOf(i).map((c) => c.name).join(' + ');
   const maxCmd = Math.max(0, ...Object.values(p.cmdDmg));
   const warn = maxCmd >= 15 || p.poison >= 7;
-  const bf = p.zones.battlefield.map((id) => { const c = S.cards[id]; return cardHTML(c, { style: `left:${(c.x * 100).toFixed(2)}%;top:${(c.y * 100).toFixed(2)}%` }); }).join('');
-  const mp = (z, label, n) => `<button type="button" class="mp" data-act="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}">${label} <b>${n}</b></button>`;
-  const head = `<div class="seat-h">
-    <button type="button" class="pname" data-act="seatmenu" data-p="${i}"><span>${esc(p.name)}</span>${identityPips(i)}</button>
-    ${p.out ? '<span class="outtag">Out</span>' : ''}${p.bot ? '<span class="chip" title="Practice bot">Bot</span>' : ''}${p.empty ? '<span class="chip">Waiting for a player…</span>' : ''}
+  const bf = p.zones.battlefield.map((id) => { const c = S.cards[id]; const atk = S.attacks.some((a) => a.id === id); return cardHTML(c, { cls: atk ? 'attacking' : '', style: `left:${(c.x * 100).toFixed(2)}%;top:${(c.y * 100).toFixed(2)}%` }); }).join('');
+  const mp = (z, label, n) => `<button type="button" class="mp" data-act="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}" title="${label}">${label} <b>${n}</b></button>`;
+  const plate = `<div class="plate">${avatarHTML(i, full)}<div class="pinfo">
+    <button type="button" class="pname" data-act="seatmenu" data-p="${i}"><span>${esc(p.name)}</span>${identityPips(i)}${p.out ? '<span class="outtag">Out</span>' : ''}${p.empty ? '<span class="chip">Waiting…</span>' : ''}</button>
     <span class="cmdn">${esc(cmdNames)}</span>
-    <div class="life" data-life="${i}"><button type="button" data-act="life" data-p="${i}" data-d="-1" aria-label="${esc(p.name)} loses 1 life" title="Shift-click for 5">−</button><span class="lv">${p.life}</span><button type="button" data-act="life" data-p="${i}" data-d="1" aria-label="${esc(p.name)} gains 1 life" title="Shift-click for 5">+</button></div>
-    <button type="button" class="chip ${warn ? 'warn' : ''}" data-act="dmg" data-p="${i}">Cmdr ${maxCmd} · Poison ${p.poison}</button>
-    ${full ? '' : `<div class="minipiles">${mp('hand', 'Hand', p.zones.hand.length)}${mp('library', 'Library', p.zones.library.length)}${mp('graveyard', 'Graveyard', p.zones.graveyard.length)}${mp('exile', 'Exile', p.zones.exile.length)}${mp('command', 'Command', p.zones.command.length)}</div>`}
-  </div>`;
+    <div class="pstat">${(maxCmd || p.poison || warn) ? `<button type="button" class="chip ${warn ? 'warn' : ''}" data-act="dmg" data-p="${i}">Cmdr ${maxCmd} · Poison ${p.poison}</button>` : ''}<span class="lifectl"><button type="button" data-act="life" data-p="${i}" data-d="-1" title="−1 (shift: −5)">−</button><button type="button" data-act="life" data-p="${i}" data-d="1" title="+1 (shift: +5)">+</button></span></div>
+  </div></div>`;
   const crack = p.out ? `<svg class="crack ${Date.now() - p.outAt < 1200 ? 'fresh' : ''}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M52 0 L47 22 L58 35 L44 55 L55 72 L49 100"/><path d="M47 22 L30 30 L18 26"/><path d="M58 35 L76 40 L90 33"/><path d="M44 55 L26 62 L12 74"/><path d="M55 72 L72 80 L86 92"/></svg>` : '';
-  const empty = p.zones.battlefield.length ? '' : `<div class="bf-empty">${full ? 'Drag cards here to play them. Lands sit along the bottom.' : 'No permanents yet'}</div>`;
+  const empty = p.zones.battlefield.length ? '' : `<div class="bf-empty">${full ? 'Drag cards here. Lands go along the bottom.' : ''}</div>`;
   let dock = '';
   if (full) {
     const slot = (z, label) => {
@@ -542,27 +545,31 @@ function seatHTML(i, full) {
       if (z === 'library') inner = list.length ? `<div class="card"><div class="ci back stackback ${backOk ? 'pic' : ''}"><span>EC</span>${backOk ? `<img src="${CARD_BACK}" alt="" draggable="false">` : ''}</div></div>` : '<span class="empty">Empty</span>';
       else inner = list.length ? cardHTML(S.cards[list[list.length - 1]]) : `<span class="empty">${z === 'command' ? 'None' : 'Empty'}</span>`;
       const tax = z === 'command' ? commandersOf(i).filter((c) => c.zone === 'command').map((c) => `<span class="tax">Tax +${2 * (c.casts || 0)}</span>`).join('') : '';
-      return `<div class="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}"><button type="button" class="pl" data-act="pile" data-zone="p${i}-${z}">${label} <b>${list.length}</b></button><div class="slot" data-act="pileclick" data-zone="p${i}-${z}" title="${z === 'library' ? 'Click to draw. Right-click for more.' : ''}">${inner}</div>${tax}</div>`;
+      const cnt = (z !== 'command' && list.length) ? `<span class="cnt">${list.length}</span>` : '';
+      return `<div class="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}"><div class="slot" data-act="pileclick" data-zone="p${i}-${z}" title="${z === 'library' ? 'Click to draw. Right-click for more.' : label}">${inner}${cnt}</div><button type="button" class="pl" data-act="pile" data-zone="p${i}-${z}">${label}</button>${tax}</div>`;
     };
     const hand = p.zones.hand.map((id) => cardHTML(S.cards[id])).join('') || '<span class="hand-empty">Your hand is empty</span>';
+    const mine = net.isMine(S.turn.active) && S.turn.active === i;
     dock = `<div class="dock"><div class="piles">${slot('command', 'Command')}${slot('library', 'Library')}${slot('graveyard', 'Graveyard')}${slot('exile', 'Exile')}</div>
       <div class="handwrap"><div class="handbar"><span>Hand · ${p.zones.hand.length}</span><span class="sp"></span><button type="button" class="btn ghost sm" data-act="draw" data-p="${i}">Draw</button><button type="button" class="btn ghost sm" data-act="mull" data-p="${i}">Mulligan</button></div>
-      <div class="hand" data-zone="p${i}-hand" data-pile="p${i}-hand">${hand}</div></div></div>`;
+      <div class="hand" data-zone="p${i}-hand" data-pile="p${i}-hand">${hand}</div></div>
+      <div class="actions"><button type="button" class="endturn ${mine ? 'mine' : ''}" data-act="pass">${mine ? 'End turn' : 'Pass turn'}</button><button type="button" class="btn sm" data-act="next">Next phase</button></div></div>`;
   }
-  const mat = matOf(i); const matStyle = mat === 'custom' ? ` style="background-image:var(--grain),url(${customMats[i]})"` : '';
+  const mat = matOf(i); const matStyle = mat === 'custom' ? ` style="background-image:url(${customMats[i]})"` : '';
   const labels = full ? '<span class="zl top">Battlefield</span><span class="zl bot">Lands</span>' : '';
-  return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''}" data-seat="${i}" data-mat="${mat}"${matStyle}>${head}<div class="bf" data-zone="p${i}-battlefield">${labels}${empty}${bf}</div>${dock}${crack}</div>`;
+  const minis = full ? '' : `<div class="minipiles">${mp('hand', 'Hand', p.zones.hand.length)}${mp('library', 'Lib', p.zones.library.length)}${mp('graveyard', 'GY', p.zones.graveyard.length)}${mp('exile', 'Ex', p.zones.exile.length)}${mp('command', 'Cmd', p.zones.command.length)}</div>`;
+  return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''} ${targeting && i !== targeting.from && !p.out && i < S.seats ? 'targetable' : ''}" data-seat="${i}" data-mat="${mat}"${matStyle}>${plate}<div class="bf" data-zone="p${i}-battlefield">${labels}${empty}${bf}</div>${minis}${dock}${crack}</div>`;
 }
 function renderTurn() { $('#turn').innerHTML = ''; }
 function renderMid() {
   const p = P(S.turn.active); const mine = net.isMine(S.turn.active);
   const last = S.log[0] ? S.log[0].text : 'Game log';
   $('#mid').innerHTML = `<div class="turnbar ${mine ? 'mine' : ''}">
-    <div class="tb-who"><span class="tn">Round ${S.turn.number}</span><span class="who">${identityPips(S.turn.active)}${esc(p.name)}'s turn</span></div>
+    <div class="tb-who"><span class="tn">Round ${S.turn.number}</span><span class="who">${identityPips(S.turn.active)}${mine ? 'Your turn' : esc(p.name) + "'s turn"}</span></div>
     <div class="phases" role="group" aria-label="Phase">${PHASES.map((ph, k) => `<button type="button" class="ph ${k === S.turn.phase ? 'on' : ''}" data-act="phase" data-k="${k}">${ph}</button>`).join('')}</div>
-    <div class="tb-act"><button type="button" class="btn sm" data-act="next">Next phase</button><button type="button" class="btn ghost sm" data-act="pass">Pass turn</button></div>
     <div class="midtools"><button type="button" class="btn ghost sm" data-act="token">Token</button><button type="button" class="btn ghost sm" data-act="wipe">Board wipe</button><button type="button" class="btn ghost sm" data-act="d20">Roll d20</button><button type="button" class="ticker" data-act="log" title="Open the game log">${esc(last)}</button></div>
   </div>`;
+  renderSide();
 }
 function syncTools() {
   $('#viewSel').closest('label').hidden = MODE !== 'hotseat';
@@ -612,11 +619,12 @@ function drawArrows() {
   const svg = $('#arrows'); const W = innerWidth, H = innerHeight; svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   let out = '<defs><marker id="ah" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path class="ahp" d="M0,0 L10,5 L0,10 z"/></marker></defs>';
   S.attacks.forEach((a) => {
-    const r1 = visRect(cardEl(a.id)), r2 = visRect(lifeEl(a.target)); if (!r1 || !r2) return;
-    const x1 = r1.left + r1.width / 2, y1 = r1.top + r1.height / 2, x2 = r2.left + r2.width / 2, y2 = r2.top + r2.height + 4;
-    const mx = (x1 + x2) / 2 + (y2 - y1) * 0.12, my = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.12 - 30;
+    const r1 = visRect(cardEl(a.id)), r2 = visRect($(`.seat[data-seat="${a.target}"] .avatar`)); if (!r1 || !r2) return;
+    const x1 = r1.left + r1.width / 2, y1 = r1.top + r1.height / 2, x2 = r2.left + r2.width / 2, y2 = r2.top + r2.height / 2;
+    const mx = (x1 + x2) / 2 + (y2 - y1) * 0.15, my = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.18 - 40;
     const fresh = Date.now() - a.t < 700 && motionMul();
-    out += `<path class="arw ${fresh ? 'fresh' : ''}" d="M${x1},${y1} Q${mx},${my} ${x2},${y2}" marker-end="url(#ah)"/>`;
+    const d = `M${x1},${y1} Q${mx},${my} ${x2},${y2}`;
+    out += `<path class="arw glow" d="${d}"/><path class="arw ${fresh ? 'fresh' : ''}" d="${d}" marker-end="url(#ah)"/><path class="arw dash" d="${d}"/>`;
   });
   svg.innerHTML = out;
 }
@@ -630,10 +638,41 @@ function banner(text, sub, pi) {
   $('#layer').appendChild(b); setTimeout(() => b.remove(), 1700);
 }
 
+/* ---------- Side panel ---------- */
+let sideTab = 'log';
+function renderSide() {
+  const el = $('#sideLog'); if (!el) return;
+  const fmt = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const rows = S.log.slice(0, 60).map((l) => {
+    const who = S.players.find((p) => l.text.startsWith(p.name)); const k = who ? S.players.indexOf(who) : -1;
+    const c = k >= 0 ? commandersOf(k)[0] : null; const dot = c ? `<span class="ldot" style="border-color:${colorHex(c)}"><i class="ms ms-${firstColor(c).toLowerCase()}"></i></span>` : '<span class="ldot">·</span>';
+    const text = who ? `<b>${esc(who.name)}</b>${esc(l.text.slice(who.name.length))}` : esc(l.text);
+    return `<div class="logrow">${dot}<div>${text}<time>${fmt(l.t)}</time></div></div>`;
+  }).join('');
+  el.innerHTML = rows || '<p class="side-empty">Nothing has happened yet.</p>';
+}
+function sideCardHTML(c) {
+  const src = faceSrc(c, true); const hidden = c.faceDown && c.controller !== S.view;
+  const meta = `<b>${esc(c.flipped && c.backImg ? c.name.split(' // ')[1] || c.name : c.name)}</b>${esc(c.type)}<br><span>${esc(P(c.owner).name)} · ${ZLABEL[c.zone]}${c.isCmdr ? ` · Tax +${2 * (c.casts || 0)}` : ''}${c.tapped ? ' · Tapped' : ''}${c.artist ? ` · Illus. ${esc(c.artist)}` : ''}</span>`;
+  return (src && !hidden ? `<img src="${esc(src)}" alt="${esc(c.name)}">` : cardHTML(c, { noid: true, flat: true, reveal: !hidden, back: hidden, cls: 'big', style: '--cw:100%' })) + `<div class="zmeta">${meta}</div>`;
+}
+const sideVisible = () => { const sd = $('#side'); return sd && getComputedStyle(sd).display !== 'none'; };
+
+/* ---------- Attack targeting ---------- */
+let targeting = null;
+function startTargeting(c) {
+  targeting = { id: c.id, from: c.controller };
+  const pr = $('#prompt'); pr.innerHTML = `<span>Choose a player for <b>${esc(c.name)}</b> to attack</span><button type="button" class="btn sm" id="cancelTarget">Cancel</button>`; pr.hidden = false;
+  $('#cancelTarget').onclick = stopTargeting; render();
+}
+function stopTargeting() { targeting = null; const pr = $('#prompt'); if (pr) { pr.hidden = true; pr.innerHTML = ''; } render(); }
+function hurtFlash() { if (!motionMul()) return; const h = document.createElement('div'); h.className = 'hurt'; $('#layer').appendChild(h); setTimeout(() => h.remove(), 800); }
+
 /* ---------- Zoom ---------- */
 const canSee = (c) => c && !(c.zone === 'hand' && c.controller !== S.view) && c.zone !== 'library' && !(c.faceDown && c.controller !== S.view);
 function showZoom(id) {
   const c = S.cards[id]; if (!canSee(c)) { hideZoom(); return; }
+  if (sideVisible()) { $('#sideCard').innerHTML = sideCardHTML(c); zoomId = id; return; }
   const z = $('#zoom'); const w = innerWidth < 760 ? 220 : 300;
   const src = faceSrc(c, true);
   const meta = `<b>${esc(c.flipped && c.backImg ? c.name.split(' // ')[1] || c.name : c.name)}</b><br><span>${esc(P(c.owner).name)} · ${ZLABEL[c.zone]}${c.isCmdr ? ` · Tax +${2 * (c.casts || 0)}` : ''}${c.tapped ? ' · Tapped' : ''}${c.artist ? ` · Illus. ${esc(c.artist)}` : ''}</span>`;
@@ -679,7 +718,8 @@ function cardMenu(c, x, y) {
     if (isCreature(c)) {
       const at = S.attacks.find((a) => a.id === c.id);
       if (at) add(`Deal ${powerOf(c)} combat damage to ${P(at.target).name}`, () => combatDamage(c, at.target), { hot: true });
-      S.players.forEach((p, k) => { if (k !== c.controller && !p.out) add(`Attack ${p.name}`, () => attack(c, k)); });
+      else add('Attack…', () => startTargeting(c), { hot: true });
+      S.players.forEach((p, k) => { if (k !== c.controller && !p.out && k < S.seats) add(`Attack ${p.name}`, () => attack(c, k)); });
     }
     sep();
     add('+1/+1 counter', () => counter(c, 'p1', 1)); add('−1/−1 counter', () => counter(c, 'p1', -1));
@@ -991,6 +1031,12 @@ function drop(d, x, y, cancel) {
   }
 }
 function onClick(e) {
+  if (targeting) {
+    const seat = e.target.closest('.seat.targetable');
+    if (seat) { const c = S.cards[targeting.id]; const k = +seat.dataset.seat; stopTargeting(); if (c) attack(c, k); return; }
+  }
+  const tab = e.target.closest('.side-tabs .tab');
+  if (tab) { sideTab = tab.dataset.tab; $$('.side-tabs .tab').forEach((t) => t.classList.toggle('on', t === tab)); $('#sideLog').hidden = sideTab !== 'log'; $('#sideChat').hidden = sideTab !== 'chat'; return; }
   const a = e.target.closest('[data-act]'); if (!a || (a.closest('#modal') && a.dataset.act === 'close')) return;
   if (performance.now() < ignoreClick && e.target.closest('.card[data-id]')) return;
   if (a.dataset.act === 'pileclick' && e.target.closest('.card[data-id]') && !/-(graveyard|exile)$/.test(a.dataset.zone || '')) return;
@@ -1028,7 +1074,7 @@ function onContext(e) {
   }
 }
 function onKey(e) {
-  if (e.key === 'Escape') { closeMenu(); closeModal(); hideZoom(); untilt(); return; }
+  if (e.key === 'Escape') { closeMenu(); closeModal(); hideZoom(); untilt(); if (targeting) stopTargeting(); return; }
   if (e.target.closest('input,textarea,select') || !$('#modal').hidden) return;
   if (e.key === ' ' && !e.target.closest('button')) { e.preventDefault(); nextPhase(); }
   else if (e.key === 'd' || e.key === 'D') draw(S.view, 1);
@@ -1051,6 +1097,7 @@ function bindUI() {
   };
   $('#soundBtn').onclick = () => { S.sound = !S.sound; if (S.sound) { SFX.init(); SFX.play('chime', 'U'); } render(); };
   $('#importBtn').onclick = () => importModal(S.view);
+  $('#sideBtn').onclick = () => { const app = $('#app'); if (innerWidth <= 1280) app.classList.toggle('show-side'); else app.classList.toggle('no-side'); requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); };
   $('#newBtn').onclick = () => { if (net.active && !net.isHost) { toast('Only the host can start a new game'); return; } confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { if (net.active) net.send('all', { fn: 'newGame' }); newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); }); };
   document.addEventListener('pointerdown', (e) => { if (S.sound) SFX.init(); onDown(e); });
   document.addEventListener('pointermove', onMove, { passive: false });
@@ -1076,7 +1123,7 @@ function roomBar() {
   if (MODE !== 'room') return;
   const t = $('#roomBar'); if (!t) return;
   const humans = new Set(Object.values(net.peers).filter((p) => p.seat != null).map((p) => p.seat)).size;
-  t.innerHTML = `<span class="tn">Table</span><span class="code">${esc(ROOM.code)}</span><button type="button" class="btn ghost sm" id="copyInvite">Copy invite link</button><span class="tn">${humans} of ${S.seats - ROOM.bots} seated</span>`;
+  t.innerHTML = `<span class="code">${esc(ROOM.code)}</span><button type="button" class="btn ghost sm" id="copyInvite" title="Copy invite link">Invite</button><span>${humans}/${S.seats - ROOM.bots}</span>`;
   $('#copyInvite').onclick = async () => { const link = `${location.origin}/?join=${ROOM.code}`; try { await navigator.clipboard.writeText(link); toast('Invite link copied'); } catch { toast(link, 8000); } };
 }
 let seatRestored = false;

@@ -37,6 +37,7 @@ function toEntry(card) {
     pt: power != null ? `${power}/${toughness}` : '',
     colors: (card.colors || front.colors || card.color_identity || []).join(''),
     img: imgs.normal || '',
+    art: imgs.art_crop || (backImgs && backImgs.art_crop) || '',
     big: imgs.large || imgs.normal || '',
     backImg: backImgs ? backImgs.normal : '',
     backBig: backImgs ? (backImgs.large || backImgs.normal) : '',

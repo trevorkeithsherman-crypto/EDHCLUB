@@ -6,7 +6,9 @@ export function setFxState(state) { S = state; }
 
 const $ = (s) => document.querySelector(s);
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const mul = () => ({ full: 1, reduced: 0.5, off: 0 }[S.motion] ?? 1);
+let lite = false;
+export function setLite(on) { lite = !!on; }
+const mul = () => (lite ? 0 : ({ full: 1, reduced: 0.5, off: 0 }[S.motion] ?? 1));
 function visRect(el) { if (!el) return null; const r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2 ? r : null; }
 
 export const FX = {
@@ -14,7 +16,7 @@ export const FX = {
   init() { this.cv = $('#fx'); this.cx = this.cv.getContext('2d'); this.size(); addEventListener('resize', () => this.size()); },
   size() { const d = devicePixelRatio || 1; this.cv.width = innerWidth * d; this.cv.height = innerHeight * d; this.cx.setTransform(d, 0, 0, d, 0, 0); },
   full() { return S.motion === 'full'; },
-  push(p) { p.life = 0; this.parts.push(p); if (!this.raf) this.raf = requestAnimationFrame(() => this.tick()); },
+  push(p) { if (lite) return; p.life = 0; this.parts.push(p); if (!this.raf) this.raf = requestAnimationFrame(() => this.tick()); },
   tick() {
     const cx = this.cx, Ps = this.parts; cx.clearRect(0, 0, innerWidth, innerHeight);
     for (let k = Ps.length - 1; k >= 0; k--) {
@@ -151,10 +153,12 @@ export const Ambient = {
     });
     if (!this.raf) this.raf = requestAnimationFrame(() => this.tick());
   },
+  /** Call when motion / effects settings change so a stopped loop can resume. */
+  wake() { if (!this.raf) this.raf = requestAnimationFrame(() => this.tick()); },
   tick() {
     this.raf = 0; this.t++;
     const m = mul();
-    if (m === 0 || S.fx === false || document.hidden) { this.seats.forEach((st) => { if (st.cv) { const cx = st.cv.getContext('2d'); cx.clearRect(0, 0, st.cv.width, st.cv.height); } }); this.raf = requestAnimationFrame(() => this.tick()); return; }
+    if (m === 0 || S.fx === false || document.hidden) { this.seats.forEach((st) => { if (st.cv && st.cv.width) { const cx = st.cv.getContext('2d'); cx.clearRect(0, 0, st.cv.width, st.cv.height); st.parts = []; } }); this.idle = true; this.raf = 0; return; }
     if (m < 1 && this.t % 2) { this.raf = requestAnimationFrame(() => this.tick()); return; }
     this.seats.forEach((st) => {
       const cv = st.cv; if (!cv || !cv.isConnected) return;

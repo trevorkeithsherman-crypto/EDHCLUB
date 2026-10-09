@@ -78,6 +78,8 @@ window.__edhChannel = (name, opts) => {
 """
 
 def setup(ctx):
+    # the test box is a small container; present it as a capable device so auto performance mode stays off unless a test asks
+    ctx.add_init_script("if (!window.__edhDeviceSet) { Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8, configurable: true }); Object.defineProperty(navigator, 'deviceMemory', { get: () => 8, configurable: true }); }")
     pg = ctx.new_page(); pg.set_viewport_size({'width': 1440, 'height': 900})
     errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.route('https://api.scryfall.com/**', collection)
@@ -260,7 +262,7 @@ with sync_playwright() as p:
     # hand fan layout
     rots = pg.eval_on_selector_all('.hand .card', 'els=>els.map(e=>e.style.getPropertyValue("--rot"))')
     check('hand is fanned (cards rotated progressively)', len(rots) >= 3 and rots[0] != rots[-1] and rots[0].endswith('deg'))
-    check('hand cards are larger than opponents\' cards', pg.eval_on_selector('.hand .card', 'e=>e.offsetWidth') > pg.eval_on_selector('.opps .bf .card, .opps .seat', 'e=>e.closest(".seat") ? 70 : 70'))
+    check('hand cards are larger than opponents\' cards', pg.eval_on_selector('.hand .card', 'e=>e.offsetWidth') > pg.eval_on_selector('.opps .bf .card, .opps .seat', 'e=>e.closest(".seat") ? 70 : 70'), pg.evaluate("()=>[document.querySelectorAll('.hand .card').length, document.querySelector('.hand .card').offsetWidth, document.querySelector('.me .hand').clientWidth, innerWidth, innerHeight]"))
     # zoom
     pg.mouse.move(5, 5); c = pg.locator('.hand .card').last.bounding_box(); pg.mouse.move(c['x'] + c['width'] * .6, c['y'] + c['height'] * .5); pg.mouse.move(c['x'] + c['width'] * .62, c['y'] + c['height'] * .52); pg.wait_for_timeout(600)
     check('hover zoom shows large card with artist credit', ('Test Artist' in pg.locator('#zoom').text_content() if pg.is_visible('#zoom') else 'Test Artist' in pg.locator('#sideCard').text_content()))

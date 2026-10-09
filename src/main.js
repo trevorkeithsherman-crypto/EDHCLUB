@@ -1,6 +1,6 @@
 import { fetchCards, fetchToken, fetchPrintings, cached, CARD_BACK } from './scryfall.js';
 import { DB, buildSample } from './decks.js';
-import { FX, SFX, Ambient, setFxState } from './fx.js';
+import { FX, SFX, Ambient, setFxState, setLite } from './fx.js';
 import { net, rememberRoom, recallRoom } from './net.js';
 import { makeBot } from './bots.js';
 import * as Rules from './combat.js';
@@ -78,7 +78,26 @@ function freshState() {
     log: [], attacks: [], outOrder: [], stats: { casts: {}, big: null }, over: false, sel: null, fx: true,
   };
 }
-const motionMul = () => ({ full: 1, reduced: 0.5, off: 0 }[S.motion] ?? 1);
+const motionMul = () => (liteOn() ? 0 : ({ full: 1, reduced: 0.5, off: 0 }[S.motion] ?? 1));
+/* ---------- Performance mode ----------
+   'auto' picks lite on weaker hardware or when frames start dropping; 'full' / 'lite' force it. Lite keeps every
+   mechanic and the look, but drops the playmat particles, foil shaders, tilt, blur and particle bursts. */
+const PERF_KEY = 'edhclub-perf';
+const perf = { mode: (() => { try { return localStorage.getItem(PERF_KEY) || 'auto'; } catch { return 'auto'; } })(), autoLite: false, reason: '' };
+const liteOn = () => perf.mode === 'lite' || (perf.mode === 'auto' && perf.autoLite);
+function applyPerf() { document.body.classList.toggle('lite', liteOn()); setLite(liteOn()); Ambient.wake(); }
+function setPerf(mode) { perf.mode = mode; try { localStorage.setItem(PERF_KEY, mode); } catch { /* ignore */ } applyPerf(); render(); }
+function perfLabel() { return `Performance: ${perf.mode === 'auto' ? `auto (${liteOn() ? 'lite' : 'full'})` : perf.mode}`; }
+function detectPerf() {
+  const n = navigator; const weak = (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || (n.deviceMemory && n.deviceMemory <= 4) || (n.connection && n.connection.saveData) || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (weak) { perf.autoLite = true; perf.reason = 'device'; }
+  applyPerf();
+  // watch the first seconds of play: if frames keep dropping, step down and say so once
+  if (perf.mode !== 'auto' || perf.autoLite || navigator.webdriver) return;
+  let last = performance.now(); let slow = 0; let total = 0; const t0 = last;
+  const probe = (now) => { const dt = now - last; last = now; if (dt > 0 && dt < 1000 && !document.hidden) { total++; if (dt > 34) slow++; } if (now - t0 < 8000) requestAnimationFrame(probe); else if (total > 60 && slow / total > 0.25) { perf.autoLite = true; perf.reason = 'frames'; applyPerf(); render(); toast('Performance mode on: this device was dropping frames. Change it under Settings.', 7000); } };
+  requestAnimationFrame(probe);
+}
 const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const P = (i) => S.players[i];
@@ -681,7 +700,7 @@ function seatHTML(i, full) {
   const maxCmd = Math.max(0, ...Object.values(p.cmdDmg));
   const warn = maxCmd >= 15 || p.poison >= 7;
   const usedB = new Set(S.attacks.flatMap((a) => a.blockers || []));
-  const bf = p.zones.battlefield.map((id) => { const c = S.cards[id]; const atk = S.attacks.some((a) => a.id === id); const blk = usedB.has(id); const atkCard = blocking ? S.cards[blocking.attackId] : null; const chosen = blocking && S.attacks.find((x) => x.id === blocking.attackId)?.blockers?.includes(id); const can = blocking && blocking.seat === i && atkCard && Rules.canBlock(c, atkCard) && (!blk || chosen); return cardHTML(c, { cls: `${atk ? 'attacking' : ''} ${blk ? 'blocking' : ''} ${can ? 'canblock' : ''}`, style: `left:${(c.x * 100).toFixed(2)}%;top:${(c.y * 100).toFixed(2)}%` }); }).join('');
+  const bf = p.zones.battlefield.map((id) => { const c = S.cards[id]; const atk = S.attacks.some((a) => a.id === id); const blk = usedB.has(id); const atkCard = blocking ? S.cards[blocking.attackId] : null; const chosen = blocking && S.attacks.find((x) => x.id === blocking.attackId)?.blockers?.includes(id); const can = blocking && blocking.seat === i && atkCard && Rules.canBlock(c, atkCard) && (!blk || chosen); return cardHTML(c, { cls: `${atk ? 'attacking' : ''} ${blk ? 'blocking' : ''} ${can ? 'canblock' : ''}`, style: `--x:${(c.x * 100).toFixed(2)}%;--y:${(c.y * 100).toFixed(2)}%` }); }).join('');
   const mp = (z, label, n) => `<button type="button" class="mp" data-act="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}" title="${label}">${label} <b>${n}</b></button>`;
   const plate = `<div class="plate">${avatarHTML(i, full)}<div class="pinfo">
     <button type="button" class="pname" data-act="seatmenu" data-p="${i}"><span>${esc(p.name)}</span>${identityPips(i)}${p.out ? '<span class="outtag">Out</span>' : ''}${p.empty ? '<span class="chip">Waiting…</span>' : ''}</button>
@@ -734,7 +753,7 @@ function render() {
   renderTurn();
   $('#opps').innerHTML = others().map((i) => seatHTML(i, false)).join('');
   $('#me').innerHTML = seatHTML(S.view, true);
-  renderMid(); syncTools(); fanHand();
+  renderMid(); syncTools(); fanHand(); watchHand();
   $('#opps').style.gridTemplateColumns = `repeat(${Math.max(1, (S.seats || 4) - 1)}, minmax(0, 1fr))`;
   sizeBattlefields(); Ambient.sync();
   net.queueSync(seatSnap, sharedSnap);
@@ -746,18 +765,35 @@ function render() {
   requestAnimationFrame(drawArrows); queueSave();
 }
 // Lay the hand out as a fan: overlapping, rotated around a pivot below the cards.
+// Re-fan whenever the hand box changes size (fonts, images, side panel, rotation): the fan must always fit the box.
+let handRO = null; let handWatched = null;
+function watchHand() {
+  const hand = $('.me .hand'); if (!hand || hand === handWatched || !('ResizeObserver' in window)) return;
+  if (handRO) handRO.disconnect();
+  handRO = new ResizeObserver(() => fanHand()); handRO.observe(hand); handWatched = hand;
+  const bf = $('.me .bf'); if (bf) handRO.observe(bf);
+}
 function fanHand() {
   const hand = $('.me .hand'); if (!hand) return;
   const cards = $$('.card', hand); const n = cards.length; if (!n) return;
-  const cw = cards[0].offsetWidth || 100;
-  const avail = Math.max(cw, hand.clientWidth - 24);
+  hand.style.removeProperty('--cw');
+  let cw = cards[0].offsetWidth || 100;
+  const narrow = isCompact(); const tight = innerHeight <= 520;
+  // A big hand shrinks its cards before it stacks them more than halfway: every card keeps a clear middle to grab.
+  const room = hand.clientWidth - (narrow ? 20 : 28);
+  if (n > 1 && (n - 1) * cw * 0.58 + cw > room) { cw = Math.max(narrow ? 44 : 84, Math.floor(room / (0.58 * (n - 1) + 1))); hand.style.setProperty('--cw', cw + 'px'); cw = cards[0].offsetWidth || cw; }
+  const ch = cw * RATIO;
+  const spread = tight ? Math.min(8, 1.5 * (n - 1)) : narrow ? Math.min(14, 2 * (n - 1)) : Math.min(24, 3 * (n - 1));
+  // how far a card rotated by spread/2 about its origin pokes out sideways / downwards
+  const rad = (spread / 2) * Math.PI / 180; const sideExt = Math.ceil(Math.sin(rad) * ch * 1.2 * 0.5 + (1 - Math.cos(rad)) * cw / 2); const drop = Math.ceil(Math.sin(rad) * cw / 2);
+  const inset = narrow ? 8 + sideExt : 12 + Math.round(sideExt * 0.4); const avail = Math.max(cw, hand.clientWidth - inset * 2);
   const step = n > 1 ? Math.min(cw * 0.72, (avail - cw) / (n - 1)) : 0;
-  const spread = Math.min(26, 3.2 * (n - 1));
-  hand.style.setProperty('--fan-h', `${cw * RATIO + 24 + spread * 1.2}px`);
-  const x0 = Math.max(12, (hand.clientWidth - ((n - 1) * step + cw)) / 2);
+  const rise = tight ? 0 : Math.min(18, spread * 0.8);
+  hand.style.setProperty('--fan-pad', `${drop}px`); hand.style.setProperty('--fan-h', `${ch + drop + rise + 10}px`);
+  const x0 = Math.max(inset, (hand.clientWidth - ((n - 1) * step + cw)) / 2);
   cards.forEach((el, i) => {
     const t = n > 1 ? i / (n - 1) - 0.5 : 0;
-    const rot = t * spread; const lift = Math.abs(t) * Math.abs(t) * spread * 1.6;
+    const rot = t * spread; const lift = -(1 - 4 * t * t) * rise; // centre up, edges on the baseline
     el.style.left = `${x0 + i * step}px`; el.style.setProperty('--rot', `${rot.toFixed(2)}deg`); el.style.setProperty('--lift', `${lift.toFixed(1)}px`); el.style.zIndex = i + 1;
   });
 }
@@ -1618,15 +1654,19 @@ function onDown(e) {
 let tiltEl = null;
 function tilt(e, el) {
   if (tiltEl && tiltEl !== el) untilt();
-  if (!el || !motionMul() || el.classList.contains('facedown')) { if (tiltEl) untilt(); return; }
-  const r = el.getBoundingClientRect(); const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
-  const tapped = el.classList.contains('tapped'); const lift = el.closest('.hand') ? 'translateY(-34px) ' : '';
-  el.style.transform = `${lift}perspective(700px) rotateX(${((0.5 - py) * 18).toFixed(1)}deg) rotateY(${((px - 0.5) * (tapped ? -18 : 18)).toFixed(1)}deg) scale(1.05)`;
+  if (!el || !motionMul() || liteOn() || el.classList.contains('facedown')) { if (tiltEl) untilt(); return; }
+  const face = el.querySelector('.ci'); if (!face) return;
+  const r = el.getBoundingClientRect(); const px = clamp((e.clientX - r.left) / r.width, 0, 1), py = clamp((e.clientY - r.top) / r.height, 0, 1);
+  const tapped = el.classList.contains('tapped'); const inHand = !!el.closest('.hand');
+  const rx = ((0.5 - py) * 16).toFixed(1), ry = ((px - 0.5) * 16).toFixed(1);
+  // Hand: the whole card lifts (its ::after keeps the pointer inside). Battlefield: only the face tilts, the box stays put.
+  if (inHand) { el.style.transform = `translateY(-34px) perspective(700px) rotateX(${rx}deg) rotateY(${ry}deg) scale(1.05)`; face.style.transform = ''; }
+  else { face.style.transform = `${tapped ? 'rotate(90deg) ' : ''}perspective(700px) rotateX(${rx}deg) rotateY(${ry}deg) scale(1.05)`; }
   el.style.setProperty('--gx', (px * 100).toFixed(0) + '%'); el.style.setProperty('--gy', (py * 100).toFixed(0) + '%');
-  if (!el.querySelector('.glare')) { const g = document.createElement('div'); g.className = 'glare'; el.appendChild(g); }
+  if (!face.querySelector('.glare')) { const g = document.createElement('div'); g.className = 'glare'; face.appendChild(g); }
   el.classList.add('tilt'); tiltEl = el;
 }
-function untilt() { if (!tiltEl) return; tiltEl.style.transform = ''; tiltEl.classList.remove('tilt'); tiltEl = null; }
+function untilt() { if (!tiltEl) return; const face = tiltEl.querySelector('.ci'); if (face) face.style.transform = ''; tiltEl.style.transform = ''; tiltEl.classList.remove('tilt'); tiltEl = null; }
 function hoverZoom(e) {
   if (e.pointerType !== 'mouse') return;
   mouse.x = e.clientX; mouse.y = e.clientY;
@@ -1852,19 +1892,20 @@ function bindUI() {
   ['W', 'U', 'B', 'R', 'G', 'C'].forEach((k) => { HEX[k] = css('--m' + k) || '#aaa'; });
   $('#viewSel').onchange = (e) => { S.view = +e.target.value; S.sel = null; render(); };
   $('#motionSel').onchange = (e) => { S.motion = e.target.value; render(); };
-  $('#fxBtn').onclick = () => { S.fx = !S.fx; render(); toast(S.fx ? 'Playmat effects on' : 'Playmat effects off'); };
+  $('#fxBtn').onclick = () => { S.fx = !S.fx; render(); Ambient.wake(); toast(S.fx ? 'Playmat effects on' : 'Playmat effects off'); };
   $('#tableBtn').onclick = () => { if (SPECTATE) { toast('Only players can manage the table'); return; } tableModal(); };
   $('#fsBtn').onclick = doFullscreen; document.addEventListener('fullscreenchange', syncFsBtn); document.addEventListener('webkitfullscreenchange', syncFsBtn);
   registerSW();
   $('#settingsBtn').onclick = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     openMenu([
+      { label: perfLabel(), fn: () => { setPerf({ auto: 'full', full: 'lite', lite: 'auto' }[perf.mode] || 'auto'); toast(liteOn() ? 'Performance mode: lighter effects for smoother play' : 'Full effects'); } },
       { label: `Playmat effects: ${S.fx ? 'on' : 'off'}`, fn: () => $('#fxBtn').click() },
       { label: `Sound: ${S.sound ? 'on' : 'off'}`, fn: () => $('#soundBtn').click() },
       { label: `Bot pace: ${{ relaxed: 'relaxed', normal: 'normal', fast: 'fast' }[S.botSpeed || 'normal']}`, fn: () => { S.botSpeed = { relaxed: 'normal', normal: 'fast', fast: 'relaxed' }[S.botSpeed || 'normal']; render(); toast(`Bots play at a ${S.botSpeed} pace`); } },
       { label: reminderSettingLabel(), fn: () => { S.reminders = S.reminders === false; render(); toast(S.reminders === false ? 'Trigger reminders off' : 'Trigger reminders on'); } },
       { label: `Foil effects: ${S.foilFx === false ? 'off' : 'on'}`, fn: () => { S.foilFx = S.foilFx === false; render(); toast(S.foilFx === false ? 'Foil effects off' : 'Foil effects on'); } },
-      { label: `Card motion: ${{ full: 'full', reduced: 'reduced', off: 'off' }[S.motion]}`, fn: () => { S.motion = { full: 'reduced', reduced: 'off', off: 'full' }[S.motion]; render(); toast(`Card motion ${S.motion}`); } },
+      { label: `Card motion: ${{ full: 'full', reduced: 'reduced', off: 'off' }[S.motion]}`, fn: () => { S.motion = { full: 'reduced', reduced: 'off', off: 'full' }[S.motion]; render(); Ambient.wake(); toast(`Card motion ${S.motion}`); } },
       { sep: true },
       { label: 'Keyboard shortcuts  (?)', fn: shortcutsModal },
       { label: fullscreenOn() ? 'Exit full screen' : 'Full screen  (Shift+F)', fn: doFullscreen },
@@ -1978,7 +2019,7 @@ async function boot() {
   } else if (MODE === 'bots') { net.seats = ROOM.seats; net.botList = Array.from({ length: ROOM.bots }, (_, k) => ROOM.seats - 1 - k).sort(); S = null; newGame(false); S.view = 0; P(0).avatar = localAvatar(); }
   else if (!S) { S = null; newGame(false); }
   if (MODE !== 'hotseat') bot = makeBot(botApi());
-  bindUI(); hydrate(); render(); roomBar();
+  bindUI(); detectPerf(); hydrate(); render(); roomBar();
   ensureArt(allNames());
   const want = SPECTATE ? '' : (Q.get('deck') || '');
   if (/^top:\d+$/.test(want) && !seatRestored) {
@@ -2003,4 +2044,4 @@ boot();
 // Read-only hook for the test suite.
 window.__edhState = () => S;
 window.__edhMut = (fn) => { fn(S); render(); };
-window.__edhApi = () => ({ fire: fireEvent, runEffects, parseEffects, parseAbilities, moveCard, activate: botActivate, spectate: SPECTATE, net, rulesFor, draw, Rules });
+window.__edhApi = () => ({ fire: fireEvent, runEffects, parseEffects, parseAbilities, moveCard, activate: botActivate, spectate: SPECTATE, net, rulesFor, draw, Rules, perf, setPerf, liteOn });

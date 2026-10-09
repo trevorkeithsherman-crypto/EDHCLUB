@@ -41,7 +41,11 @@ export async function signInDiscord() {
   if (error) throw error;
 }
 
-export async function signOut() { if (supa) await supa.auth.signOut(); }
+export async function signOut() {
+  if (supa) { try { await supa.auth.signOut({ scope: 'local' }); } catch { /* fall through to local cleanup */ } }
+  // Forget everything that belonged to the account: photo, auto-seated deck, name, room seats, the hotseat table.
+  setLocalAvatar(''); setLastDeckId(''); try { localStorage.removeItem(NAME_KEY); localStorage.removeItem('edhclub-table-v2'); Object.keys(sessionStorage).filter((k) => k.startsWith('edhclub-room-')).forEach((k) => sessionStorage.removeItem(k)); } catch { /* ignore */ }
+}
 
 const AVATAR_KEY = 'edhclub-avatar';
 export function localAvatar() { try { return localStorage.getItem(AVATAR_KEY) || ''; } catch { return ''; } }

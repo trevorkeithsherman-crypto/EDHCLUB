@@ -17,7 +17,8 @@ async function refreshAccount() {
   renderClubs(); renderDecks();
 }
 async function renderDecks() {
-  const body = $('#decksBody'); if (!online || !user) return;
+  const body = $('#decksBody'); if (!online) return;
+  if (!user) { body.innerHTML = '<p class="muted">Sign in to keep decks on your account. Save them from the Decks button at any table; the last one you used is seated automatically next time.</p>'; return; }
   const decks = await listDecks(); const last = lastDeckId();
   body.innerHTML = decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · seated automatically' : ''}</small></span><span class="row">${d.id !== last ? `<button type="button" class="btn ghost sm" data-deck-use="${esc(d.id)}">Use next</button>` : ''}<button type="button" class="btn ghost sm" data-deck-del="${esc(d.id)}">Delete</button></span></li>`).join('')}</ul><p class="muted">Add or edit decks from the Decks button at any table.</p>` : '<p class="muted">No saved decks yet. Open a table, paste a list, and press "Save to my decks".</p>';
   body.querySelectorAll('[data-deck-del]').forEach((b) => { b.onclick = async () => { await deleteDeck(b.dataset.deckDel); renderDecks(); }; });
@@ -97,7 +98,7 @@ function viewAccount() {
   $('#pfpUp').onclick = () => $('#pfpFile').click();
   $('#pfpFile').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 8 * 1024 * 1024) { toast('That image is over 8 MB; pick a smaller one'); return; } try { await uploadAvatar(f); await refreshAccount(); viewAccount(); toast('Profile picture updated'); } catch (err) { toast(friendlyAuthError(err), 6000); } };
   const rm = $('#pfpRm'); if (rm) rm.onclick = async () => { try { await removeAvatar(); await refreshAccount(); viewAccount(); toast('Profile picture removed'); } catch (err) { toast(friendlyAuthError(err), 6000); } };
-  $('#out').onclick = async () => { await signOut(); await refreshAccount(); go('home'); };
+  $('#out').onclick = async () => { await signOut(); user = null; name = ''; await refreshAccount(); go('home'); toast('Signed out'); };
   const up = $('#upgrade'); if (up) up.onclick = async () => {
     const e = $('#em').value.trim().toLowerCase(), p = $('#pw').value;
     if (!emailOk(e)) { toast('Enter a valid email address'); return; } if (p.length < 8) { toast('Passwords need at least 8 characters'); return; }

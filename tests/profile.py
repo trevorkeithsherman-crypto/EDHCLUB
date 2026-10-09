@@ -43,6 +43,15 @@ with sync_playwright() as p:
     # remove
     pg.goto(BASE + '/'); pg.wait_for_timeout(1000); pg.click('[data-go="signin"]'); pg.wait_for_timeout(400); pg.click('#pfpRm'); pg.wait_for_timeout(1500)
     check('remove clears the picture', state_av['url'] is None and pg.locator('#account .pfp.init').count() == 1)
+    # sign out forgets the account everywhere
+    pg.set_input_files('#pfpFile', SP + 'face.png'); pg.wait_for_timeout(1500); pg.evaluate("localStorage.setItem('edhclub-last-deck','d1')")
+    pg.click('[data-go="signin"]'); pg.wait_for_timeout(300); pg.click('#out'); pg.wait_for_timeout(1200)
+    check('sign out: nav offers Sign in / Create account', pg.locator('#account [data-go="signup"]').count() == 1 and pg.locator('#account .pfp').count() == 0)
+    check('sign out: decks panel no longer lists decks', 'Sign in to keep decks' in pg.locator('#decksBody').text_content())
+    check('sign out: cached photo, last deck and name are cleared', pg.evaluate("[localStorage.getItem('edhclub-avatar'), localStorage.getItem('edhclub-last-deck'), localStorage.getItem('edhclub-name')]") == [None, None, None])
+    pg.goto(BASE + '/table.html?mode=bots'); pg.wait_for_timeout(2000)
+    check('sign out: bots table shows no photo and no account decks', pg.locator('.me .avatar.photo').count() == 0)
+    pg.click('#importBtn'); pg.wait_for_timeout(400); check('sign out: deck modal asks to sign in', 'Sign in on the' in pg.locator('#modal').text_content() and pg.locator('[data-deck-load]').count() == 0); pg.keyboard.press('Escape')
     ctx.close()
 
     # ---- room: host photo reaches the guest ----

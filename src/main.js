@@ -68,7 +68,7 @@ function freshState() {
   const n = MODE === 'hotseat' ? 4 : ROOM.seats;
   return {
     v: 2, seats: n,
-    players: [0, 1, 2, 3].map((i) => ({ name: SEAT_NAMES[i], life: 40, poison: 0, cmdDmg: {}, out: i >= n, outAt: 0, mulls: 0, deckText: buildSample(i), mat: 'auto', zones: emptyZones(), bot: MODE !== 'hotseat' && i >= n - ROOM.bots && i < n, empty: MODE === 'room' && i < n - ROOM.bots })),
+    players: [0, 1, 2, 3].map((i) => ({ name: SEAT_NAMES[i], life: 40, poison: 0, cmdDmg: {}, out: i >= n, outAt: 0, mulls: 0, deckText: buildSample(i), mat: 'auto', zones: emptyZones(), bot: MODE !== 'hotseat' && i < n && net.botSeats().includes(i), empty: MODE === 'room' && i < n && !net.botSeats().includes(i) })),
     cards: {}, stack: [], turn: { active: 0, phase: 1, number: 1 }, view: 0, motion: defaultMotion(), sound: false, nextId: 1,
     log: [], attacks: [], outOrder: [], stats: { casts: {}, big: null }, over: false, sel: null, fx: true,
   };
@@ -550,7 +550,7 @@ const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'con
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
-  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: false }, zones: p.zones, cards };
+  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: !!p.empty }, zones: p.zones, cards };
 }
 function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40) }; }
 function applySeat(snap) {
@@ -922,14 +922,85 @@ function commandMenu(pi, x, y) {
   const items = []; cs.forEach((c) => { items.push({ label: `Cast ${c.name} (tax +${2 * (c.casts || 0)})`, fn: () => castToStack(c.id), hot: true }); items.push({ label: `Put ${c.name} onto battlefield`, fn: () => moveCard(c.id, pi, 'battlefield', { anim: 'commander' }) }); });
   openMenu(items, x, y, 'Command zone');
 }
+/* ---------- Table manager: add or kick bots, open seats for people, swap bot decks ---------- */
+function applyLayout(seats, botList) {
+  const before = JSON.stringify([net.seats, net.botSeats()]);
+  net.seats = seats; net.botList = botList.slice();
+  if (JSON.stringify([net.seats, net.botSeats()]) === before && S.seats === seats) return;
+  S.seats = seats;
+  S.players.forEach((p, k) => {
+    if (k >= seats) { p.out = true; return; }
+    const isBot = net.botSeats().includes(k);
+    if (isBot && !p.bot) { p.bot = true; p.empty = false; p.out = false; p.name = BOT_NAMES[k]; }
+    if (!isBot && p.bot) { p.bot = false; p.empty = k !== net.seat; p.out = false; purgeOwner(k); p.zones = emptyZones(); }
+  });
+  render();
+}
+const canManage = () => MODE === 'bots' || (MODE === 'room' && net.isHost);
+async function addBot(k) {
+  const p = P(k); if (p.bot) return;
+  if (MODE === 'room' && net.takenSeats().has(k)) { toast(`${p.name} is sitting there`); return; }
+  p.bot = true; p.empty = false; p.out = false; p.name = BOT_NAMES[k]; p.avatar = ''; p.mat = 'auto';
+  net.botList = [...new Set([...net.botList, k])].sort();
+  loadDeck(k, p.deckText || buildSample(k)); if (S.outOrder) S.outOrder = S.outOrder.filter((o) => o.i !== k);
+  log(`${p.name} joined the table`); render(); ensureArt(allNames(), { quiet: true });
+  if (net.active) { await net.setLayout({ botList: net.botList }); net.resendAll(); }
+}
+async function kickBot(k) {
+  const p = P(k); if (!p.bot) return;
+  const name = p.name; purgeOwner(k); p.zones = emptyZones();
+  p.bot = false; p.empty = MODE === 'room'; p.out = MODE !== 'room'; p.name = SEAT_NAMES[k]; p.life = 40; p.poison = 0; p.cmdDmg = {};
+  S.attacks = S.attacks.filter((a) => a.target !== k && S.cards[a.id]);
+  if (S.turn.active === k) passTurn();
+  if (net.active) net.send('seat', seatSnap(k));
+  net.botList = net.botList.filter((x) => x !== k);
+  log(`${name} left the table${MODE === 'room' ? '; the seat is open' : ''}`); render();
+  if (net.active) await net.setLayout({ botList: net.botList });
+}
+function kickHuman(k) { if (!net.active || !net.isHost) return; const p = P(k); net.send('all', { fn: 'kick', seat: k }); log(`${p.name} was removed by the host`); toast(`${p.name} removed`); }
+async function setSeatCount(n) {
+  n = clamp(n, 2, 4); if (n === S.seats) return;
+  if (n < S.seats) { for (let k = n; k < S.seats; k++) { if (P(k).bot) { P(k).bot = false; net.botList = net.botList.filter((x) => x !== k); purgeOwner(k); P(k).zones = emptyZones(); } if (MODE === 'room' && net.takenSeats().has(k)) { toast('Someone is sitting in that seat'); return; } P(k).out = true; P(k).empty = false; } }
+  else { for (let k = S.seats; k < n; k++) { const p = P(k); p.out = MODE !== 'room'; p.empty = MODE === 'room'; p.bot = false; p.life = 40; p.name = SEAT_NAMES[k]; } }
+  S.seats = n; render();
+  if (net.active) await net.setLayout({ seats: n, botList: net.botList });
+}
+function tableModal() {
+  if (!canManage()) { toast('Only the host can change the table'); return; }
+  const rows = S.players.slice(0, S.seats).map((p, k) => {
+    const me = MODE === 'room' ? k === net.seat : k === S.view;
+    const human = MODE === 'room' && !p.bot && !p.empty && !me;
+    const kind = me ? 'You' : p.bot ? 'Bot' : human ? 'Player' : MODE === 'room' ? 'Open seat' : 'Empty seat';
+    const deck = commandersOf(k).map((c) => c.name).join(' + ') || (p.deckName || '');
+    const acts = p.bot ? `<button type="button" class="btn ghost sm" data-tm="deck" data-k="${k}">Change deck</button><button type="button" class="btn ghost sm" data-tm="random" data-k="${k}">Random deck</button><button type="button" class="btn ghost sm" data-tm="kick" data-k="${k}">${MODE === 'room' ? 'Kick bot, open seat' : 'Remove bot'}</button>`
+      : human ? `<button type="button" class="btn ghost sm" data-tm="kickh" data-k="${k}">Remove player</button>`
+      : me ? `<button type="button" class="btn ghost sm" data-tm="deck" data-k="${k}">Change deck</button>`
+      : `<button type="button" class="btn sm" data-tm="add" data-k="${k}">Add a bot</button>`;
+    return `<li class="tm-row ${p.bot ? 'is-bot' : ''} ${(!p.bot && p.empty) ? 'is-open' : ''}"><span class="tm-seat">${k + 1}</span><span class="tm-who"><b>${esc(p.bot || (!p.empty && (!p.out || me || human)) ? p.name : MODE === 'room' ? 'Waiting for a player' : 'Nobody')}</b><small>${kind}${deck ? ' · ' + esc(deck) : ''}${p.out && !p.empty && (p.bot || me || human) ? ' · out' : ''}</small></span><span class="row">${acts}</span></li>`;
+  }).join('');
+  openModal(`<h2>Table</h2><p>${MODE === 'room' ? 'Open seats can be taken by anyone with the invite code. Kick a bot to make room for a friend, or add one when a seat stays empty. Bots keep the same turn order as the seat they sit in.' : 'Add or remove practice bots and pick what they play. A removed seat sits out until you fill it again.'}</p>
+  <div class="tm-head"><span>Seats</span><span class="seg">${[2, 3, 4].map((n) => `<button type="button" class="${S.seats === n ? 'on' : ''}" data-tm="seats" data-k="${n}">${n}</button>`).join('')}</span></div>
+  <ul class="tm-list">${rows}</ul>
+  <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="close">Done</button></div>`);
+  $('#modal .mpanel').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-tm]'); if (!b) return; const k = +b.dataset.k; const act = b.dataset.tm;
+    if (act === 'add') { await addBot(k); tableModal(); }
+    else if (act === 'kick') { await kickBot(k); tableModal(); }
+    else if (act === 'kickh') { confirmModal(`Remove ${P(k).name} from the table? They can rejoin with the code.`, 'Remove player', () => { kickHuman(k); setTimeout(tableModal, 300); }); }
+    else if (act === 'deck') { importModal(k); }
+    else if (act === 'random') { const n = Math.floor(Math.random() * 4); loadDeck(k, buildSample(n)); P(k).deckName = ''; log(`${P(k).name} switched decks`); render(); ensureArt(allNames(), { quiet: true }); tableModal(); toast(`${P(k).name} shuffled up a new deck`); }
+    else if (act === 'seats') { await setSeatCount(k); tableModal(); }
+  });
+}
 function seatMenu(pi, x, y) {
   const p = P(pi);
-  if (!net.isMine(pi)) { openMenu([{ label: `${p.name}'s seat`, fn: () => {} }], x, y, p.name); return; }
+  if (!net.isMine(pi)) { openMenu([{ label: `${p.name}'s seat`, fn: () => {} }, ...(canManage() ? [{ sep: true }, { label: p.empty ? 'Add a bot here' : 'Manage table…', fn: () => (p.empty ? addBot(pi).then(() => render()) : tableModal()) }] : [])], x, y, p.name); return; }
   openMenu([
     ...(MODE === 'hotseat' && pi !== S.view ? [{ label: `Play as ${p.name}`, fn: () => { S.view = pi; S.sel = null; render(); }, hot: true }] : []),
     { label: 'Choose playmat', fn: () => matModal(pi) },
     { label: 'Rename', fn: () => renameModal(pi) },
-    { label: 'Import a deck for this seat', fn: () => importModal(pi) },
+    { label: p.bot ? 'Change this bot\'s deck' : 'Import a deck for this seat', fn: () => importModal(pi) },
+    ...(canManage() ? [{ label: p.bot ? (MODE === 'room' ? 'Kick bot, open the seat' : 'Remove this bot') : 'Manage table…', fn: () => (p.bot ? kickBot(pi) : tableModal()) }] : []),
     { label: 'Reset life to 40', fn: () => { p.life = 40; render(); } },
     { label: p.out ? 'Rejoin the game' : 'Concede', fn: () => { if (p.out) { p.out = false; S.outOrder = S.outOrder.filter((o) => o.i !== pi); log(`${p.name} rejoined`); render(); } else eliminate(pi, 'conceded'); } },
   ], x, y, p.name);
@@ -995,7 +1066,7 @@ async function importModal(pi) {
   openModal(`<h2>Decks</h2>${lib}
   <div class="top100"><div class="eyebrow">Top 100 on Archidekt <button type="button" class="link" id="topToggle">Browse</button></div><div id="topBody" hidden><input id="topQ" type="search" placeholder="Search by name, builder or colors (e.g. UR)" autocomplete="off"><div class="toplist" id="topList"><p class="muted">Loading…</p></div></div></div>
   <p>Paste a text export from Moxfield, Archidekt or any deck site, one card per line like "1 Sol Ring". Put the commander under a "Commander" heading, or type it below. Seating a deck resets that seat's board and life.</p>
-  <div class="grid2"><label for="impSeat" ${MODE === 'hotseat' ? '' : 'hidden'}>Seat<select id="impSeat">${S.players.filter((p, i) => i < S.seats && net.isMine(i)).map((p) => { const i = S.players.indexOf(p); return `<option value="${i}" ${i === pi ? 'selected' : ''}>${esc(p.name)}</option>`; }).join('')}</select></label>
+  <div class="grid2"><label for="impSeat" ${S.players.filter((p, i) => i < S.seats && net.isMine(i) && !p.empty).length > 1 ? '' : 'hidden'}>Seat<select id="impSeat">${S.players.filter((p, i) => i < S.seats && net.isMine(i) && !p.empty).map((p) => { const i = S.players.indexOf(p); return `<option value="${i}" ${i === pi ? 'selected' : ''}>${esc(p.name)}</option>`; }).join('')}</select></label>
   <label for="impName">Player name<input id="impName" maxlength="24" value="${esc(P(pi).name)}"></label></div>
   <label for="impCmd">Commander (optional)<input id="impCmd" placeholder="Taken from the list if left blank"></label>
   <label for="impList">Decklist<textarea id="impList" rows="9" spellcheck="false" data-autofocus></textarea></label>
@@ -1305,6 +1376,7 @@ function bindUI() {
   $('#viewSel').onchange = (e) => { S.view = +e.target.value; S.sel = null; render(); };
   $('#motionSel').onchange = (e) => { S.motion = e.target.value; render(); };
   $('#fxBtn').onclick = () => { S.fx = !S.fx; render(); toast(S.fx ? 'Playmat effects on' : 'Playmat effects off'); };
+  $('#tableBtn').onclick = () => tableModal();
   $('#settingsBtn').onclick = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     openMenu([
@@ -1342,8 +1414,8 @@ function botApi() { return { S, P, moveCard, castToStack, resolveTop, attack, co
 function roomBar() {
   if (MODE !== 'room') return;
   const t = $('#roomBar'); if (!t) return;
-  const humans = new Set(Object.values(net.peers).filter((p) => p.seat != null).map((p) => p.seat)).size;
-  t.innerHTML = `<span class="code">${esc(ROOM.code)}</span><button type="button" class="btn ghost sm" id="copyInvite" title="Copy invite link">Invite</button><span>${humans}/${S.seats - ROOM.bots}</span>`;
+  const humans = new Set(Object.values(net.peers).filter((p) => p.seat != null && !net.botSeats().includes(p.seat)).map((p) => p.seat)).size;
+  t.innerHTML = `<span class="code">${esc(ROOM.code)}</span><button type="button" class="btn ghost sm" id="copyInvite" title="Copy invite link">Invite</button><span>${humans}/${net.humanSeats().length}</span>`;
   $('#copyInvite').onclick = async () => { const link = `${location.origin}/?join=${ROOM.code}`; try { await navigator.clipboard.writeText(link); toast('Invite link copied'); } catch { toast(link, 8000); } };
 }
 let seatRestored = false;
@@ -1369,8 +1441,16 @@ async function boot() {
       }
       net.on('seat', applySeat); net.on('shared', applyShared);
       net.on('req', ({ fn, to, args }) => { if (REQ[fn]) REQ[fn](to, ...args); });
-      net.on('all', ({ fn, kind, cardId }) => { if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); });
-      net.on('peers', (peers) => { Object.values(peers).forEach((pr) => { if (pr.seat != null && pr.seat < S.seats && !net.isMine(pr.seat)) { const p = P(pr.seat); p.empty = false; if (p.name === SEAT_NAMES[pr.seat]) p.name = pr.name; } }); roomBar(); render(); });
+      net.on('all', ({ fn, kind, cardId, seat }) => { if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); else if (fn === 'kick' && seat === net.seat) { toast('The host removed you from this table', 6000); net.leave(); setTimeout(() => { location.href = '/'; }, 1500); } });
+      net.on('peers', (peers) => {
+        const host = Object.values(peers).find((pr) => pr.isHost && pr.seats);
+        if (host && !net.isHost) applyLayout(host.seats, host.botList || []);
+        Object.values(peers).forEach((pr) => { if (pr.seat != null && pr.seat < S.seats && !net.isMine(pr.seat)) { const p = P(pr.seat); p.empty = false; if (p.name === SEAT_NAMES[pr.seat] || p.bot) { p.name = pr.name; p.bot = false; } } });
+        // seats with no peer and no bot are open
+        const seated = new Set(Object.values(peers).map((pr) => pr.seat));
+        S.players.forEach((p, k) => { if (k < S.seats && k !== net.seat && !net.botSeats().includes(k) && !seated.has(k)) { if (!p.empty) { p.empty = true; purgeOwner(k); } } });
+        roomBar(); render();
+      });
       net.on('resend', () => { net.queueSync(seatSnap, sharedSnap); });
       if (!ROOM.host) { ROOM.seats = S.seats; }
       toast(ROOM.host ? `Table ${ROOM.code} is open. Share the code.` : `You're seated at ${ROOM.code}`, 4000);
@@ -1379,7 +1459,7 @@ async function boot() {
       document.body.insertAdjacentHTML('afterbegin', `<div class="toast" style="position:fixed;left:50%;top:40%;transform:translateX(-50%);z-index:99;pointer-events:auto;max-width:460px">${esc(e.message)}<br><a href="/">Back to the lobby</a></div>`);
       S = null; newGame(false);
     }
-  } else if (MODE === 'bots') { S = null; newGame(false); S.view = 0; P(0).avatar = localAvatar(); }
+  } else if (MODE === 'bots') { net.seats = ROOM.seats; net.botList = Array.from({ length: ROOM.bots }, (_, k) => ROOM.seats - 1 - k).sort(); S = null; newGame(false); S.view = 0; P(0).avatar = localAvatar(); }
   else if (!S) { S = null; newGame(false); }
   if (MODE !== 'hotseat') bot = makeBot(botApi());
   bindUI(); hydrate(); render(); roomBar();

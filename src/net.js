@@ -15,15 +15,26 @@ export function recallRoom(code) { try { return JSON.parse(sessionStorage.getIte
 
 export const net = {
   code: null, seat: null, name: '', isHost: false, channel: null, peers: {}, ready: false,
-  handlers: {}, lastSentSeat: '', lastSentShared: '', lastGotShared: '', syncT: 0, hostId: null, seats: 4, bots: 0,
+  handlers: {}, lastSentSeat: '', lastSentShared: '', lastGotShared: '', syncT: 0, hostId: null, seats: 4, botList: [],
+  get bots() { return this.botList.length; },
   on(type, fn) { this.handlers[type] = fn; },
   get active() { return Boolean(this.channel); },
   isMine(seat) { return !this.active || seat === this.seat || (this.isHost && this.botSeats().includes(seat)); },
-  botSeats() { const out = []; for (let k = 0; k < this.seats; k++) if (k >= this.seats - this.bots) out.push(k); return out; },
+  botSeats() { return this.botList.filter((k) => k < this.seats); },
+  humanSeats() { return Array.from({ length: this.seats }, (_, k) => k).filter((k) => !this.botList.includes(k)); },
+  /** Seats occupied by connected humans (other than me). */
+  takenSeats() { return new Set(Object.entries(this.peers).filter(([k]) => k !== clientId).map(([, p]) => p.seat).filter((s) => s != null)); },
+  /** Host only: publish a new seat layout. Guests pick it up from presence. */
+  async setLayout({ seats, botList }) {
+    if (!this.isHost) return;
+    if (seats) this.seats = seats; if (botList) this.botList = botList.filter((k) => k < this.seats);
+    if (this.channel && this.ready) await this.channel.track({ seat: this.seat, name: this.name, isHost: true, clientId, seats: this.seats, botList: this.botList, ts: Date.now() });
+  },
   /** Join a room. Resolves once presence has settled and a seat is chosen. */
-  async join({ code, name, isHost, seats, bots }) {
+  async join({ code, name, isHost, seats, bots, botList }) {
     if (!supa && !window.__edhChannel) throw new Error('Rooms need the online service. Practice against bots works offline.');
-    this.code = code; this.name = name; this.isHost = isHost; this.seats = seats || 4; this.bots = bots || 0;
+    this.code = code; this.name = name; this.isHost = isHost; this.seats = seats || 4;
+    this.botList = botList || Array.from({ length: bots || 0 }, (_, k) => this.seats - 1 - k).sort();
     // Tests can swap the transport for an in-browser bus (window.__edhChannel); production uses Supabase.
     const make = window.__edhChannel || ((name, opts) => supa.channel(name, opts));
     const ch = make('room:' + code, { config: { broadcast: { self: false, ack: false }, presence: { key: clientId } } });
@@ -42,17 +53,17 @@ export const net = {
     await new Promise((r) => setTimeout(r, 700));
     this.peers = flatten(ch.presenceState());
     const hostPeer = Object.values(this.peers).find((p) => p.isHost && p.seats);
-    if (!isHost && hostPeer) { this.seats = hostPeer.seats; this.bots = hostPeer.bots || 0; }
+    if (!isHost && hostPeer) { this.seats = hostPeer.seats; this.botList = hostPeer.botList || Array.from({ length: hostPeer.bots || 0 }, (_, k) => this.seats - 1 - k).sort(); }
     const taken = new Set(Object.entries(this.peers).filter(([k]) => k !== clientId).map(([, p]) => p.seat).filter((s) => s != null));
-    const human = this.seats - this.bots;
+    const human = this.humanSeats();
     let seat = null;
     const prior = recallRoom(code);
     if (isHost) seat = 0;
-    else if (prior && prior.seat != null && prior.seat < human && !taken.has(prior.seat)) seat = prior.seat;
-    else for (let k = 0; k < human; k++) if (!taken.has(k)) { seat = k; break; }
+    else if (prior && prior.seat != null && human.includes(prior.seat) && !taken.has(prior.seat)) seat = prior.seat;
+    else for (const k of human) if (!taken.has(k)) { seat = k; break; }
     if (seat == null) throw new Error('This table is full');
     this.seat = seat;
-    await ch.track({ seat, name, isHost, clientId, seats: this.seats, bots: this.bots, ts: Date.now() });
+    await ch.track({ seat, name, isHost, clientId, seats: this.seats, botList: this.botList, ts: Date.now() });
     rememberRoom(code, { ...(prior || {}), seat, clientId });
     this.ready = true;
     this.send('hello', { clientId });

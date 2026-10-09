@@ -306,6 +306,11 @@ function moveCard(id, pi, zone, o = {}) {
   if (fromZone === 'command' && c.isCmdr && (zone === 'stack' || zone === 'battlefield')) c.casts = (c.casts || 0) + 1;
   c.controller = (zone === 'battlefield' || zone === 'stack' || zone === 'hand') ? pi : c.owner;
   c.zone = zone;
+  // Commander rule: when it would hit a graveyard, exile, hand or library, its owner may send it to the command zone instead.
+  if (c.isCmdr && !o.forced && ['graveyard', 'exile', 'library', 'hand'].includes(zone) && (fromZone === 'battlefield' || fromZone === 'stack') && net.isMine(c.owner)) {
+    if (P(c.owner).bot) { setTimeout(() => commanderTo(c, 'command', zone), 0); }
+    else setTimeout(() => commanderChoice(c, zone), 0);
+  }
   if (zone === 'stack') S.stack.push(id);
   else { const list = P(c.controller).zones[zone]; if (zone === 'library') { o.bottom ? list.push(id) : list.unshift(id); } else list.push(id); }
   render();
@@ -329,6 +334,19 @@ function autoPlace(c) {
 }
 const ZVERB = { hand: 'returned {c} to hand', graveyard: 'put {c} in the graveyard', exile: 'exiled {c}', library: 'put {c} on top of the library', command: 'returned {c} to the command zone', battlefield: 'put {c} onto the battlefield' };
 function moveLog(c, zone, o = {}) { const who = P(S.view).name; let v = ZVERB[zone] || 'moved {c}'; if (zone === 'library' && o.bottom) v = 'put {c} on the bottom of the library'; log(`${who} ${v.replace('{c}', c.faceDown ? 'a card' : c.name)}`); }
+function commanderTo(c, dest, from) {
+  if (!S.cards[c.id] || c.zone !== from) return;
+  if (dest === 'command') { moveCard(c.id, c.owner, 'command', { forced: true, anim: 'fly' }); log(`${c.name} returned to the command zone`); }
+  else log(`${P(c.owner).name} left ${c.name} in the ${ZLABEL[from].toLowerCase()}`);
+}
+function commanderChoice(c, from) {
+  if (!S.cards[c.id] || c.zone !== from) return;
+  const where = ZLABEL[from].toLowerCase();
+  openModal(`<h2>${esc(c.name)} ${from === 'graveyard' ? 'died' : from === 'exile' ? 'was exiled' : 'left the battlefield'}</h2><p>It’s your commander. Send it back to the command zone, or leave it in the ${esc(where)}${from === 'graveyard' ? ' (for reanimation, say)' : ''}? The next cast from the command zone costs ${2 * ((c.casts || 0) + 0)} more.</p>
+  <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" id="cmdStay">Leave it in the ${esc(where)}</button><button type="button" class="btn" id="cmdHome" data-autofocus>Command zone</button></div>`, { cls: 'narrow' });
+  $('#cmdHome').onclick = () => { closeModal(); commanderTo(c, 'command', from); };
+  $('#cmdStay').onclick = () => { closeModal(); commanderTo(c, from, from); };
+}
 function castToStack(id, fromRect) {
   const c = S.cards[id]; if (!c) return;
   const fromCmd = c.zone === 'command'; const who = P(c.controller).name;
@@ -340,7 +358,7 @@ function castToStack(id, fromRect) {
   const from = fromRect || visRect(cardEl(id)); const dest = c.isCmdr ? 'command' : 'graveyard';
   S.lastSpell = { id, t: Date.now() };
   spellFlash(c, from);
-  moveCard(id, c.owner, dest, { anim: 'none', fromRect: from });
+  moveCard(id, c.owner, dest, { anim: 'none', fromRect: from, forced: true });
 }
 function spellFlash(c, from) {
   if (!motionMul() || !from) { SFX.play('chime', firstColor(c)); return; }
@@ -360,7 +378,7 @@ function spellFlash(c, from) {
 function resolveTop() {
   const id = S.stack[S.stack.length - 1]; if (!id) return; const c = S.cards[id];
   if (isPerm(c)) moveCard(id, c.controller, 'battlefield', { anim: 'land' });
-  else moveCard(id, c.owner, c.isCmdr ? 'command' : 'graveyard', { anim: 'fly' });
+  else moveCard(id, c.owner, c.isCmdr ? 'command' : 'graveyard', { anim: 'fly', forced: true });
 }
 function draw(pi, n) {
   const p = P(pi); let k = 0;
@@ -541,7 +559,7 @@ function wipeLocal(kind) {
   SFX.play('shatter');
   victims.forEach((c) => { const el = cardEl(c.id); const r = visRect(el); if (r && motionMul()) { FX.shatter(r, colorsHex(c)); el.style.transition = 'opacity .14s'; el.style.opacity = '0'; } });
   setTimeout(() => {
-    victims.forEach((c) => { if (S.cards[c.id]) moveCard(c.id, c.owner, c.isCmdr ? 'command' : 'graveyard', { anim: 'none' }); });
+    victims.forEach((c) => { if (S.cards[c.id]) moveCard(c.id, c.owner, c.isCmdr ? 'command' : 'graveyard', { anim: 'none', forced: true }); });
     log(`Board wipe: ${victims.length} permanent${victims.length > 1 ? 's' : ''} destroyed${victims.some((c) => c.isCmdr) ? ' (commanders went to the command zone)' : ''}`); render();
   }, motionMul() ? 280 : 0);
 }
@@ -658,7 +676,7 @@ function seatHTML(i, full) {
     <div class="pstat">${(maxCmd || p.poison || warn) ? `<button type="button" class="chip ${warn ? 'warn' : ''}" data-act="dmg" data-p="${i}">Cmdr ${maxCmd} · Poison ${p.poison}</button>` : ''}<span class="lifectl"><button type="button" data-act="life" data-p="${i}" data-d="-1" title="−1 (shift: −5)">−</button><button type="button" data-act="life" data-p="${i}" data-d="1" title="+1 (shift: +5)">+</button></span></div>
   </div></div>`;
   const crack = p.out ? `<svg class="crack ${Date.now() - p.outAt < 1200 ? 'fresh' : ''}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M52 0 L47 22 L58 35 L44 55 L55 72 L49 100"/><path d="M47 22 L30 30 L18 26"/><path d="M58 35 L76 40 L90 33"/><path d="M44 55 L26 62 L12 74"/><path d="M55 72 L72 80 L86 92"/></svg>` : '';
-  const empty = p.zones.battlefield.length ? '' : `<div class="bf-empty">${full ? 'Drag cards here. Lands go along the bottom.' : ''}</div>`;
+  const empty = p.zones.battlefield.length ? '' : `<div class="bf-empty">${full ? 'Drag cards here. Click to tap, right-click for more.' : ''}</div>`;
   let dock = '';
   if (full) {
     const slot = (z, label) => {
@@ -1244,6 +1262,7 @@ function logModal() {
 let lastPointerType = 'mouse';
 function onCardClick(c) {
   const now = performance.now();
+  if (lastPointerType === 'mouse' && c.zone === 'battlefield' && net.isMine(c.controller) && !blocking && !targeting) { lastClick = null; S.sel = c.id; $$('#table .card.sel').forEach((x) => x.classList.remove('sel')); cardEl(c.id)?.classList.add('sel'); toggleTap(c); return; }
   if (lastClick && lastClick.id === c.id && now - lastClick.t < 420) { lastClick = null; hideTapbar(); quick(c); return; }
   lastClick = { id: c.id, t: now }; S.sel = c.id;
   $$('#table .card.sel').forEach((x) => x.classList.remove('sel')); cardEl(c.id)?.classList.add('sel');
@@ -1553,7 +1572,7 @@ function bindUI() {
 }
 
 /* ---------- Boot ---------- */
-function botApi() { return { S, P, moveCard, castToStack, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife: changeLifeAny, request, net, toast, isMine: (k) => net.isMine(k), lookup, toGraveyard: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'graveyard'); else request(c.controller, 'cardTo', c.id, 'graveyard'); }, toExile: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'exile'); else request(c.controller, 'cardTo', c.id, 'exile'); } }; }
+function botApi() { return { S, P, moveCard, castToStack, toggleTap, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife: changeLifeAny, request, net, toast, isMine: (k) => net.isMine(k), lookup, toGraveyard: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'graveyard'); else request(c.controller, 'cardTo', c.id, 'graveyard'); }, toExile: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'exile'); else request(c.controller, 'cardTo', c.id, 'exile'); } }; }
 function roomBar() {
   if (MODE !== 'room') return;
   const t = $('#roomBar'); if (!t) return;

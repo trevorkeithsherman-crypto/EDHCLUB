@@ -4,7 +4,7 @@
 // table uses. The host's client runs them.
 
 export function makeBot(api) {
-  const { S, P, castToStack, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife, toGraveyard, toExile, moveCard } = api;
+  const { S, P, castToStack, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife, toGraveyard, toExile, moveCard, toggleTap } = api;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const speed = () => (S.botSpeed === 'fast' ? 0.3 : 1);
   const jitter = (ms) => ms * (0.75 + Math.random() * 0.5);
@@ -27,7 +27,21 @@ export function makeBot(api) {
   const bf = (k) => P(k).zones.battlefield.map((id) => S.cards[id]).filter(Boolean);
   const creatures = (k) => bf(k).filter(isCreature);
   const opponents = (i) => S.players.map((q, k) => ({ q, k })).filter(({ q, k }) => k !== i && k < (S.seats || 4) && !q.out && !q.empty);
-  const manaOf = (k) => bf(k).reduce((n, c) => n + (isLand(c) ? 1 : isRock(c) ? rockMana(c) : 0), 0);
+  const manaOf = (k) => bf(k).reduce((n, c) => n + (c.tapped ? 0 : isLand(c) ? 1 : isRock(c) ? rockMana(c) : 0), 0);
+  // Pay for a spell by tapping lands (colored pips first) and mana rocks, like a person would.
+  const pips = (c) => (String(c.cost || '').match(/\{[WUBRG]\}/g) || []).map((t) => t[1]);
+  const landColors = (l) => { const o = oracle(l); const t = l.type.toLowerCase(); return ['W', 'U', 'B', 'R', 'G'].filter((k) => o.includes(`{${k.toLowerCase()}}`) || t.includes({ W: 'plains', U: 'island', B: 'swamp', R: 'mountain', G: 'forest' }[k])); };
+  function tapMana(k, c) {
+    let need = cost(c) + (c.isCmdr && c.zone !== 'battlefield' ? 2 * (c.casts || 0) : 0); if (need <= 0) return;
+    const avail = bf(k).filter((x) => !x.tapped && (isLand(x) || isRock(x)));
+    const want = pips(c);
+    const tap = (x) => { if (need <= 0 || x.tapped) return; toggleTap(x); need -= isLand(x) ? 1 : rockMana(x); };
+    for (const col of want) { const l = avail.find((x) => !x.tapped && isLand(x) && landColors(x).includes(col)); if (l) tap(l); }
+    avail.filter((x) => isRock(x) && rockMana(x) >= 2).forEach(tap);
+    avail.filter((x) => isLand(x) && landColors(x).length === 0).forEach(tap); // colorless/utility lands first
+    avail.filter((x) => isLand(x)).forEach(tap);
+    avail.filter((x) => isRock(x)).forEach(tap);
+  }
   const blockersOf = (k, atk) => creatures(k).filter((b) => Rules.canBlock(b, atk));
   const biggestThreat = (i) => opponents(i).flatMap(({ k }) => creatures(k)).sort((a, b) => value(b) - value(a))[0];
 
@@ -137,7 +151,7 @@ export function makeBot(api) {
       const picks = plan(i, mana);
       for (const c of picks) {
         if (!S.cards[c.id] || (c.zone !== 'hand' && c.zone !== 'command')) continue;
-        castToStack(c.id); await d(800); if (S.stack.length) resolveTop();
+        tapMana(i, c); castToStack(c.id); await d(800); if (S.stack.length) resolveTop();
         await resolveSpell(i, c, d); await d(500);
       }
       // combat
@@ -153,8 +167,8 @@ export function makeBot(api) {
         for (const a of mine()) { const c = S.cards[a.id]; if (c) combatDamage(c, a.target); await d(450); }
       }
       // second main: anything affordable we held back (cheap creatures after combat)
-      const late = plan(i, Math.max(0, mana - picks.reduce((s, c) => s + cost(c), 0))).filter((c) => isCreature(c) && S.cards[c.id] && c.zone === 'hand');
-      for (const c of late.slice(0, 2)) { castToStack(c.id); await d(700); if (S.stack.length) resolveTop(); }
+      const late = plan(i, manaOf(i)).filter((c) => isCreature(c) && S.cards[c.id] && c.zone === 'hand');
+      for (const c of late.slice(0, 2)) { tapMana(i, c); castToStack(c.id); await d(700); if (S.stack.length) resolveTop(); }
       await d(500);
       log(`${p.name} passes`);
       passTurn();

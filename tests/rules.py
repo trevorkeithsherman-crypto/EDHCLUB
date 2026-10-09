@@ -196,6 +196,43 @@ with sync_playwright() as p:
     check('bots: no JS errors', not errs, str(errs)[:300])
     ctx.close(); browser.close()
 
+# ---- commander choice, click-to-tap, bots tapping mana ----
+with sync_playwright() as p:
+    browser = p.chromium.launch(); ctx = browser.new_context(); pg, errs = setup(ctx); fresh(pg)
+    cm = next(c for c in state(pg)['cards'].values() if c['isCmdr'] and c['owner'] == 0)
+    pg.locator('.me [data-zone$=command] .card').first.dblclick(); pg.wait_for_timeout(1200)
+    check('commander cast to the battlefield', state(pg)['cards'][cm['id']]['zone'] == 'battlefield')
+    el = pg.locator(f'.card[data-id="{cm["id"]}"]')
+    el.click(); pg.wait_for_timeout(250); check('desktop: one left click taps', state(pg)['cards'][cm['id']]['tapped'])
+    el.click(); pg.wait_for_timeout(250); check('…and clicking again untaps', not state(pg)['cards'][cm['id']]['tapped'])
+    menu(pg, el, 'graveyard'); pg.wait_for_timeout(400)
+    check('commander dying asks: command zone or graveyard', not pg.locator('#modal').is_hidden() and pg.locator('#cmdHome').count() == 1 and pg.locator('#cmdStay').count() == 1 and 'died' in pg.locator('#modal').text_content())
+    pg.click('#cmdStay'); pg.wait_for_timeout(400); check('"Leave it" keeps it in the graveyard', state(pg)['cards'][cm['id']]['zone'] == 'graveyard')
+    pg.evaluate(f"__edhMut(st=>{{ const c=st.cards['{cm['id']}']; st.players[0].zones.graveyard=st.players[0].zones.graveyard.filter(x=>x!==c.id); c.zone='battlefield'; st.players[0].zones.battlefield.push(c.id); }})"); pg.wait_for_timeout(200)
+    menu(pg, pg.locator(f'.card[data-id="{cm["id"]}"]'), 'Exile'); pg.wait_for_timeout(400)
+    check('exiling it asks too', pg.locator('#cmdHome').count() == 1 and 'exiled' in pg.locator('#modal').text_content())
+    pg.click('#cmdHome'); pg.wait_for_timeout(500); check('"Command zone" sends it home', state(pg)['cards'][cm['id']]['zone'] == 'command' and cm['id'] in state(pg)['players'][0]['zones']['command'])
+    # a bot's commander goes home automatically
+    pg.goto(BASE + '/table.html?mode=bots&seats=2&bots=1'); pg.wait_for_timeout(2500)
+    bc = next(c for c in state(pg)['cards'].values() if c['isCmdr'] and c['owner'] == 1)
+    pg.evaluate(f"__edhMut(st=>{{ const c=st.cards['{bc['id']}']; st.players[1].zones.command=[]; c.zone='battlefield'; st.players[1].zones.battlefield.push(c.id); }})"); pg.wait_for_timeout(200)
+    pg.evaluate(f"__edhMut(st=>{{}})"); pg.locator(f'.card[data-id="{bc['id']}"]').click(button='right'); pg.wait_for_timeout(150)
+    # host controls the bot's cards in a bots game; use the menu to kill it
+    it = pg.locator('.menu .mi:has-text("graveyard")').first
+    if it.count(): it.click()
+    pg.wait_for_timeout(600)
+    check('a bot\'s commander returns to the command zone on its own', state(pg)['cards'][bc['id']]['zone'] == 'command' and pg.locator('#modal').is_hidden())
+    # bots tap mana when they cast
+    pg.evaluate("__edhMut(st=>{st.turn.active=1; st.turn.phase=1;})")
+    t0 = time.time(); tapped_seen = False
+    while time.time() - t0 < 30 and state(pg)['turn']['active'] == 1:
+        pg.wait_for_timeout(400); st = state(pg)
+        if any(st['cards'][i]['tapped'] and 'Land' in st['cards'][i]['type'] for i in st['players'][1]['zones']['battlefield']) and any('cast' in l['text'] for l in st['log'][:6]): tapped_seen = True
+        if pg.locator('#prompt [data-act=allowAll]').count(): pg.click('#prompt [data-act=allowAll]')
+    log = ' '.join(l['text'] for l in state(pg)['log'])
+    check('bot taps lands when it casts a spell', tapped_seen or 'cast' not in log, log[:200])
+    check('commander/tap/bots: no JS errors', not errs, str(errs)[:300])
+    browser.close()
 fails = [r for r in results if not r[1]]
 print(f'\n{len(results) - len(fails)}/{len(results)} passed')
 for n, ok, note in fails: print('  FAIL', n, note)

@@ -159,10 +159,11 @@ with sync_playwright() as p:
     check('drag land from hand to battlefield', any(c['name'] == 'Mountain' for c in bf))
     check('a dropped land is placed where it was dropped (lower half)', any(c['name'] == 'Mountain' and c['y'] > 0.4 for c in bf))
     # cast a creature via double-click, resolve
-    for _ in range(6):
+    for _ in range(14):
         stx = state(pg)
         if any('Creature' in stx['cards'][i]['type'] and not stx['cards'][i]['isCmdr'] for i in stx['players'][0]['zones']['hand']): break
-        pg.click('.me [data-act=draw]'); pg.wait_for_timeout(300)
+        pg.click('.me [data-act=draw]'); pg.wait_for_timeout(250)
+    stx = state(pg)
     cid = next(i for i in stx['players'][0]['zones']['hand'] if 'Creature' in stx['cards'][i]['type'] and not stx['cards'][i]['isCmdr'])
     creature = pg.locator(f'.hand .card[data-id="{cid}"]'); cname = stx['cards'][cid]['name']
     creature.dblclick(); pg.wait_for_timeout(1000)
@@ -187,7 +188,7 @@ with sync_playwright() as p:
     st = state(pg); cm = [c for c in st['cards'].values() if c['isCmdr'] and c['owner'] == 0][0]
     check('commander cast from command zone lands on battlefield', cm['zone'] == 'battlefield' and cm['casts'] == 1)
     cmel = pg.locator(f'.me .bf .card[data-id="{cm["id"]}"]')
-    check('tap via double-click', (cmel.dblclick(), pg.wait_for_timeout(300), state(pg)['cards'][cm['id']]['tapped'])[-1])
+    check('tap via a single click', (cmel.click(), pg.wait_for_timeout(300), state(pg)['cards'][cm['id']]['tapped'])[-1])
     check('untap via menu', menu(pg, cmel, 'Untap') and not state(pg)['cards'][cm['id']]['tapped'])
     check('+1/+1 counter via menu', menu(pg, cmel, '+1/+1 counter') and state(pg)['cards'][cm['id']]['p1'] == 1)
     check('power/toughness overlay shows modified P/T', cmel.locator('.ptm').text_content().strip() == '4/4')

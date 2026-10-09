@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Top 100 decks · EDH Club</title>
+  <meta name="description" content="The hundred most-viewed Commander decks on Archidekt, ready to play or save to your EDH Club account.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Metamorphous&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mana-font@1.18.0/css/mana.min.css">
+  <link rel="stylesheet" href="/src/landing.css">
+</head>
+<body class="decks-page">
+  <header class="top">
+    <a class="logo" href="/"><span>EDH</span><small>Club</small></a>
+    <nav id="account"><a class="btn ghost" href="/">Lobby</a></nav>
+  </header>
+  <main>
+    <section class="deckhead">
+      <p class="eyebrow">Need a deck?</p>
+      <h1>The hundred most-played Commander decks.</h1>
+      <p class="lead">Pulled from Archidekt's most-viewed public decks. Play one against bots right now, or save it to your account and it'll be seated for you at every table.</p>
+      <div class="filters">
+        <input id="q" type="search" placeholder="Search by name, commander or builder" autocomplete="off">
+        <div class="colorpick" id="colors" role="group" aria-label="Color identity">
+          <button type="button" data-c="W" title="White"><i class="ms ms-w ms-cost"></i></button><button type="button" data-c="U" title="Blue"><i class="ms ms-u ms-cost"></i></button><button type="button" data-c="B" title="Black"><i class="ms ms-b ms-cost"></i></button><button type="button" data-c="R" title="Red"><i class="ms ms-r ms-cost"></i></button><button type="button" data-c="G" title="Green"><i class="ms ms-g ms-cost"></i></button>
+        </div>
+        <select id="sort"><option value="views">Most viewed</option><option value="updated">Recently updated</option><option value="name">Name</option></select>
+      </div>
+    </section>
+    <section class="deckgrid" id="grid"><p class="muted">Loading the top 100…</p></section>
+    <p class="muted small">Deck data from <a href="https://archidekt.com" target="_blank" rel="noopener">Archidekt</a>, refreshed every few hours. Each deck belongs to its builder; the links go to the original.</p>
+  </main>
+  <footer class="fan">EDH Club is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC. Card images and data from <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a>.</footer>
+  <div id="modal" hidden></div>
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="/src/decks-page.js"></script>
+</body>
+</html>

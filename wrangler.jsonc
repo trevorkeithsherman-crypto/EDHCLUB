@@ -1,10 +1,13 @@
-// Cloudflare Workers static-assets deploy for EDH Club.
-// Build with `npm run build`, then `npx wrangler deploy` serves ./dist.
+// Cloudflare Worker for EDH Club: static assets from ./dist plus a small /api for the Top 100 decks page.
+// Build with `npm run build`, then `npx wrangler deploy`.
 {
   "name": "edhclub",
+  "main": "worker.js",
   "compatibility_date": "2026-09-05",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
   }
 }

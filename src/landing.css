@@ -90,3 +90,28 @@ h1 { font: 800 clamp(34px, 4.6vw, 58px)/1.05 var(--f-ui); letter-spacing: -.025e
 .pfp.big { width: 72px; height: 72px; font-size: 28px; margin: 0; }
 .pfp-row { display: flex; gap: 18px; align-items: center; padding: 4px 0 18px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
 .pfp-row p { margin: 2px 0 8px; }
+
+/* ---------- Top 100 decks page ---------- */
+.decks-page::before { background-image: url(/mats/azorius.jpg); }
+.deckhead { padding-top: 28px; max-width: 760px; }
+.deckhead h1 { margin-bottom: 12px; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
+.filters input[type=search] { flex: 1 1 260px; background: rgba(0, 0, 0, .35); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; color: var(--text); font: 500 14px var(--f-ui); }
+.filters input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79, 195, 255, .2); }
+.filters select { background: var(--glass-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 10px; color: var(--text); font: 600 13px var(--f-ui); }
+.colorpick { display: flex; gap: 4px; }
+.colorpick button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line-2); background: rgba(0, 0, 0, .35); font-size: 16px; opacity: .55; display: grid; place-items: center; }
+.colorpick button.on { opacity: 1; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(79, 195, 255, .35); }
+.deckgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.deckcard { background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; transition: transform .15s, border-color .15s; }
+.deckcard:hover { transform: translateY(-2px); border-color: var(--line-2); }
+.deckart { aspect-ratio: 16 / 7; background: #141926 center 30% / cover no-repeat; position: relative; }
+.deckart::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(10, 13, 20, .95), rgba(10, 13, 20, 0) 60%); }
+.deckart .rank { position: absolute; left: 10px; top: 10px; z-index: 1; font: 800 11px var(--f-ui); letter-spacing: .06em; background: rgba(6, 8, 13, .8); border: 1px solid var(--line-2); border-radius: 6px; padding: 3px 7px; color: var(--gold-2); }
+.deckart .pips { position: absolute; right: 10px; bottom: 8px; z-index: 1; font-size: 15px; display: flex; gap: 3px; }
+.deckbody { padding: 12px 14px 14px; display: grid; gap: 6px; }
+.deckbody h3 { margin: 0; font: 700 16px/1.25 var(--f-ui); letter-spacing: -.01em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.deckbody p { margin: 0; font-size: 13px; }
+.deckbody .row { margin-top: 6px; gap: 6px; }
+.deckbody .btn.sm { padding: 6px 10px; }
+.small { font-size: 12px; }

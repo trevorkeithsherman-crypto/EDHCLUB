@@ -956,7 +956,7 @@ async function deckLibraryHTML() {
   if (!online) return '';
   const user = await currentUser(); if (!user) return '<div class="summary">Sign in on the <a href="/">lobby</a> to keep decks on your account.</div>';
   const decks = await listDecks(); const last = lastDeckId();
-  return `<div class="decklib"><div class="eyebrow">Your decks</div>${decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · last used' : ''}</small></span><span class="row"><button type="button" class="btn sm" data-deck-load="${d.id}">Load</button><button type="button" class="btn ghost sm" data-deck-del="${d.id}">Delete</button></span></li>`).join('')}</ul>` : '<p class="muted">No saved decks yet. Paste a list below and save it.</p>'}</div>`;
+  return `<div class="decklib"><div class="eyebrow">Your decks</div>${decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · last used' : ''}</small></span><span class="row"><button type="button" class="btn sm" data-deck-load="${d.id}">Load</button><button type="button" class="btn ghost sm" data-deck-del="${d.id}">Delete</button></span></li>`).join('')}</ul>` : '<p class="muted">No saved decks yet. Paste a list below and save it, or <a href="/decks.html">pick one of the top 100</a>.</p>'}</div>`;
 }
 async function importModal(pi) {
   const lib = await deckLibraryHTML();
@@ -1298,7 +1298,14 @@ async function boot() {
   if (MODE !== 'hotseat') bot = makeBot(botApi());
   bindUI(); hydrate(); render(); roomBar();
   ensureArt(allNames());
-  if (MODE !== 'hotseat' && online && lastDeckId() && !seatRestored) {
+  const want = Q.get('deck') || '';
+  if (/^top:\d+$/.test(want) && !seatRestored) {
+    try {
+      const r = await fetch(`/api/deck/${want.slice(4)}`); const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || r.statusText);
+      const me = net.active ? net.seat : 0; loadDeck(me, d.text, null); P(me).deckName = d.name; P(me).deckId = ''; render(); toast(`Seated with ${d.name}`); ensureArt(allNames(), { quiet: true });
+      log(`${P(me).name} sat down with ${d.commander}`);
+    } catch (e) { toast(`Couldn't load that deck: ${e.message}`, 6000); }
+  } else if (MODE !== 'hotseat' && online && lastDeckId() && !seatRestored) {
     try {
       const d = await getDeck(lastDeckId());
       if (d) { const me = net.active ? net.seat : 0; loadDeck(me, d.list, null); P(me).deckId = d.id; P(me).deckName = d.name; if (d.mat && d.mat !== 'auto') P(me).mat = d.mat; render(); toast(`Seated with ${d.name}`); ensureArt(allNames(), { quiet: true }); }

@@ -7,6 +7,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         table: resolve(__dirname, 'table.html'),
+        decks: resolve(__dirname, 'decks.html'),
       },
     },
   },

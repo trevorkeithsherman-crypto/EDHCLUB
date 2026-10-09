@@ -235,6 +235,33 @@ with sync_playwright() as p:
     log = ' '.join(l['text'] for l in state(pg)['log'])
     check('bot taps lands when it casts a spell', tapped_seen or 'cast' not in log, log[:200])
     check('commander/tap/bots: no JS errors', not errs, str(errs)[:300])
+    # ---- bots understand lands: fetch lands get cracked, utility lands aren't mana, taplands enter tapped ----
+    pg.goto(BASE + '/table.html?mode=bots&seats=2&bots=1'); pg.wait_for_timeout(2500)
+    pg.evaluate("""__edhMut(st=>{ const p=st.players[1]; const mk=(name,type,oracle,zone,extra={})=>{const id='x'+Math.random().toString(36).slice(2,8); st.cards[id]={id,name,type,cost:'',pt:'',oracle,colors:'',kw:'',img:'',big:'',art:'',backImg:'',backBig:'',artist:'',owner:1,controller:1,zone,tapped:false,faceDown:false,flipped:false,p1:0,ctr:0,token:false,x:Math.random()*.5,y:.6,isCmdr:false,casts:0,...extra}; p.zones[zone].push(id); return id;};
+      p.zones.hand=[]; p.zones.battlefield=[]; p.zones.library=[]; Object.keys(st.cards).forEach(id=>{ if (st.cards[id].owner===1 && !st.cards[id].isCmdr) delete st.cards[id]; });
+      mk('Evolving Wilds','Land','{T}, Sacrifice Evolving Wilds: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.','hand');
+      mk('Maze of Ith','Land','{T}: Untap target attacking creature. Prevent all combat damage that would be dealt to and dealt by that creature this turn.','battlefield');
+      mk('Goblin Guide','Creature — Goblin Scout','Haste','hand',{cost:'{R}',pt:'2/2',colors:'R',kw:'haste'});
+      for (let k=0;k<5;k++) mk('Mountain','Basic Land — Mountain','({T}: Add {R}.)','library');
+      st.turn.active=1; st.turn.phase=1; })""")
+    t0 = time.time()
+    while time.time() - t0 < 40 and state(pg)['turn']['active'] == 1:
+        pg.wait_for_timeout(300)
+        if pg.locator('#prompt [data-act=allowAll]').count(): pg.click('#prompt [data-act=allowAll]')
+        if pg.locator('#prompt [data-act=pok]').count(): pg.click('#prompt [data-act=pok]')
+    st = state(pg); bf1 = [st['cards'][i] for i in st['players'][1]['zones']['battlefield']]; gy1 = [st['cards'][i] for i in st['players'][1]['zones']['graveyard']]
+    check('bot cracks Evolving Wilds: it is in the graveyard and a basic came in tapped', any(c['name'] == 'Evolving Wilds' for c in gy1) and any(c['name'] == 'Mountain' for c in bf1), str([c['name'] for c in bf1 + gy1]))
+    check('Maze of Ith is never tapped for mana', all(not c['tapped'] for c in bf1 if c['name'] == 'Maze of Ith'))
+    check('Goblin Guide stays in hand: the fetched Mountain is tapped and Maze makes no mana', any(st['cards'][i]['name'] == 'Goblin Guide' for i in st['players'][1]['zones']['hand']), str([c['name'] for c in bf1]))
+    pg.evaluate("""__edhMut(st=>{ const p=st.players[1]; const id='tl1'; st.cards[id]={id,name:'Bloodfell Caves',type:'Land',cost:'',pt:'',oracle:'Bloodfell Caves enters tapped. When it enters, you gain 1 life. {T}: Add {B} or {R}.',colors:'',kw:'',img:'',big:'',art:'',backImg:'',backBig:'',artist:'',owner:1,controller:1,zone:'hand',tapped:false,faceDown:false,flipped:false,p1:0,ctr:0,token:false,x:0,y:0,isCmdr:false,casts:0}; p.zones.hand.push(id); })""")
+    pg.click('[data-act=pass]'); t0 = time.time()
+    while time.time() - t0 < 40 and state(pg)['turn']['active'] == 1:
+        pg.wait_for_timeout(300)
+        if pg.locator('#prompt [data-act=allowAll]').count(): pg.click('#prompt [data-act=allowAll]')
+        if pg.locator('#prompt [data-act=pok]').count(): pg.click('#prompt [data-act=pok]')
+    st = state(pg); caves = next((c for c in st['cards'].values() if c['name'] == 'Bloodfell Caves'), None)
+    check('a tapland is played tapped', caves and caves['zone'] == 'battlefield' and caves['tapped'], str(caves and (caves['zone'], caves['tapped'])))
+    check('lands: no JS errors', not errs, str(errs)[:300])
     browser.close()
 fails = [r for r in results if not r[1]]
 print(f'\n{len(results) - len(fails)}/{len(results)} passed')

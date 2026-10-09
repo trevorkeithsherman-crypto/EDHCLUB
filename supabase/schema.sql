@@ -71,3 +71,17 @@ create policy "avatars are public" on storage.objects for select using (bucket_i
 create policy "own avatar insert" on storage.objects for insert with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "own avatar update" on storage.objects for update using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "own avatar delete" on storage.objects for delete using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Deck manager: favorites, play counts, a per-account default deck, and a hard cap of 20 decks per account.
+alter table public.decks add column if not exists favorite boolean not null default false;
+alter table public.decks add column if not exists plays integer not null default 0;
+alter table public.decks add column if not exists last_played_at timestamptz;
+alter table public.profiles add column if not exists default_deck_id uuid;
+create or replace function public.enforce_deck_limit() returns trigger language plpgsql as $$
+begin
+  if (select count(*) from public.decks where user_id = new.user_id) >= 20 then
+    raise exception 'Deck limit reached: each account can keep up to 20 decks' using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+create trigger decks_limit before insert on public.decks for each row execute function public.enforce_deck_limit();

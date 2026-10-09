@@ -4,8 +4,9 @@ import { FX, SFX, Ambient, setFxState } from './fx.js';
 import { net, rememberRoom, recallRoom } from './net.js';
 import { makeBot } from './bots.js';
 import * as Rules from './combat.js';
+import { parseList, deckStats, deckText } from './decklist.js';
 import { registerSW, canInstall, install, onInstallable, isIOS, toggleFullscreen, fullscreenOn, fullscreenSupported } from './pwa.js';
-import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
+import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
 
 /* ---------- Mode from the URL ---------- */
 const Q = new URLSearchParams(location.search);
@@ -121,31 +122,7 @@ async function ensureArt(names, { quiet = false } = {}) {
 const allNames = () => [...new Set(Object.values(S.cards).filter((c) => !c.token).map((c) => c.name))];
 
 /* ---------- Deck parsing ---------- */
-function parseDeck(text, cmdOverride) {
-  let section = 'deck'; let cmd = []; const main = [];
-  for (const raw of String(text || '').split(/\r?\n/)) {
-    const l = raw.trim(); if (!l || l.startsWith('//') || l.startsWith('#')) continue;
-    const head = l.replace(/:$/, '').replace(/\s*\(\d+\)$/, '').toLowerCase();
-    if (/^(commanders?|deck|main ?deck|mainboard|sideboard|maybeboard|considering|companion|tokens?)$/.test(head)) {
-      section = head.startsWith('commander') ? 'cmd' : /^(side|maybe|consid|token|companion)/.test(head) ? 'skip' : 'deck'; continue;
-    }
-    const m = l.match(/^(\d+)\s*x?\s+(.+)$/i); let n = 1, name = l; if (m) { n = +m[1]; name = m[2]; }
-    const isC = /\*cmdr\*|\[[^\]]*commander[^\]]*\]|\^commander/i.test(name);
-    name = name.replace(/\s*\*[A-Za-z]+\*\s*/g, ' ').replace(/\s*\[[^\]]*\]\s*/g, ' ').replace(/\s*\^[^^]*\^\s*/g, ' ').replace(/\s+\([A-Za-z0-9]{2,6}\)(\s+[\w★-]+)?\s*$/, '').replace(/\s+/g, ' ').trim();
-    if (!name || section === 'skip') continue;
-    if (section === 'cmd' || isC) cmd.push(name); else main.push({ n, name });
-  }
-  if (cmdOverride && cmdOverride.trim()) {
-    const nm = cmdOverride.trim(); const hit = main.find((e) => e.name.toLowerCase() === nm.toLowerCase()); if (hit) hit.n--; cmd = [hit ? hit.name : nm];
-  }
-  if (!cmd.length && main.length) {
-    const leg = main.find((e) => /Legendary/.test(lookup(e.name).type) && /(Creature|can be your commander)/.test(lookup(e.name).type));
-    if (leg) { cmd.push(leg.name); leg.n--; }
-  }
-  const list = main.filter((e) => e.n > 0);
-  const count = list.reduce((a, e) => a + e.n, 0);
-  return { cmd, main: list, count };
-}
+function parseDeck(text, cmdOverride) { return parseList(text, cmdOverride, (n) => lookup(n).type); }
 function makeCard(def, owner) {
   const id = `c${net.active ? net.seat : 'l'}_${S.nextId++}`;
   const c = { id, name: def.name, cost: def.cost || '', type: def.type || 'Card', pt: def.pt || '', colors: def.colors || '', kw: def.kw || '', oracle: def.oracle || '', img: def.img || '', big: def.big || '', art: def.art || '', backImg: def.backImg || '', backBig: def.backBig || '', artist: def.artist || '', owner, controller: owner, zone: 'library', tapped: false, faceDown: false, flipped: false, p1: 0, ctr: 0, token: false, x: 0, y: 0, isCmdr: false, casts: 0 };
@@ -1185,7 +1162,7 @@ async function deckLibraryHTML() {
   if (!online) return '';
   const user = await currentUser(); if (!user) return '<div class="summary">Sign in on the <a href="/">lobby</a> to keep decks on your account.</div>';
   const decks = await listDecks(); const last = lastDeckId();
-  return `<div class="decklib"><div class="eyebrow">Your decks</div>${decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · last used' : ''}</small></span><span class="row"><button type="button" class="btn sm" data-deck-load="${d.id}">Load</button><button type="button" class="btn ghost sm" data-deck-del="${d.id}">Delete</button></span></li>`).join('')}</ul>` : '<p class="muted">No saved decks yet. Paste a list below and save it, or <a href="/decks.html">pick one of the top 100</a>.</p>'}</div>`;
+  return `<div class="decklib"><div class="eyebrow">Your decks <a class="link" href="/decks.html" style="margin-left:8px;font-size:12px;letter-spacing:0;text-transform:none">Manage decks</a></div>${decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · last used' : ''}</small></span><span class="row"><button type="button" class="btn sm" data-deck-load="${d.id}">Load</button><button type="button" class="btn ghost sm" data-deck-del="${d.id}">Delete</button></span></li>`).join('')}</ul>` : '<p class="muted">No saved decks yet. Paste a list below and save it, or <a href="/decks.html">pick one of the top 100</a>.</p>'}</div>`;
 }
 async function importModal(pi) {
   const lib = await deckLibraryHTML();
@@ -1700,10 +1677,13 @@ async function boot() {
       const me = net.active ? net.seat : 0; loadDeck(me, d.text, null); P(me).deckName = d.name; P(me).deckId = ''; render(); toast(`Seated with ${d.name}`); ensureArt(allNames(), { quiet: true });
       log(`${P(me).name} sat down with ${d.commander}`);
     } catch (e) { toast(`Couldn't load that deck: ${e.message}`, 6000); }
-  } else if (MODE !== 'hotseat' && online && lastDeckId() && !seatRestored) {
+  } else if (want && !want.startsWith('top:') && online && !seatRestored) {
+    try { const d = await getDeck(want); if (d) { const me = net.active ? net.seat : 0; loadDeck(me, d.list, null); P(me).deckId = d.id; P(me).deckName = d.name; if (d.mat && d.mat !== 'auto') P(me).mat = d.mat; render(); toast(`Seated with ${d.name}`); ensureArt(allNames(), { quiet: true }); bumpDeckPlays(d.id); } else toast('That deck isn\'t on your account', 5000); }
+    catch (e) { toast(`Couldn't load that deck: ${e.message}`, 6000); }
+  } else if (MODE !== 'hotseat' && online && !seatRestored) {
     try {
-      const d = await getDeck(lastDeckId());
-      if (d) { const me = net.active ? net.seat : 0; loadDeck(me, d.list, null); P(me).deckId = d.id; P(me).deckName = d.name; if (d.mat && d.mat !== 'auto') P(me).mat = d.mat; render(); toast(`Seated with ${d.name}`); ensureArt(allNames(), { quiet: true }); }
+      const id = await defaultDeckId(); const d = id ? await getDeck(id) : null;
+      if (d) { const me = net.active ? net.seat : 0; loadDeck(me, d.list, null); P(me).deckId = d.id; P(me).deckName = d.name; if (d.mat && d.mat !== 'auto') P(me).mat = d.mat; render(); toast(`Seated with ${d.name}`); ensureArt(allNames(), { quiet: true }); bumpDeckPlays(d.id); }
     } catch { /* deck library unavailable */ }
   }
   if (net.active) net.resendAll();

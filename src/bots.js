@@ -14,6 +14,13 @@ export function makeBot(api) {
   const cost = (c) => (String(c.cost || '').match(/\{[^}]+\}/g) || []).reduce((a, t) => { const v = t.slice(1, -1); return a + (/^\d+$/.test(v) ? +v : v === 'X' ? 0 : 1); }, 0);
   const oracle = (c) => String(c.oracle || '').toLowerCase();
   const isLand = (c) => /Land/.test(c.type);
+  // What a land actually does, read from its type line and text. Basics are mana; nonbasics only if they tap for mana.
+  const BASIC = { plains: 'W', island: 'U', swamp: 'B', mountain: 'R', forest: 'G' };
+  const basicTypes = (l) => Object.entries(BASIC).filter(([t]) => new RegExp(`\\b${t}\\b`, 'i').test(l.type)).map(([, k]) => k);
+  const tapsForMana = (l) => isLand(l) && (basicTypes(l).length > 0 || /\{t\}: add/.test(oracle(l)) || /\{t\}, pay \d+ life: add/.test(oracle(l)) || (!l.oracle && /Basic/.test(l.type)));
+  const isFetch = (l) => isLand(l) && /sacrifice [^.:]*: search your library for (?:a |an |up to \w+ )?(?:basic land|plains|island|swamp|mountain|forest)/.test(oracle(l));
+  const entersTapped = (l) => /enters (?:the battlefield )?tapped/.test(oracle(l)) && !/unless/.test(oracle(l));
+  const landMana = (l) => { if (!tapsForMana(l)) return 0; const n = (oracle(l).match(/\{t\}: add (\{[wubrgc]\}){2,}/) || [])[0]; return n ? (n.match(/\{/g).length - 1) : 1; };
   const isRock = (c) => !isLand(c) && /Artifact/.test(c.type) && /\{t\}: add/.test(oracle(c));
   const rockMana = (c) => { const m = oracle(c).match(/\{t\}: add ((\{[wubrgc]\})+|\{[wubrgc]\}|one mana|two mana)/); if (!m) return 0; if (/two/.test(m[1])) return 2; const pips = (m[1].match(/\{/g) || []).length; return Math.max(1, pips); };
   const isRamp = (c) => !isLand(c) && /search your library for (a|up to \w+) basic land/.test(oracle(c));
@@ -27,15 +34,15 @@ export function makeBot(api) {
   const bf = (k) => P(k).zones.battlefield.map((id) => S.cards[id]).filter(Boolean);
   const creatures = (k) => bf(k).filter(isCreature);
   const opponents = (i) => S.players.map((q, k) => ({ q, k })).filter(({ q, k }) => k !== i && k < (S.seats || 4) && !q.out && !q.empty);
-  const manaOf = (k) => bf(k).reduce((n, c) => n + (c.tapped ? 0 : isLand(c) ? 1 : isRock(c) ? rockMana(c) : 0), 0);
+  const manaOf = (k) => bf(k).reduce((n, c) => n + (c.tapped ? 0 : isLand(c) ? landMana(c) : isRock(c) ? rockMana(c) : 0), 0);
   // Pay for a spell by tapping lands (colored pips first) and mana rocks, like a person would.
   const pips = (c) => (String(c.cost || '').match(/\{[WUBRG]\}/g) || []).map((t) => t[1]);
-  const landColors = (l) => { const o = oracle(l); const t = l.type.toLowerCase(); return ['W', 'U', 'B', 'R', 'G'].filter((k) => o.includes(`{${k.toLowerCase()}}`) || t.includes({ W: 'plains', U: 'island', B: 'swamp', R: 'mountain', G: 'forest' }[k])); };
+  const landColors = (l) => { const o = oracle(l); const t = l.type.toLowerCase(); return ['W', 'U', 'B', 'R', 'G'].filter((k) => (o.includes(`{${k.toLowerCase()}}`) && /add/.test(o)) || t.includes({ W: 'plains', U: 'island', B: 'swamp', R: 'mountain', G: 'forest' }[k]) || (/add (?:one mana of )?any color/.test(o))); };
   function tapMana(k, c) {
     let need = cost(c) + (c.isCmdr && c.zone !== 'battlefield' ? 2 * (c.casts || 0) : 0); if (need <= 0) return;
-    const avail = bf(k).filter((x) => !x.tapped && (isLand(x) || isRock(x)));
+    const avail = bf(k).filter((x) => !x.tapped && ((isLand(x) && tapsForMana(x)) || isRock(x)));
     const want = pips(c);
-    const tap = (x) => { if (need <= 0 || x.tapped) return; toggleTap(x); need -= isLand(x) ? 1 : rockMana(x); };
+    const tap = (x) => { if (need <= 0 || x.tapped) return; toggleTap(x); need -= isLand(x) ? landMana(x) : rockMana(x); };
     for (const col of want) { const l = avail.find((x) => !x.tapped && isLand(x) && landColors(x).includes(col)); if (l) tap(l); }
     avail.filter((x) => isRock(x) && rockMana(x) >= 2).forEach(tap);
     avail.filter((x) => isLand(x) && landColors(x).length === 0).forEach(tap); // colorless/utility lands first
@@ -45,13 +52,26 @@ export function makeBot(api) {
   const blockersOf = (k, atk) => creatures(k).filter((b) => Rules.canBlock(b, atk));
   const biggestThreat = (i) => opponents(i).flatMap(({ k }) => creatures(k)).sort((a, b) => value(b) - value(a))[0];
 
+  // Evolving Wilds and friends: sacrifice, find the basic the hand wants, it comes in tapped if the card says so.
+  async function crackFetches(i, d) {
+    const p = P(i);
+    for (const l of bf(i).filter((x) => isFetch(x) && !x.tapped)) {
+      const o = oracle(l); const wants = (o.match(/for (?:a |an |up to \w+ )?(basic land|plains|island|swamp|mountain|forest)(?: or (plains|island|swamp|mountain|forest))?/) || []).slice(1).filter(Boolean);
+      const need = new Set(p.zones.hand.concat(p.zones.command).map((id) => S.cards[id]).flatMap((c) => (c.colors || '').split('')));
+      const lib = p.zones.library.map((id) => S.cards[id]).filter((b) => /Basic/.test(b.type) && (wants.includes('basic land') || wants.some((w) => new RegExp(w, 'i').test(b.type))));
+      if (!lib.length) continue;
+      const pick = lib.sort((a, b) => (need.has(basicTypes(b)[0]) ? 1 : 0) - (need.has(basicTypes(a)[0]) ? 1 : 0))[0];
+      moveCard(l.id, i, 'graveyard'); moveCard(pick.id, i, 'battlefield'); if (/onto the battlefield tapped/.test(o)) pick.tapped = true;
+      log(`${p.name} cracks ${l.name} for ${pick.name}`); await d(500);
+    }
+  }
   /* ---------- casting ---------- */
   function pickLand(p) {
     const lands = p.zones.hand.map((id) => S.cards[id]).filter(isLand); if (!lands.length) return null;
     const need = new Set(p.zones.hand.concat(p.zones.command).map((id) => S.cards[id]).flatMap((c) => (c.colors || '').split('')));
     const colorOf = (l) => { const o = oracle(l); return ['w', 'u', 'b', 'r', 'g'].filter((k) => o.includes(`{${k}}`) || new RegExp(`\\b${{ w: 'plains', u: 'island', b: 'swamp', r: 'mountain', g: 'forest' }[k]}\\b`).test(l.type.toLowerCase())).map((k) => k.toUpperCase()); };
     const have = new Set(bf(S.players.indexOf(p)).filter(isLand).flatMap(colorOf));
-    return lands.sort((a, b) => colorOf(b).filter((k) => need.has(k) && !have.has(k)).length - colorOf(a).filter((k) => need.has(k) && !have.has(k)).length || colorOf(b).length - colorOf(a).length)[0];
+    return lands.sort((a, b) => (tapsForMana(b) || isFetch(b)) - (tapsForMana(a) || isFetch(a)) || colorOf(b).filter((k) => need.has(k) && !have.has(k)).length - colorOf(a).filter((k) => need.has(k) && !have.has(k)).length || colorOf(b).length - colorOf(a).length)[0];
   }
   // Pick what to cast this turn: ramp early, answer threats, refill when empty-handed, otherwise the best curve.
   function plan(i, mana) {
@@ -146,7 +166,8 @@ export function makeBot(api) {
     try {
       const d = (ms) => wait(jitter(ms) * speed());
       await d(900);
-      const land = pickLand(p); if (land) { castToStack(land.id); await d(650); }
+      const land = pickLand(p); if (land) { castToStack(land.id); if (entersTapped(land)) { land.tapped = true; } await d(650); }
+      await crackFetches(i, d);
       const mana = manaOf(i);
       const picks = plan(i, mana);
       for (const c of picks) {

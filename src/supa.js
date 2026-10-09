@@ -166,7 +166,7 @@ export function lastDeckId() { try { return localStorage.getItem(LAST_DECK_KEY) 
 export function setLastDeckId(id) { try { if (id) localStorage.setItem(LAST_DECK_KEY, id); else localStorage.removeItem(LAST_DECK_KEY); } catch { /* ignore */ } }
 export async function listDecks() {
   const user = await currentUser(); if (!supa || !user) return [];
-  const { data } = await supa.from('decks').select('id, name, commander, colors, card_count, mat, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false });
+  const { data } = await supa.from('decks').select('id, name, commander, colors, card_count, mat, favorite, plays, last_played_at, created_at, updated_at').eq('user_id', user.id).order('favorite', { ascending: false }).order('updated_at', { ascending: false });
   return data || [];
 }
 export async function getDeck(id) {
@@ -174,9 +174,11 @@ export async function getDeck(id) {
   const { data } = await supa.from('decks').select('*').eq('id', id).maybeSingle();
   return data;
 }
-export async function saveDeck({ id, name, commander, colors, cardCount, list, mat }) {
+export const DECK_LIMIT = 20;
+export async function saveDeck({ id, name, commander, colors, cardCount, list, mat, favorite }) {
   const user = await currentUser(); if (!supa || !user) throw new Error('Sign in to save decks');
-  const row = { user_id: user.id, name, commander, colors, card_count: cardCount, list, mat: mat || 'auto', updated_at: new Date().toISOString() };
+  if (!id) { const { count } = await supa.from('decks').select('id', { count: 'exact', head: true }).eq('user_id', user.id); if ((count || 0) >= DECK_LIMIT) throw new Error(`You already have ${DECK_LIMIT} decks. Delete one to make room.`); }
+  const row = { user_id: user.id, name, commander, colors, card_count: cardCount, list, mat: mat || 'auto', updated_at: new Date().toISOString() }; if (favorite != null) row.favorite = favorite;
   if (id) row.id = id;
   const { data, error } = await supa.from('decks').upsert(row, { onConflict: 'id' }).select().single();
   if (error) throw error;
@@ -216,3 +218,8 @@ export async function upgradeGuest(email, password, name) {
   await upsertProfile(data.user, name);
   return data.user;
 }
+
+export async function updateDeckMeta(id, patch) { if (!supa || !id) return; await supa.from('decks').update(patch).eq('id', id); }
+export async function bumpDeckPlays(id) { if (!supa || !id) return; const d = await getDeck(id); if (d) await supa.from('decks').update({ plays: (d.plays || 0) + 1, last_played_at: new Date().toISOString() }).eq('id', id); }
+export async function setDefaultDeck(id) { setLastDeckId(id); const user = await currentUser(); if (supa && user) await supa.from('profiles').update({ default_deck_id: id || null }).eq('id', user.id); }
+export async function defaultDeckId() { const local = lastDeckId(); if (local) return local; const user = await currentUser(); if (!supa || !user) return ''; const { data } = await supa.from('profiles').select('default_deck_id').eq('id', user.id).maybeSingle(); if (data?.default_deck_id) setLastDeckId(data.default_deck_id); return data?.default_deck_id || ''; }

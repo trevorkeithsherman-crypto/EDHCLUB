@@ -27,7 +27,7 @@ with sync_playwright() as p:
     # sign in as guest on the lobby, then save from the deck page
     pg.goto(BASE + '/'); pg.wait_for_timeout(800); pg.click('[data-go="signin"]'); pg.wait_for_timeout(200); pg.click('.tab:has-text("guest")'); pg.wait_for_timeout(200); pg.click('#guest'); pg.wait_for_timeout(1200)
     check('lobby links to the deck page', pg.locator('a[href="/decks.html"]').count() >= 1)
-    pg.goto(BASE + '/decks.html'); pg.wait_for_timeout(1200)
+    pg.goto(BASE + '/decks.html#top'); pg.wait_for_timeout(1200)
     pg.locator('[data-save]').first.click(); pg.wait_for_timeout(1200)
     check('save stores the converted list on the account', saved and saved[0]['name'] == 'Deck 0' and saved[0]['list'].startswith('Commander\n1 Krenko') and saved[0]['card_count'] == 100, str(saved)[:200])
     check('button confirms', 'Saved' in pg.locator('[data-save]').first.text_content())

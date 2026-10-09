@@ -3,7 +3,7 @@
 // between requests to stay inside Scryfall's rate guidance. Results are cached in
 // localStorage so a deck only hits the network the first time it is seated.
 
-const CACHE_KEY = 'edhclub-scryfall-v1';
+const CACHE_KEY = 'edhclub-scryfall-v2';
 // The standard Magic card back, as hosted by Scryfall (card_back_id 0aeebaf5-8c7d-4636-9e82-8c27447861f7).
 export const CARD_BACK = 'https://backs.scryfall.io/normal/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg';
 const API = 'https://api.scryfall.com/cards/collection';
@@ -17,6 +17,8 @@ function persist() {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch { /* storage full or blocked */ }
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Entries cached before art crops were stored are refetched once; the old key is cleared.
+try { localStorage.removeItem('edhclub-scryfall-v1'); } catch { /* ignore */ }
 export const cardKey = (name) => String(name).toLowerCase().split(' // ')[0].trim();
 
 export function cached(name) {

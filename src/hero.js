@@ -34,7 +34,7 @@ export function startHero(root) {
   const cardHTML = (name, cls = '') => { const src = img(name); return src ? `<div class="hs-card ${cls}"><img src="${esc(src)}" alt="" loading="lazy" decoding="async"></div>` : `<div class="hs-card ph ${cls}" data-n="${esc(name)}"></div>`; };
 
   // Avatars: commander art crops, exactly like a player without a photo at a real table.
-  const paintAvatars = () => state.forEach((s, i) => { const a = art(s.cmdr); const av = seatEl(i).querySelector('.hs-av'); if (a) av.style.backgroundImage = `url(${a})`; });
+  const paintAvatars = () => state.forEach((s, i) => { const a = art(s.cmdr); const av = seatEl(i).querySelector('.hs-av'); if (a) av.style.backgroundImage = `url(${a})`; else av.insertAdjacentHTML('afterbegin', `<b class="hs-init">${esc(s.name[0])}</b>`); });
 
   function placeCard(i, name, cls = '') {
     const s = state[i]; const bf = $(`[data-bf="${i}"]`);

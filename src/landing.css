@@ -48,6 +48,7 @@ h1 { font: 800 clamp(34px, 4.6vw, 58px)/1.05 var(--f-ui); letter-spacing: -.025e
 .hs-plate { position: absolute; left: 4%; top: 9%; display: flex; align-items: center; gap: 6px; z-index: 3; }
 .hs-av { width: 26px; height: 26px; border-radius: 50%; background: #1a2030 center / cover no-repeat; box-shadow: 0 0 0 2px #0a0d14, 0 0 0 3.5px var(--ring, var(--gold)); position: relative; flex: none; }
 .me .hs-av { width: 34px; height: 34px; }
+.hs-init { position: absolute; inset: 0; display: grid; place-items: center; font: 800 12px var(--f-ui); color: var(--gold-2); }
 .hs-life { position: absolute; right: -10px; bottom: -6px; min-width: 20px; padding: 0 4px; height: 17px; display: grid; place-items: center; border-radius: 6px; background: linear-gradient(180deg, #171c28, #0b0e15); border: 1px solid var(--line-2); color: var(--gold-2); font: 800 10px/1 var(--f-ui); font-variant-numeric: tabular-nums; transition: transform .15s; }
 .me .hs-life { height: 20px; font-size: 12px; }
 .hs-life.tick { transform: scale(1.35); color: #ff8a80; }

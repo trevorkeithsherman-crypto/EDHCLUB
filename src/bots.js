@@ -38,6 +38,11 @@ export function makeBot(api) {
         const attackers = p.zones.battlefield.map((id) => S.cards[id]).filter((c) => isCreature(c) && !c.tapped && powerOf(c) > 0 && !c.summoning);
         for (const c of attackers.slice(0, 6)) { attack(c, t); await d(350); }
         await d(900);
+        // Give the defender a chance to block or take it (bots answer in under a second; humans get 20s, then it goes through).
+        const mine = () => S.attacks.filter((a) => attackers.some((c) => c.id === a.id));
+        const answered = (a) => a.ok || (a.blockers && a.blockers.length) || (api.P(a.target).bot);
+        for (let w = 0; w < 40 && mine().some((a) => !answered(a)); w++) await d(500);
+        mine().filter((a) => !answered(a)).forEach((a) => { a.ok = true; log(`${api.P(a.target).name} didn't answer; the attack goes through`); });
         for (const c of attackers.slice(0, 6)) { if (S.attacks.find((a) => a.id === c.id)) { combatDamage(c, t); await d(450); } }
       }
       await d(600);

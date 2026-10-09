@@ -203,6 +203,8 @@ with sync_playwright() as p:
     att = pg.locator('.me .bf .card').filter(has=pg.locator(f'img[alt="{cname}"]')).first
     check('attack via menu draws an arrow', menu(pg, att, 'Attack Mira') and pg.locator('#arrows path.arw').count() >= 1)
     check('attacking taps the creature and moves to Combat', state(pg)['cards'][att.get_attribute('data-id')]['tapped'] and state(pg)['turn']['phase'] == 2)
+    check('defender is prompted before damage', pg.locator('#prompt [data-act=allow]').count() == 1)
+    pg.click('#prompt [data-act=allow]'); pg.wait_for_timeout(300)
     check('combat damage lowers the target life', menu(pg, att, 'combat damage') and state(pg)['players'][1]['life'] == 37)
     # life buttons
     lb = pg.locator('.seat[data-seat="1"] [data-act=life][data-d="-1"]'); lb.click(force=True); pg.wait_for_timeout(150); lb.click(modifiers=['Shift'], force=True); pg.wait_for_timeout(300)
@@ -327,12 +329,15 @@ with sync_playwright() as p:
     check('bots mode seats me plus 3 bots', pg.locator('.avatar.bot').count() == 3 and 'Trevor' in pg.locator('.me .pname').text_content())
     check('Seat selector hidden outside hotseat', pg.locator('#viewSel').is_hidden())
     pg.click('[data-act=pass]'); t0 = time.time()
+    def take_all():
+        if pg.locator('#prompt [data-act=allowAll]').count(): pg.click('#prompt [data-act=allowAll]'); return True
+    prompted = False
     while time.time() - t0 < 40:
-        pg.wait_for_timeout(1000)
+        pg.wait_for_timeout(700); prompted = take_all() or prompted
         if state(pg)['turn']['active'] == 0 and state(pg)['turn']['number'] == 2: break
     pg.click('[data-act=pass]')
     while time.time() - t0 < 90:
-        pg.wait_for_timeout(1000)
+        pg.wait_for_timeout(700); prompted = take_all() or prompted
         if state(pg)['turn']['active'] == 0 and state(pg)['turn']['number'] == 3: break
     st = state(pg)
     check('three bots each took two turns and passed back within 90s', st['turn']['active'] == 0 and st['turn']['number'] == 3, f"active={st['turn']['active']} round={st['turn']['number']}")
@@ -368,6 +373,7 @@ with sync_playwright() as p:
     # guest attacks host with a creature
     gcr = guest.locator('.me .bf .card').first
     if menu(guest, gcr, 'Attack Host'):
+        host.wait_for_timeout(1200); host.click('#prompt [data-act=allowAll]'); guest.wait_for_timeout(1200)
         menu(guest, gcr, 'combat damage'); host.wait_for_timeout(1200)
         check('combat damage across clients lowers host life on both', state(host)['players'][0]['life'] == 37 and state(guest)['players'][0]['life'] == 37, f"h={state(host)['players'][0]['life']} g={state(guest)['players'][0]['life']}")
     # host passes turn -> guest sees it's their turn

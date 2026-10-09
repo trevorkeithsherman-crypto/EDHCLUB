@@ -1,5 +1,6 @@
 import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest, myProfile, uploadAvatar, removeAvatar, localAvatar } from './supa.js';
 import { startHero } from './hero.js';
+import { registerSW, install, onInstallable, isIOS } from './pwa.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -186,3 +187,12 @@ document.addEventListener('click', (e) => { const b = e.target.closest('[data-go
 })();
 
 startHero(document.getElementById('heroShot'));
+
+registerSW();
+// "Install app" appears only when the browser can actually do it (or on iOS, where we explain Add to Home Screen).
+onInstallable((ok) => {
+  let b = document.getElementById('installBtn');
+  if (!ok) { if (b) b.remove(); return; }
+  if (!b) { b = document.createElement('button'); b.type = 'button'; b.id = 'installBtn'; b.className = 'btn ghost sm'; b.textContent = 'Install app'; document.getElementById('account').prepend(b); }
+  b.onclick = async () => { const r = await install(); if (r === 'ios') toast('In Safari: tap Share, then "Add to Home Screen" for a full-screen EDH Club.', 7000); else if (r === 'installed') toast('Installed. Find EDH Club on your home screen or in your apps.', 6000); };
+});

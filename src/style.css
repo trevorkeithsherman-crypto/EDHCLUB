@@ -492,3 +492,14 @@ body.is-drag, body.is-drag * { cursor: grabbing !important; }
 .tm-who { display: grid; min-width: 0; } .tm-who b { font: 600 14px var(--f-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .tm-who small { color: var(--muted); font-size: 12px; }
 .tm-row .row { gap: 6px; justify-content: flex-end; }
 @media (max-width: 760px) { .tm-row { grid-template-columns: 26px minmax(0, 1fr); } .tm-row .row { grid-column: 1 / -1; justify-content: flex-start; } }
+
+/* Keyboard shortcuts overlay */
+.mpanel.wide { width: min(980px, calc(100% - 32px)); }
+.kgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px 28px; margin: 6px 0 16px; }
+.kgrid h3 { font: 700 11px var(--f-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--blue); margin: 0 0 8px; }
+.krow { display: grid; grid-template-columns: 96px 1fr; gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); font-size: 13px; color: var(--text); }
+.keys { display: inline-flex; align-items: center; gap: 3px; } .keys i { color: var(--dim); font-style: normal; font-size: 11px; }
+kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 6px; background: linear-gradient(180deg, #1c2333, #0d1119); border: 1px solid var(--line-2); box-shadow: 0 2px 0 rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .08); font: 700 11px var(--f-ui); color: var(--gold-2); }
+.steps { margin: 0 0 12px; padding-left: 20px; color: var(--text); font-size: 14px; line-height: 1.6; }
+.rail-btn.on:not(:disabled) { color: var(--blue); }
+:fullscreen body, :-webkit-full-screen body { background: var(--bg); }

@@ -4,6 +4,7 @@ import { FX, SFX, Ambient, setFxState } from './fx.js';
 import { net, rememberRoom, recallRoom } from './net.js';
 import { makeBot } from './bots.js';
 import * as Rules from './combat.js';
+import { registerSW, canInstall, install, onInstallable, isIOS, toggleFullscreen, fullscreenOn, fullscreenSupported } from './pwa.js';
 import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
 
 /* ---------- Mode from the URL ---------- */
@@ -1420,12 +1421,92 @@ function onContext(e) {
     else if (z === 'graveyard' || z === 'exile') openZone(pi, z);
   }
 }
+/* ---------- Keyboard shortcuts ----------
+   The card under the mouse wins; otherwise the selected card (click once to select). Nothing fires while typing. */
+const SHORTCUTS = [
+  { keys: ['T'], label: 'Tap / untap the card', group: 'Cards' },
+  { keys: ['A'], label: 'Attack with the card (then click a player)', group: 'Cards' },
+  { keys: ['B', 'Enter'], label: 'Play / cast the card (hand or command zone)', group: 'Cards' },
+  { keys: ['G'], label: 'Send the card to the graveyard', group: 'Cards' },
+  { keys: ['X'], label: 'Exile the card', group: 'Cards' },
+  { keys: ['H'], label: 'Return the card to hand', group: 'Cards' },
+  { keys: ['F'], label: 'Flip / transform (double-faced) or face-down', group: 'Cards' },
+  { keys: ['L'], label: 'Look closer', group: 'Cards' },
+  { keys: ['1', '2'], label: '+1/+1 counter · −1/−1 counter', group: 'Cards' },
+  { keys: ['C'], label: 'Counter (generic) on the card', group: 'Cards' },
+  { keys: ['D'], label: 'Draw a card', group: 'Turn' },
+  { keys: ['U'], label: 'Untap all your permanents', group: 'Turn' },
+  { keys: ['S'], label: 'Shuffle your library', group: 'Turn' },
+  { keys: ['Space'], label: 'Next phase', group: 'Turn' },
+  { keys: ['E'], label: 'End turn / pass', group: 'Turn' },
+  { keys: ['M'], label: 'Mulligan', group: 'Turn' },
+  { keys: ['−', '='], label: 'Life −1 / +1 (hold Shift for 5)', group: 'Table' },
+  { keys: ['K'], label: 'Create a token', group: 'Table' },
+  { keys: ['R'], label: 'Roll a d20', group: 'Table' },
+  { keys: ['Shift', 'F'], label: 'Full screen', group: 'Table' },
+  { keys: ['P'], label: 'Log & card panel', group: 'Table' },
+  { keys: ['?'], label: 'This list', group: 'Table' },
+  { keys: ['Esc'], label: 'Cancel / close', group: 'Table' },
+];
+let kbMouse = { x: -1, y: -1 };
+document.addEventListener('pointermove', (e) => { if (e.pointerType === "mouse") kbMouse = { x: e.clientX, y: e.clientY }; }, { passive: true });
+const focusCard = () => {
+  const under = kbMouse.x >= 0 ? document.elementFromPoint(kbMouse.x, kbMouse.y)?.closest('#table .card[data-id]') : null;
+  const id = under ? under.dataset.id : ((zoomId && S.cards[zoomId]) ? zoomId : S.sel);
+  const c = id && S.cards[id]; return c && net.isMine(c.controller) ? c : null;
+};
 function onKey(e) {
-  if (e.key === 'Escape') { closeMenu(); closeModal(); hideZoom(); untilt(); if (targeting) stopTargeting(); if (blocking) stopBlocking(); return; }
-  if (e.target.closest('input,textarea,select') || !$('#modal').hidden) return;
-  if (e.key === ' ' && !e.target.closest('button')) { e.preventDefault(); nextPhase(); }
-  else if (e.key === 'd' || e.key === 'D') draw(S.view, 1);
+  if (e.key === 'Escape') { closeMenu(); closeModal(); hideZoom(); untilt(); hideTapbar(); if (targeting) stopTargeting(); if (blocking) stopBlocking(); return; }
+  if (e.target.closest('input,textarea,select,[contenteditable]') || !$('#modal').hidden || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key; const me = S.view; const c = focusCard(); const mine = (i) => net.isMine(i);
+  const act = (fn) => { e.preventDefault(); fn(); };
+  if (k === '?' || (k === '/' && e.shiftKey)) return act(shortcutsModal);
+  if (k === 'F' && e.shiftKey) return act(() => doFullscreen());
+  if (k === ' ' && !e.target.closest('button')) return act(nextPhase);
+  switch (k.toLowerCase()) {
+    case 'd': if (mine(me)) act(() => draw(me, 1)); return;
+    case 'u': if (mine(me)) act(() => { const ids = P(me).zones.battlefield.filter((id) => S.cards[id].tapped); ids.forEach((id) => { S.cards[id].tapped = false; }); if (ids.length) { log(`${P(me).name} untapped ${ids.length} permanent${ids.length > 1 ? 's' : ''}`); SFX.play('tick'); } render(); }); return;
+    case 's': if (mine(me)) act(() => shuffleLib(me)); return;
+    case 'e': if (mine(S.turn.active)) act(() => $('[data-act=pass]')?.click()); return;
+    case 'm': if (mine(me)) act(() => mulligan(me)); return;
+    case 'k': act(tokenModal); return;
+    case 'r': act(() => $('[data-act=d20]')?.click()); return;
+    case 'p': act(() => $('#sideBtn').click()); return;
+    case '-': case '_': if (mine(me)) act(() => changeLife(me, e.shiftKey ? -5 : -1, { manual: true })); return;
+    case '=': case '+': if (mine(me)) act(() => changeLife(me, e.shiftKey ? 5 : 1, { manual: true })); return;
+  }
+  if (!c) return;
+  switch (k.toLowerCase()) {
+    case 't': if (c.zone === 'battlefield') act(() => toggleTap(c)); return;
+    case 'a': if (c.zone === 'battlefield' && isCreature(c)) act(() => startTargeting(c)); return;
+    case 'b': case 'enter': if (c.zone === 'hand' || c.zone === 'command') act(() => castToStack(c.id)); return;
+    case 'g': if (!c.isCmdr || c.zone !== 'command') act(() => { moveLog(c, 'graveyard'); moveCard(c.id, c.owner, 'graveyard'); }); return;
+    case 'x': act(() => { moveLog(c, 'exile'); moveCard(c.id, c.owner, 'exile'); }); return;
+    case 'h': if (c.zone !== 'hand') act(() => { moveLog(c, 'hand'); moveCard(c.id, c.controller, 'hand'); }); return;
+    case 'f': if (c.zone === 'battlefield') act(() => { if (c.backImg) c.flipped = !c.flipped; else c.faceDown = !c.faceDown; render(); SFX.play('whoosh'); }); return;
+    case 'l': if (canSee(c)) act(() => closerModal(c)); return;
+    case '1': if (c.zone === 'battlefield') act(() => counter(c, 'p1', 1)); return;
+    case '2': if (c.zone === 'battlefield') act(() => counter(c, 'p1', -1)); return;
+    case 'c': if (c.zone === 'battlefield') act(() => counter(c, 'ctr', 1)); return;
+  }
 }
+function shortcutsModal() {
+  const groups = [...new Set(SHORTCUTS.map((x) => x.group))];
+  openModal(`<h2>Keyboard shortcuts</h2><p>Hover a card (or click it once to select it), then press a key. Shortcuts are off while you type.</p>
+  <div class="kgrid">${groups.map((g) => `<section><h3>${g}</h3>${SHORTCUTS.filter((x) => x.group === g).map((x) => `<div class="krow"><span class="keys">${x.keys.map((kk) => `<kbd>${kk}</kbd>`).join('<i>/</i>')}</span><span>${x.label}</span></div>`).join('')}</section>`).join('')}</div>
+  <div class="row" style="justify-content:space-between;align-items:center"><span class="muted small">Mouse: double-click plays or taps · right-click for the full menu · drag between zones.</span><button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'wide' });
+}
+async function doFullscreen() {
+  if (!fullscreenSupported()) { toast(isIOS() ? 'On iPhone, add EDH Club to your Home Screen for a full-screen table.' : 'Full screen isn’t available in this browser.', 5000); return; }
+  const on = await toggleFullscreen(); if (on === null) toast('Full screen was blocked by the browser'); syncFsBtn();
+}
+async function installApp() {
+  const r = await install();
+  if (r === 'ios') openModal(`<h2>Add EDH Club to your Home Screen</h2><p>Safari doesn’t offer an install button, but it takes two taps:</p><ol class="steps"><li>Tap the <b>Share</b> button at the bottom of Safari.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol><p>You’ll get a full-screen table with no browser bars.</p><div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="close">Got it</button></div>`, { cls: 'narrow' });
+  else if (r === 'installed') toast('EDH Club is installed. Open it from your home screen or app list.', 6000);
+  else if (r === 'unavailable') toast('Your browser didn’t offer an install option here. Chrome, Edge and Android browsers usually do.', 6000);
+}
+function syncFsBtn() { const b = $('#fsBtn'); if (b) { b.classList.toggle('on', fullscreenOn()); b.title = fullscreenOn() ? 'Exit full screen (Shift+F)' : 'Full screen (Shift+F)'; } }
 function bindUI() {
   FX.init();
   ['W', 'U', 'B', 'R', 'G', 'C'].forEach((k) => { HEX[k] = css('--m' + k) || '#aaa'; });
@@ -1433,12 +1514,18 @@ function bindUI() {
   $('#motionSel').onchange = (e) => { S.motion = e.target.value; render(); };
   $('#fxBtn').onclick = () => { S.fx = !S.fx; render(); toast(S.fx ? 'Playmat effects on' : 'Playmat effects off'); };
   $('#tableBtn').onclick = () => tableModal();
+  $('#fsBtn').onclick = doFullscreen; document.addEventListener('fullscreenchange', syncFsBtn); document.addEventListener('webkitfullscreenchange', syncFsBtn);
+  registerSW();
   $('#settingsBtn').onclick = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     openMenu([
       { label: `Playmat effects: ${S.fx ? 'on' : 'off'}`, fn: () => $('#fxBtn').click() },
       { label: `Sound: ${S.sound ? 'on' : 'off'}`, fn: () => $('#soundBtn').click() },
       { label: `Card motion: ${{ full: 'full', reduced: 'reduced', off: 'off' }[S.motion]}`, fn: () => { S.motion = { full: 'reduced', reduced: 'off', off: 'full' }[S.motion]; render(); toast(`Card motion ${S.motion}`); } },
+      { sep: true },
+      { label: 'Keyboard shortcuts  (?)', fn: shortcutsModal },
+      { label: fullscreenOn() ? 'Exit full screen' : 'Full screen  (Shift+F)', fn: doFullscreen },
+      ...(canInstall() ? [{ label: 'Install EDH Club as an app', fn: installApp }] : []),
       { sep: true },
       { label: 'Game log', fn: logModal },
     ], r.left, r.bottom + 4, 'Settings');

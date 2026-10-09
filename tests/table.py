@@ -55,6 +55,22 @@ with sync_playwright() as p:
     # seat menu shortcuts
     pg.click('.opps .seat[data-seat="1"] .pname'); pg.wait_for_timeout(200)
     check('bot seat menu offers deck change and removal', pg.locator('.menu .mi:has-text("Change this bot")').count() == 1 and pg.locator('.menu .mi:has-text("Remove this bot")').count() == 1); pg.keyboard.press('Escape')
+    # ---- auto playmats never collide at the start ----
+    pg.goto(BASE + '/table.html?mode=bots'); pg.wait_for_timeout(1500)
+    mats = pg.eval_on_selector_all('.seat[data-seat]', 'els=>els.map(e=>e.dataset.mat)')
+    check('four auto mats are all different', len(set(mats)) == 4, str(mats))
+    # make everyone mono-red: still four different mats, and the first seat keeps its first choice
+    pg.evaluate("__edhMut(st=>{ for (const p of st.players) p.mat='auto'; Object.values(st.cards).forEach(c=>{ if (c.isCmdr) c.colors='R'; }); })"); pg.wait_for_timeout(200)
+    mats = pg.eval_on_selector_all('.seat[data-seat]', 'els=>els.map(e=>e.dataset.mat)')
+    by_seat = dict(zip(pg.eval_on_selector_all('.seat[data-seat]', 'els=>els.map(e=>+e.dataset.seat)'), mats))
+    check('four mono-red commanders: Rakdos, Boros, Izzet, Gruul in seat order, no repeats', [by_seat[k] for k in range(4)] == ['rakdos', 'boros', 'izzet', 'gruul'], str(by_seat))
+    # a hand-picked mat is respected and auto seats route around it
+    pg.evaluate("__edhMut(st=>{ st.players[2].mat='rakdos'; })"); pg.wait_for_timeout(200)
+    mats = dict(zip(pg.eval_on_selector_all('.seat[data-seat]', 'els=>els.map(e=>+e.dataset.seat)'), pg.eval_on_selector_all('.seat[data-seat]', 'els=>els.map(e=>e.dataset.mat)')))
+    check('seat 3 picks Rakdos by hand; seat 1 auto moves to Boros so they differ', mats[2] == 'rakdos' and mats[0] == 'boros' and len(set(mats.values())) == 4, str(mats))
+    pg.evaluate("__edhMut(st=>{ st.players[0].mat='rakdos'; })"); pg.wait_for_timeout(200)
+    mats = dict(zip(pg.eval_on_selector_all('.seat[data-seat]', 'els=>els.map(e=>+e.dataset.seat)'), pg.eval_on_selector_all('.seat[data-seat]', 'els=>els.map(e=>e.dataset.mat)')))
+    check('two players may choose the same mat on purpose', mats[0] == 'rakdos' and mats[2] == 'rakdos', str(mats))
     check('bots mode: no JS errors', not errs, str(errs)[:300])
     ctx.close()
 

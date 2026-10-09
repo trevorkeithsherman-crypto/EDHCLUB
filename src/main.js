@@ -607,13 +607,33 @@ function maybeBot() {
 }
 
 /* ---------- Rendering ---------- */
+// Auto playmats: each seat gets the guild that fits its commander, but no two seats share a mat when the
+// game starts. Players can still pick the same one by hand. Resolved in seat order so every client agrees.
+const MAT_PREFS = { W: ['orzhov', 'azorius', 'boros', 'selesnya'], U: ['azorius', 'izzet', 'dimir', 'simic'], B: ['golgari', 'dimir', 'rakdos', 'orzhov'], R: ['rakdos', 'boros', 'izzet', 'gruul'], G: ['selesnya', 'gruul', 'simic', 'golgari'] };
+const MAT_FALLBACK = ['azorius', 'rakdos', 'selesnya', 'dimir', 'izzet', 'golgari', 'boros', 'orzhov', 'gruul', 'simic'];
+function matPrefs(i) {
+  const c = commandersOf(i)[0]; const cols = c ? (c.colors || '').replace(/[^WUBRG]/g, '') : '';
+  const out = [];
+  if (cols.length === 2) { const pr = MAT_BY_PAIR[cols] || MAT_BY_PAIR[cols[1] + cols[0]]; if (pr) out.push(pr); }
+  for (const k of cols) (MAT_PREFS[k] || []).forEach((m) => out.push(m));
+  out.push(MAT_FALLBACK[i % MAT_FALLBACK.length], ...MAT_FALLBACK);
+  return [...new Set(out)];
+}
+function autoMats() {
+  const n = S.seats || 4; const taken = new Set(); const out = {};
+  for (let i = 0; i < n; i++) { const p = P(i); if (p.mat && p.mat !== 'auto' && (MATS[p.mat] || (p.mat === 'custom' && customMats[i]))) taken.add(p.mat); }
+  for (let i = 0; i < n; i++) {
+    const p = P(i); if (p.mat && p.mat !== 'auto' && (MATS[p.mat] || (p.mat === 'custom' && customMats[i]))) continue;
+    const pick = matPrefs(i).find((m) => !taken.has(m)) || matPrefs(i)[0];
+    taken.add(pick); out[i] = pick;
+  }
+  return out;
+}
 function matOf(i) {
   const p = P(i);
   if (p.mat === 'custom' && customMats[i]) return 'custom';
   if (p.mat && p.mat !== 'auto' && MATS[p.mat]) return p.mat;
-  const c = commandersOf(i)[0]; const cols = c ? (c.colors || '') : '';
-  const pair = cols.length === 2 ? (MAT_BY_PAIR[cols] || MAT_BY_PAIR[cols[1] + cols[0]]) : null;
-  return pair || MAT_BY_COLOR[cols[0]] || ['azorius', 'rakdos', 'selesnya', 'dimir'][i % 4];
+  return autoMats()[i] || MAT_FALLBACK[i % MAT_FALLBACK.length];
 }
 const others = () => [1, 2, 3].map((k) => (S.view + k) % 4).filter((k) => k < (S.seats || 4));
 function avatarHTML(i, big) {
@@ -1033,7 +1053,7 @@ function matModal(pi) {
   const seatStyle = (k) => { const el = document.createElement('div'); el.className = 'seat'; el.dataset.mat = k; document.body.appendChild(el); const bg = getComputedStyle(el).backgroundImage; el.remove(); return `style="background:${bg.replace(/"/g, '&quot;')}"`; };
   const now = matOf(pi); const nowName = now === 'custom' ? 'your upload' : MATS[now].name;
   const custom = customMats[pi] ? opt('custom', 'Your mat', 'Uploaded image', `style="background-image:url(${customMats[pi]})"`) : '';
-  openModal(`<h2>${esc(p.name)}'s playmat</h2><p>Ten guild halls of Ravnica, each with its own weather. Auto picks the guild that matches your commander's colors. Upload your own art to play on it; wide images (about 2:1) fit best.</p>
+  openModal(`<h2>${esc(p.name)}'s playmat</h2><p>Ten guild halls of Ravnica, each with its own weather. Auto picks the guild that matches your commander's colors and makes sure nobody at the table starts on the same mat; pick one by hand if you want to match. Upload your own art to play on it; wide images (about 2:1) fit best.</p>
   <div class="matgrid">${opt('auto', 'Auto', `Now: ${nowName}`)}${Object.entries(MATS).map(([k, m]) => opt(k, m.name, m.blurb)).join('')}${custom}</div>
   <p class="muted small">Guild art by Richard Wright, © Wizards of the Coast, used under the Fan Content Policy.</p>
   <input type="file" id="matFile" accept="image/*" hidden>

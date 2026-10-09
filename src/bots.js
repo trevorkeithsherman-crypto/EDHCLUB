@@ -4,7 +4,7 @@
 // table uses. The host's client runs them.
 
 export function makeBot(api) {
-  const { S, P, castToStack, cast, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife, toGraveyard, toExile, moveCard, toggleTap } = api;
+  const { S, P, castToStack, cast, activate, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife, toGraveyard, toExile, moveCard, toggleTap } = api;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const speed = () => ({ fast: 0.35, relaxed: 1.7 }[S.botSpeed] || 1.25);
   const jitter = (ms) => ms * (0.75 + Math.random() * 0.5);
@@ -34,12 +34,13 @@ export function makeBot(api) {
   const bf = (k) => P(k).zones.battlefield.map((id) => S.cards[id]).filter(Boolean);
   const creatures = (k) => bf(k).filter(isCreature);
   const opponents = (i) => S.players.map((q, k) => ({ q, k })).filter(({ q, k }) => k !== i && k < (S.seats || 4) && !q.out && !q.empty);
-  const manaOf = (k) => bf(k).reduce((n, c) => n + (c.tapped ? 0 : isLand(c) ? landMana(c) : isRock(c) ? rockMana(c) : 0), 0);
+  const manaOf = (k) => bf(k).reduce((n, c) => n + (c.tapped ? 0 : isLand(c) ? landMana(c) : isRock(c) ? rockMana(c) : 0), 0) + (P(k).floating || 0);
   // Pay for a spell by tapping lands (colored pips first) and mana rocks, like a person would.
   const pips = (c) => (String(c.cost || '').match(/\{[WUBRG]\}/g) || []).map((t) => t[1]);
   const landColors = (l) => { const o = oracle(l); const t = l.type.toLowerCase(); return ['W', 'U', 'B', 'R', 'G'].filter((k) => (o.includes(`{${k.toLowerCase()}}`) && /add/.test(o)) || t.includes({ W: 'plains', U: 'island', B: 'swamp', R: 'mountain', G: 'forest' }[k]) || (/add (?:one mana of )?any color/.test(o))); };
   function tapMana(k, c) {
     let need = cost(c) + (c.isCmdr && c.zone !== 'battlefield' ? 2 * (c.casts || 0) : 0); if (need <= 0) return;
+    if (P(k).floating) { const use = Math.min(P(k).floating, need); P(k).floating -= use; need -= use; if (need <= 0) return; }
     const avail = bf(k).filter((x) => !x.tapped && ((isLand(x) && tapsForMana(x)) || isRock(x)));
     const want = pips(c);
     const tap = (x) => { if (need <= 0 || x.tapped) return; toggleTap(x); need -= isLand(x) ? landMana(x) : rockMana(x); };
@@ -173,8 +174,9 @@ export function makeBot(api) {
       for (const c of picks) {
         if (!S.cards[c.id] || (c.zone !== 'hand' && c.zone !== 'command')) continue;
         tapMana(i, c); const ok = await cast(c); if (!ok) { await d(500); continue; }
-        await d(600); await resolveSpell(i, c, d); await d(500);
+        await d(900);
       }
+      await activate(i, 'precombat');
       // combat
       nextPhase(); await d(500);
       const plans = planAttacks(i);
@@ -190,10 +192,13 @@ export function makeBot(api) {
       // second main: anything affordable we held back (cheap creatures after combat)
       const late = plan(i, manaOf(i)).filter((c) => isCreature(c) && S.cards[c.id] && c.zone === 'hand');
       for (const c of late.slice(0, 2)) { tapMana(i, c); await cast(c); await d(600); }
+      await activate(i, 'main2'); await d(400);
+      P(i).floating = 0;
       await d(500);
       log(`${p.name} passes`);
       passTurn();
     } finally { running = false; }
   }
-  return { takeTurn, chooseBlock, get busy() { return running; } };
+  const payMana = (k, n) => { tapMana(k, { cost: '{' + n + '}', casts: 0 }); };
+  return { takeTurn, chooseBlock, manaAvailable: manaOf, payMana, get busy() { return running; } };
 }

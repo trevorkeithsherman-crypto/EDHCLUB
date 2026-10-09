@@ -539,3 +539,8 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .artopt.on { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(79, 195, 255, .35); }
 .mpanel label.chk, .chk { display: inline-flex; grid-template-columns: none; align-items: center; gap: 8px; font: 600 13px var(--f-ui); text-transform: none; letter-spacing: 0; color: var(--text); margin: 0; }
 .chk input { width: auto; accent-color: var(--blue); }
+
+/* Choice modals (discard / sacrifice): pickable cards */
+.pickcard { background: none; border: 2px solid transparent; border-radius: 12px; padding: 0; cursor: pointer; display: block; transition: border-color .15s, transform .15s; }
+.pickcard.on { border-color: var(--gold, #e3c56a); transform: translateY(-3px); box-shadow: 0 0 0 3px rgba(227,197,106,.25), 0 10px 24px rgba(0,0,0,.5); }
+.pickcard .card { pointer-events: none; }

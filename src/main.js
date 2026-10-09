@@ -5,6 +5,7 @@ import { net, rememberRoom, recallRoom } from './net.js';
 import { makeBot } from './bots.js';
 import * as Rules from './combat.js';
 import { parseList, deckStats, deckText } from './decklist.js';
+import { parseAbilities, parseEffects, staticGrant } from './effects.js';
 import { registerSW, canInstall, install, onInstallable, isIOS, toggleFullscreen, fullscreenOn, fullscreenSupported } from './pwa.js';
 import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
 
@@ -186,10 +187,11 @@ function identityPips(i) {
   if (!cs.length) return '<span class="pips"><i class="ms ms-c ms-cost"></i></span>';
   return `<span class="pips">${cs.map((k) => `<i class="ms ms-${k.toLowerCase()} ms-cost"></i>`).join('')}</span>`;
 }
+const ptModified = (c) => !!(c.p1 || c.tp || c.tt || (c.zone === 'battlefield' && Rules.ptOf(c).join('/') !== String(c.pt)));
 function ptOf(c) {
   if (!c.pt) return null;
-  const m = c.pt.match(/^(\d+|\*)\/(\d+|\*)$/); if (!m || !c.p1) return c.pt;
-  const a = m[1] === '*' ? '*' : (+m[1] + c.p1), b = m[2] === '*' ? '*' : (+m[2] + c.p1); return a + '/' + b;
+  const m = c.pt.match(/^(\d+|\*)\/(\d+|\*)$/); if (!m || !ptModified(c)) return c.pt;
+  const [p, t] = Rules.ptOf(c); const a = m[1] === '*' ? '*' : p, b = m[2] === '*' ? '*' : t; return a + '/' + b;
 }
 function powerOf(c) { const s = ptOf(c); const n = parseInt(s || '0', 10); return isNaN(n) ? 0 : n; }
 function toughnessOf(c) { const s = ptOf(c) || ''; const m = s.split('/')[1]; const n = parseInt(m || '0', 10); return isNaN(n) ? 0 : n; }
@@ -207,7 +209,7 @@ function cardHTML(c, o = {}) {
   const over = `${c.p1 ? `<div class="bp">${sg}${c.p1}/${sg}${c.p1}</div>` : ''}${c.ctr ? `<div class="bc">${c.ctr}</div>` : ''}${c.dmg ? `<div class="dmg" title="Damage marked this turn">${c.dmg}</div>` : ''}${c.sick && c.zone === 'battlefield' && isCreature(c) && !Rules.has(c, 'haste') ? '<div class="zz" title="Summoning sick: can\'t attack until your next turn">zz</div>' : ''}${c.token ? '<div class="tk">Token</div>' : ''}`;
   const src = faceSrc(c, o.big);
   if (src) {
-    const mod = c.p1 && c.pt ? ptOf(c) : null;
+    const mod = c.pt && ptModified(c) ? ptOf(c) : null;
     return `<div class="${cls}" ${idA} style="${st}" title="${esc(c.name)}"><div class="ci pic"><img src="${esc(src)}" alt="${esc(c.name)}" draggable="false" decoding="async">${mod ? `<div class="ptm">${esc(mod)}</div>` : ''}${over}</div></div>`;
   }
   const pt = ptOf(c);
@@ -293,7 +295,9 @@ function moveCard(id, pi, zone, o = {}) {
   if (zone === 'stack') S.stack.push(id);
   else { const list = P(c.controller).zones[zone]; if (zone === 'library') { o.bottom ? list.push(id) : list.unshift(id); } else list.push(id); }
   render();
-  if (zone === 'battlefield') { if (fromZone !== 'battlefield') c.sick = true; if (o.x == null) autoPlace(c); else { c.x = o.x; c.y = o.y; } render(); }
+  if (zone === 'battlefield') { if (fromZone !== 'battlefield') c.sick = true; if (o.x == null) autoPlace(c); else { c.x = o.x; c.y = o.y; } render();
+    if (fromZone !== 'battlefield' && MODE !== 'hotseat') setTimeout(() => { if (S.cards[id] && c.zone === 'battlefield') { fireEvent('etb', { card: c }); if (/Land/.test(c.type)) fireEvent('landfall', { card: c }); if (isCreature(c)) fireEvent('creatureEnters', { card: c }); if (c.token) fireEvent('tokenEnters', { card: c }); } }, 60); }
+  if (fromZone === 'battlefield' && zone === 'graveyard' && MODE !== 'hotseat' && isCreature(c)) setTimeout(() => { fireEvent('dies', { card: c }); fireEvent('anyDies', { card: c }); }, 60);
   arrive(c, from, o.anim || 'fly');
 }
 function bfMetrics(pi) {
@@ -332,6 +336,7 @@ function castToStack(id, fromRect) {
   if (/Land/.test(c.type) && !fromCmd) { log(`${who} played ${c.name}`); moveCard(id, c.controller, 'battlefield', { anim: 'land', fromRect }); return; }
   S.stats.casts[c.controller] = (S.stats.casts[c.controller] || 0) + 1;
   if (fromCmd) log(`${who} cast ${c.name} from the command zone (tax ${2 * (c.casts || 0)})`); else log(`${who} cast ${c.name}`);
+  if (MODE !== 'hotseat') { if (net.active && !net.isHost) net.send('all', { fn: 'cast', seat: c.controller, cardId: c.id }); else { fireEvent('opponentCasts', { caster: c.controller, card: c }); fireEvent('youCast', { caster: c.controller, card: c }); } }
   if (isPerm(c)) { moveCard(id, c.controller, 'battlefield', { anim: fromCmd ? 'commander' : 'cast', fromRect }); return; }
   // Instants and sorceries: announce, flash the card at the table, then it goes to the graveyard.
   const from = fromRect || visRect(cardEl(id)); const dest = c.isCmdr ? 'command' : 'graveyard';
@@ -386,7 +391,7 @@ function createTokens(pi, def, count) {
   const step = () => {
     const c = makeCard(def, pi); c.token = true; c.copyOf = def.copyOf || null; c.zone = 'battlefield'; p.zones.battlefield.push(c.id);
     if (def._art) Object.assign(c, def._art);
-    render(); autoPlace(c); render();
+    render(); autoPlace(c); render(); if (MODE !== 'hotseat') setTimeout(() => { if (S.cards[c.id]) { fireEvent('creatureEnters', { card: c }); fireEvent('tokenEnters', { card: c }); } }, 60);
     const el = cardEl(c.id); FX.pop(el); FX.puff(visRect(el), colorHex(c)); SFX.play('pop');
     if (++k < count) setTimeout(step, motionMul() ? 110 : 0);
   };
@@ -398,6 +403,7 @@ function attack(c, t) {
   if (ex) { ex.target = t; ex.t = Date.now(); ex.ok = false; ex.blockers = []; } else S.attacks.push({ id: c.id, target: t, t: Date.now(), ok: false, blockers: [] });
   if (S.turn.phase !== 2) S.turn.phase = 2; if (!Rules.has(c, 'vigilance')) c.tapped = true; render();
   FX.lunge(cardEl(c.id), visRect(lifeEl(t))); SFX.play('charge'); log(`${c.name} attacks ${P(t).name}`);
+  fireEvent('attacks', { card: c, target: t }); fireEvent('anyAttacks', { card: c, target: t });
   botDefend();
 }
 // The defender gets a say before damage happens: block with a creature, or let it through.
@@ -437,6 +443,7 @@ function combatDamage(c, t) {
   const n = powerOf(c); if (n <= 0) { toast(`${c.name} has no power to deal damage`); return; }
   S.attacks = S.attacks.filter((x) => x.id !== c.id);
   if (Rules.has(c, 'lifelink')) { log(`${P(c.controller).name} gains ${n} (lifelink)`); changeLifeAny(c.controller, n); }
+  setTimeout(() => fireEvent('combatDamage', { card: c, target: t }), 200);
   if (!net.isMine(t)) { render(); request(t, 'combat', c.id); return; }
   REQ.combat(t, c.id);
 }
@@ -475,6 +482,7 @@ function botDefend() {
     }, 600 + Math.random() * 700);
   });
 }
+function clearPumps() { Object.values(S.cards).forEach((c) => { if ((c.tp || c.tt || c.tkw) && net.isMine(c.controller)) { c.tp = 0; c.tt = 0; c.tkw = ''; } }); }
 function clearSick(active) { Object.values(S.cards).forEach((c) => { if (c.sick && c.controller === active && net.isMine(c.controller)) c.sick = false; }); }
 function clearDamage() { Object.values(S.cards).forEach((c) => { if (c.dmg && net.isMine(c.controller)) c.dmg = 0; }); }
 function changeLife(i, d, o = {}) {
@@ -517,7 +525,7 @@ function win(i, fromRemote) {
   <div class="row"><button type="button" class="btn ghost" data-act="close">Look at the board</button><button type="button" class="btn" data-act="again">Play again</button></div></div>`);
 }
 function passTurn() {
-  S.attacks = []; clearDamage();
+  S.attacks = []; clearDamage(); clearPumps();
   let n = S.turn.active;
   const ns = S.seats || 4;
   for (let k = 1; k <= ns; k++) { const c = (S.turn.active + k) % ns; if (!P(c).out && !P(c).empty) { n = c; break; } }
@@ -529,6 +537,7 @@ function passTurn() {
   if (tapped.length) SFX.play('tick');
   log(`${p.name}'s turn`);
   banner(`${p.name}'s turn`, `Round ${S.turn.number}`, n);
+  if (MODE !== 'hotseat') setTimeout(() => fireEvent('upkeep', { seat: n }), 400);
   setTimeout(() => { S.turn.phase = 1; render(); draw(n, 1); }, tapped.length && motionMul() ? 300 : 0);
 }
 function nextPhase() { if (S.turn.phase >= PHASES.length - 1) { passTurn(); return; } if (S.turn.phase === 2) S.attacks = []; S.turn.phase++; render(); }
@@ -546,7 +555,7 @@ function wipeLocal(kind) {
 }
 
 /* ---------- Room sync ---------- */
-const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'dmg', 'kw', 'sick', 'anim', 'set', 'num', 'foil', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts'];
+const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'dmg', 'kw', 'sick', 'anim', 'set', 'num', 'foil', 'tp', 'tt', 'tkw', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts'];
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
@@ -565,7 +574,7 @@ function applySeat(snap) {
 function applyShared(sn) {
   const turnChanged = S.turn.active !== sn.turn.active || S.turn.number !== sn.turn.number;
   S.turn = sn.turn; S.stack = sn.stack; S.attacks = sn.attacks; S.outOrder = sn.outOrder; S.stats = sn.stats; if (!net.isHost) S.pending = sn.pending || null;
-  if (turnChanged) { clearDamage(); clearSick(S.turn.active); }
+  if (turnChanged) { clearDamage(); clearPumps(); clearSick(S.turn.active); }
   botDefend();
   const was = S.over; S.over = sn.over;
   if (sn.log && sn.log[0] && (!S.log[0] || S.log[0].t < sn.log[0].t)) S.log = sn.log;
@@ -583,6 +592,11 @@ const REQ = {
   changeLife: (to, d, src) => changeLife(to, d, { src: src ? S.cards[src] : null }),
   poison: (to, d) => { const p = P(to); p.poison = Math.max(0, p.poison + d); render(); if (d > 0) { SFX.play('hit'); FX.shake(seatEl(to)); } checkOut(to); },
   cmdDmg: (to, cardId, d) => { const p = P(to); const cur = p.cmdDmg[cardId] || 0; const nv = Math.max(0, cur + d); if (nv !== cur) { p.cmdDmg[cardId] = nv; changeLife(to, -(nv - cur), { src: S.cards[cardId] }); } },
+  draw: (to, n) => draw(to, n),
+  mill: (to, n) => { const p = P(to); const ids = p.zones.library.splice(0, n); ids.forEach((id) => { S.cards[id].zone = 'graveyard'; p.zones.graveyard.push(id); }); log(`${p.name} milled ${ids.length}`); render(); },
+  discard: (to, n, srcName) => { const p = P(to); if (p.bot) { const hand = p.zones.hand.map((id) => S.cards[id]).sort((a, b) => valueOf(a) - valueOf(b)); hand.slice(0, n).forEach((c) => moveCard(c.id, to, 'graveyard', { anim: 'fly' })); log(`${p.name} discarded ${hand.slice(0, n).map((c) => c.name).join(', ')}`); } else pickModal(to, 'hand', n, `Discard ${n} card${n > 1 ? 's' : ''} (${srcName})`, (ids) => ids.forEach((id) => { moveLog(S.cards[id], 'graveyard'); moveCard(id, to, 'graveyard', { anim: 'fly' }); })); },
+  edict: (to, n, what, srcName) => { const p = P(to); const pool = seatCards(to, (c) => matchesWhat(c, what)); if (!pool.length) { log(`${p.name} has no ${what} to sacrifice`); return; } if (p.bot) { pool.sort((a, b) => valueOf(a) - valueOf(b)).slice(0, n).forEach((c) => { log(`${p.name} sacrificed ${c.name}`); moveCard(c.id, to, 'graveyard', { anim: 'fly' }); }); } else pickModal(to, 'battlefield', n, `Sacrifice ${n} ${what}${n > 1 ? 's' : ''} (${srcName})`, (ids) => ids.forEach((id) => { log(`${p.name} sacrificed ${S.cards[id].name}`); moveCard(id, to, 'graveyard', { anim: 'fly' }); }), (c) => matchesWhat(c, what)); },
+  ask: (to, key, srcId, n, srcName) => { const src = S.cards[srcId] || { name: srcName, oracle: '', controller: to }; payModal(to, src, n, (paid) => net.send('all', { fn: 'answer', key, paid })); },
   cardTo: (to, cardId, zone) => { const c = S.cards[cardId]; if (c && c.controller === to) moveCard(cardId, c.owner, zone); },
   cardDmg: (to, cardId, n, srcId, lethal) => {
     const c = S.cards[cardId]; if (!c || c.zone !== 'battlefield') return;
@@ -966,6 +980,151 @@ function commandMenu(pi, x, y) {
   const items = []; cs.forEach((c) => { items.push({ label: `Cast ${c.name} (tax +${2 * (c.casts || 0)})`, fn: () => castToStack(c.id), hot: true }); items.push({ label: `Put ${c.name} onto battlefield`, fn: () => moveCard(c.id, pi, 'battlefield', { anim: 'commander' }) }); });
   openMenu(items, x, y, 'Command zone');
 }
+/* ---------- Card text runtime: bots act on what their cards say ----------
+   Triggers and activated abilities resolve for bot-controlled permanents (on the host). Humans' own cards only get
+   reminder toasts; static anthems apply to everyone. Everything is logged. */
+const botOwned = (c) => c && c.zone === 'battlefield' && P(c.controller).bot && net.isMine(c.controller);
+const valueOf = (c) => (isCreature(c) ? powerOf(c) + toughnessOf(c) + Rules.shownKeywords(c).length + (c.isCmdr ? 4 : 0) : 2 + (String(c.cost || '').match(/\{/g) || []).length);
+const oppsOf = (i) => S.players.map((q, k) => k).filter((k) => k !== i && k < S.seats && !P(k).out && !P(k).empty);
+const seatCards = (k, pred) => P(k).zones.battlefield.map((id) => S.cards[id]).filter((c) => c && (!pred || pred(c)));
+const matchesWhat = (c, what) => what === 'permanent' ? true : what === 'nonland permanent' ? !/Land/.test(c.type) : what === 'creature' ? isCreature(c) : what.split('|').some((w) => new RegExp(w, 'i').test(c.type));
+function pickTarget(i, what, theirs = true) {
+  const pool = (theirs ? oppsOf(i) : [i]).flatMap((k) => seatCards(k, (c) => matchesWhat(c, what)));
+  return pool.sort((a, b) => valueOf(b) - valueOf(a))[0] || null;
+}
+function sendTo(c, zone) { if (!c) return; if (net.isMine(c.controller)) moveCard(c.id, c.owner, zone, { anim: 'fly' }); else request(c.controller, 'cardTo', c.id, zone); }
+function tapAll(i, what) { seatCards(i, (c) => matchesWhat(c, what) && c.tapped).forEach((c) => { c.tapped = false; }); render(); }
+const xValue = (src, eff) => { const o = lc(src.oracle); const m = o.match(/where x is the number of ([a-z]+?)s? you control/); if (m) return seatCards(src.controller, (c) => new RegExp(m[1], 'i').test(c.type) || (m[1] === 'creature' && isCreature(c))).length; if (/x is the number of creatures/.test(o)) return seatCards(src.controller, isCreature).length; return 1; };
+const lc = (s) => String(s || '').toLowerCase();
+// Run a list of parsed effects for a source card. Returns a short description for the log.
+async function runEffects(src, effects, ctx = {}) {
+  const i = src.controller; const done = []; const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (const e of effects) {
+    const n = e.n === 'x' ? xValue(src, e) : (e.n ?? 1);
+    switch (e.k) {
+      case 'draw': { const who = e.who === 'you' ? [i] : e.who === 'opponents' ? oppsOf(i) : e.who === 'all' ? [i, ...oppsOf(i)] : [oppsOf(i).sort((a, b) => P(a).life - P(b).life)[0]].filter((k) => k != null); who.forEach((k) => { if (net.isMine(k)) draw(k, n); else request(k, 'draw', n); }); done.push(`draw ${n}`); break; }
+      case 'life': { if (e.who === 'you') { changeLifeAny(i, n); done.push(`gain ${n}`); } else { const who = e.who === 'opponents' ? oppsOf(i) : e.who === 'all' ? [i, ...oppsOf(i)] : [oppsOf(i).sort((a, b) => P(a).life - P(b).life)[0]].filter((k) => k != null); who.forEach((k) => changeLifeAny(k, n)); done.push(`${Math.abs(n)} life from ${who.map((k) => P(k).name).join(', ')}`); } break; }
+      case 'damage': {
+        if (e.to === 'opponents' || e.to === 'all') { const who = e.to === 'all' ? [i, ...oppsOf(i)] : oppsOf(i); who.forEach((k) => changeLifeAny(k, -n)); done.push(`${n} damage to ${who.map((k) => P(k).name).join(', ')}`); break; }
+        if (e.to === 'creatures' || e.to === 'everything') { S.players.forEach((q, k) => { if (k < S.seats) seatCards(k, isCreature).forEach((c) => dmgTo(c, n, src)); if (e.to === 'everything' && k < S.seats && !q.out) changeLifeAny(k, -n); }); done.push(`${n} damage to each creature`); break; }
+        const threat = pickTarget(i, 'creature'); const victim = oppsOf(i).sort((a, b) => P(a).life - P(b).life)[0];
+        if ((e.to === 'creature' || e.to === 'any') && threat && (e.to === 'creature' || (toughnessOf(threat) - (threat.dmg || 0) <= n && valueOf(threat) >= 5))) { dmgTo(threat, n, src); done.push(`${n} damage to ${threat.name}`); }
+        else if (victim != null && e.to !== 'creature') { changeLifeAny(victim, -n); if (src.isCmdr && isCreature(src) && false) {} done.push(`${n} damage to ${P(victim).name}`); }
+        break;
+      }
+      case 'token': { createTokens(i, { name: e.name, cost: '', type: e.type || (e.pt ? 'Token Creature — ' + e.name : 'Token'), pt: e.pt || '', colors: e.colors || '', kw: e.kw || '', oracle: e.oracle || '' }, Math.max(1, Math.min(20, n))); done.push(`${n} ${e.name} token${n > 1 ? 's' : ''}`); break; }
+      case 'destroy': case 'exile': {
+        const zone = e.k === 'exile' ? 'exile' : 'graveyard';
+        if (e.all) { const victims = S.players.flatMap((q, k) => (k < S.seats ? seatCards(k, (c) => matchesWhat(c, e.what) && !(e.theirs && k === i)) : [])); victims.forEach((c) => sendTo(c, zone)); done.push(`${e.k} all ${e.what}s (${victims.length})`); }
+        else { const t = pickTarget(i, e.what, true); if (t) { sendTo(t, zone); done.push(`${e.k} ${t.name}`); } }
+        break;
+      }
+      case 'bounce': { const t = pickTarget(i, e.what, true); if (t) { sendTo(t, 'hand'); done.push(`bounce ${t.name}`); } break; }
+      case 'reanimate': { const g = P(i).zones.graveyard.map((id) => S.cards[id]).filter(isCreature).sort((a, b) => valueOf(b) - valueOf(a))[0]; if (g) { moveCard(g.id, i, 'battlefield', { anim: 'land' }); done.push(`return ${g.name} to the battlefield`); } break; }
+      case 'regrow': { const g = P(i).zones.graveyard.map((id) => S.cards[id]).filter((c) => matchesWhat(c, e.what === 'instant or sorcery' ? 'Instant|Sorcery' : e.what)).sort((a, b) => valueOf(b) - valueOf(a))[0]; if (g) { moveCard(g.id, i, 'hand', { anim: 'fly' }); done.push(`return ${g.name} to hand`); } break; }
+      case 'tutor': {
+        const lib = P(i).zones.library.map((id) => S.cards[id]); let picks = [];
+        if (/basic land|land|plains|island|swamp|mountain|forest/.test(e.what)) { const need = new Set(P(i).zones.hand.concat(P(i).zones.command).map((id) => S.cards[id]).flatMap((c) => (c.colors || '').split(''))); const basics = lib.filter((c) => /Basic/.test(c.type) && (e.what === 'land' || e.what === 'basic land' || new RegExp(e.what, 'i').test(c.type))).sort((a, b) => (need.has((b.colors || '')[0] || ({ Plains: 'W', Island: 'U', Swamp: 'B', Mountain: 'R', Forest: 'G' })[b.name]) ? 1 : 0) - (need.has(({ Plains: 'W', Island: 'U', Swamp: 'B', Mountain: 'R', Forest: 'G' })[a.name]) ? 1 : 0)); picks = basics.slice(0, e.n + (e.extra ? 1 : 0)); }
+        else picks = lib.filter((c) => matchesWhat(c, e.what)).sort((a, b) => valueOf(b) - valueOf(a)).slice(0, e.n);
+        picks.forEach((c, k) => { const toBf = e.to === 'battlefield' && (!e.extra || k === 0); moveCard(c.id, i, toBf ? 'battlefield' : 'hand', { anim: toBf ? 'land' : 'fly' }); if (toBf && e.tapped) c.tapped = true; });
+        if (picks.length) { shuffleArr(P(i).zones.library); done.push(`search for ${picks.map((c) => c.name).join(', ')}`); }
+        break;
+      }
+      case 'counter': { const targets = e.on === 'self' ? [src] : e.on === 'mine' ? seatCards(i, isCreature) : [seatCards(i, isCreature).sort((a, b) => valueOf(b) - valueOf(a))[0]].filter(Boolean); targets.forEach((c) => { c.p1 = (c.p1 || 0) + n; }); if (targets.length) done.push(`${n} +1/+1 counter${n > 1 ? 's' : ''} on ${targets.length === 1 ? targets[0].name : targets.length + ' creatures'}`); break; }
+      case 'pump': { const targets = e.on === 'self' ? [src] : e.on === 'mine' ? seatCards(i, isCreature) : [seatCards(i, isCreature).sort((a, b) => valueOf(b) - valueOf(a))[0]].filter(Boolean); targets.forEach((c) => { c.tp = (c.tp || 0) + e.p; c.tt = (c.tt || 0) + e.t; if (e.kw) c.tkw = `${c.tkw || ''},${e.kw}`; }); if (targets.length) done.push(`+${e.p}/+${e.t} until end of turn`); break; }
+      case 'discard': { const who = e.who === 'opponents' ? oppsOf(i) : [oppsOf(i).sort((a, b) => P(b).zones.hand.length - P(a).zones.hand.length)[0]].filter((k) => k != null); who.forEach((k) => { if (net.isMine(k)) REQ.discard(k, n, src.name); else request(k, 'discard', n, src.name); }); done.push(`${who.map((k) => P(k).name).join(', ')} discard ${n}`); break; }
+      case 'edict': { const who = e.who === 'opponents' ? oppsOf(i) : e.who === 'all' ? [i, ...oppsOf(i)] : [oppsOf(i).sort((a, b) => seatCards(b, isCreature).length - seatCards(a, isCreature).length)[0]].filter((k) => k != null); who.forEach((k) => { if (net.isMine(k)) REQ.edict(k, n, e.what, src.name); else request(k, 'edict', n, e.what, src.name); }); done.push(`${who.map((k) => P(k).name).join(', ')} sacrifice ${n} ${e.what}`); break; }
+      case 'untap': { tapAll(i, e.what); done.push(`untap ${e.what}s`); break; }
+      case 'mill': { const who = e.who === 'you' ? [i] : e.who === 'all' ? [i, ...oppsOf(i)] : [oppsOf(i)[0]].filter((k) => k != null); who.forEach((k) => { if (net.isMine(k)) REQ.mill(k, n); else request(k, 'mill', n); }); done.push(`mill ${n}`); break; }
+      case 'mana': { P(i).floating = (P(i).floating || 0) + (e.n === 'x' ? 1 : e.n); break; }
+      case 'scry': { done.push(`scry ${n} (kept)`); break; }
+      case 'tax': break; // handled by the trigger that owns it
+    }
+    await wait(120);
+  }
+  return done.join(', ');
+}
+// Which trigger events a card has, with conditions evaluated against the event context.
+function triggersFor(c, event, ctx) {
+  return parseAbilities(c).filter((a) => a.kind === 'trigger' && a.event === event).filter((a) => {
+    if (event === 'anyDies') return a.scope === 'any' || ctx.card.controller === c.controller;
+    if (event === 'opponentCasts') return a.scope === 'any' || ctx.caster !== c.controller;
+    if (event === 'creatureEnters') return ctx.card.controller === c.controller && ctx.card.id !== c.id;
+    if (event === 'landfall') return ctx.card.controller === c.controller;
+    if (event === 'anyAttacks') return ctx.card.controller === c.controller;
+    if (event === 'tokenEnters') return ctx.card.controller === c.controller && ctx.card.token;
+    if (event === 'upkeep' || event === 'endStep') return ctx.seat === c.controller;
+    return true;
+  });
+}
+const firing = new Set();
+// Fire an event across the table: bot-owned permanents resolve, humans get a reminder for their own.
+async function fireEvent(event, ctx = {}) {
+  if (MODE === 'hotseat') return;
+  const seatsToCheck = S.players.map((p, k) => k).filter((k) => k < S.seats && !P(k).out && !P(k).empty);
+  const selfOnly = ['etb', 'dies', 'attacks', 'combatDamage'].includes(event);
+  const sources = selfOnly ? [ctx.card].filter(Boolean) : seatsToCheck.flatMap((k) => seatCards(k));
+  for (const c of sources) {
+    if (!c || (selfOnly ? false : c.zone !== 'battlefield')) continue;
+    const trig = triggersFor(c, event, ctx); if (!trig.length) continue;
+    if (P(c.controller).bot && net.isMine(c.controller)) {
+      for (const a of trig) {
+        if (!a.effects.length) { log(`${c.name} triggers (${a.text.slice(0, 80)}) — resolve by hand`); continue; }
+        const tax = a.effects.find((x) => x.k === 'tax');
+        if (tax && ctx.caster != null && !P(ctx.caster).bot) { askPay(ctx.caster, c, tax.n, a); continue; }
+        if (tax && ctx.caster != null && P(ctx.caster).bot) { continue; } // bots don't pay each other's taxes; they just skip
+        const what = await runEffects(c, a.effects.filter((x) => x.k !== 'tax'), ctx);
+        if (what) log(`${P(c.controller).name}'s ${c.name} triggers: ${what}`);
+      }
+    } else if (net.isMine(c.controller) && !P(c.controller).bot && S.reminders !== false && ['etb', 'dies', 'upkeep', 'attacks', 'combatDamage', 'opponentCasts', 'endStep', 'landfall', 'creatureEnters', 'anyDies'].includes(event)) {
+      const k = `${c.id}|${event}|${ctx.card ? ctx.card.id : ''}|${S.turn.number}`; if (firing.has(k)) continue; firing.add(k); setTimeout(() => firing.delete(k), 1500);
+      toast(`Reminder — ${c.name}: ${trig[0].text.slice(0, 110)}`, 6000);
+    }
+  }
+}
+// "Pay {1}?" for Rhystic Study and friends: the human decides; declining lets the bot's effect happen.
+function askPay(seat, src, n, ability) {
+  const run = async (paid) => { if (paid) log(`${P(seat).name} paid {${n}} for ${src.name}`); else { const what = await runEffects(src, ability.effects.filter((x) => x.k !== 'tax')); log(`${P(seat).name} didn't pay for ${src.name}: ${what}`); } };
+  if (net.isMine(seat)) payModal(seat, src, n, run);
+  else { const key = 'ask' + Math.random().toString(36).slice(2, 8); asks[key] = run; request(seat, 'ask', key, src.id, n, src.name); }
+}
+const asks = {};
+function pickModal(seat, zone, n, title, cb, pred = null) {
+  const ids = P(seat).zones[zone].filter((id) => !pred || pred(S.cards[id])); const chosen = new Set();
+  openModal(`<h2>${esc(title)}</h2><p>Pick ${n}.</p><div class="zgrid">${ids.map((id) => `<div class="zitem"><button type="button" class="pickcard" data-pick="${id}">${cardHTML(S.cards[id], { noid: true, flat: true, reveal: true })}</button></div>`).join('')}</div><div class="row" style="justify-content:flex-end"><button type="button" class="btn" id="pickGo" disabled>Confirm</button></div>`);
+  $$('[data-pick]').forEach((b) => { b.onclick = () => { const id = b.dataset.pick; if (chosen.has(id)) chosen.delete(id); else if (chosen.size < n) chosen.add(id); b.classList.toggle('on', chosen.has(id)); $('#pickGo').disabled = chosen.size < Math.min(n, ids.length); }; });
+  $('#pickGo').onclick = () => { closeModal(); cb([...chosen]); };
+}
+function payModal(seat, src, n, cb) {
+  openModal(`<h2>${esc(src.name)}</h2><p>${esc(P(src.controller).name)}'s ${esc(src.name)} triggers on your spell: <i>${esc(src.oracle || '')}</i></p><p><b>Pay {${n}}?</b> (Tap mana for it yourself; the table doesn't track your mana.)</p><div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" id="payNo">Don't pay</button><button type="button" class="btn" id="payYes" data-autofocus>Pay {${n}}</button></div>`, { cls: 'narrow' });
+  $('#payYes').onclick = () => { closeModal(); cb(true); }; $('#payNo').onclick = () => { closeModal(); cb(false); };
+}
+// Bots use their activated abilities at the end of their turn: mana sinks, token makers, card draw, pumps before combat.
+async function botActivate(i, phase) {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (const c of seatCards(i)) {
+    for (const a of parseAbilities(c).filter((x) => x.kind === 'activated')) {
+      if (!a.effects.length || a.effects.every((e) => e.k === 'mana' || e.k === 'scry')) continue;
+      if (a.sacOther) continue;
+      if (a.sacSelf && !a.effects.some((e) => e.k === 'tutor' || e.k === 'draw')) continue;
+      if (a.tap && (c.tapped || (isCreature(c) && c.sick && !Rules.has(c, 'haste')))) continue;
+      const early = a.effects.some((e) => e.k === 'pump' || e.k === 'token' || e.k === 'counter' || e.k === 'untap');
+      if (early !== (phase === 'precombat')) continue; // board-builders before combat, card draw and sinks after
+      if (a.tap && phase === 'precombat' && isCreature(c) && powerOf(c) >= 3 && !a.effects.some((e) => e.k === 'token')) continue; // keep real attackers for combat
+      if (a.sorcery && phase === 'combat') continue;
+      const mana = bot ? bot.manaAvailable(i) : 0; if (a.mana > mana) continue;
+      if (a.life && P(i).life - a.life < 10) continue;
+      if (a.mana) bot.payMana(i, a.mana);
+      if (a.tap) c.tapped = true;
+      if (a.sacSelf) sendTo(c, 'graveyard');
+      const what = await runEffects(c, a.effects);
+      log(`${P(i).name} activates ${c.name}${what ? `: ${what}` : ''}`); render(); await wait(500);
+      if (a.sacSelf) break;
+    }
+  }
+}
+function reminderSettingLabel() { return `Trigger reminders: ${S.reminders === false ? 'off' : 'on'}`; }
+
 /* ---------- Priority: every non-land spell a bot casts waits for the humans at the table ----------
    They can let it resolve (OK), hold priority while they cast an instant (Respond), or counter it outright. */
 const humanSeats = () => S.players.map((p, k) => k).filter((k) => k < S.seats && !P(k).bot && !P(k).empty && !P(k).out);
@@ -989,6 +1148,7 @@ async function botCast(c) {
   log(fromCmd ? `${who} casts ${c.name} from the command zone` : `${who} casts ${c.name}`);
   moveCard(c.id, c.controller, 'stack', { anim: 'cast' });
   S.pending = { id: c.id, by: c.controller, t: Date.now(), acks: [], holds: [], state: 'open' }; render(); SFX.play('chime', firstColor(c));
+  fireEvent('opponentCasts', { caster: c.controller, card: c }); fireEvent('youCast', { caster: c.controller, card: c });
   const t0 = Date.now(); const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   for (;;) {
     await wait(200); const p = S.pending; if (!p || p.id !== c.id) return false;
@@ -999,7 +1159,9 @@ async function botCast(c) {
   const countered = S.pending && S.pending.state === 'countered'; S.pending = null;
   if (countered) { log(`${c.name} was countered`); const top = S.stack.indexOf(c.id); if (top >= 0) S.stack.splice(top, 1); moveCard(c.id, c.owner, 'graveyard', { anim: 'fly' }); render(); return false; }
   if (S.stack[S.stack.length - 1] === c.id) resolveTop(); else if (S.cards[c.id] && c.zone === 'stack') { const k = S.stack.indexOf(c.id); if (k >= 0) S.stack.splice(k, 1); moveCard(c.id, c.controller, isPerm(c) ? 'battlefield' : 'graveyard', { anim: 'land' }); }
-  render(); return true;
+  render();
+  if (!isPerm(c)) { const what = await runEffects(c, parseEffects(c.oracle || '')); if (what) log(`${c.name}: ${what}`); render(); }
+  return true;
 }
 function pendingPromptHTML() {
   const p = S.pending; const c = S.cards[p.id]; if (!c) return '';
@@ -1607,6 +1769,7 @@ function bindUI() {
       { label: `Playmat effects: ${S.fx ? 'on' : 'off'}`, fn: () => $('#fxBtn').click() },
       { label: `Sound: ${S.sound ? 'on' : 'off'}`, fn: () => $('#soundBtn').click() },
       { label: `Bot pace: ${{ relaxed: 'relaxed', normal: 'normal', fast: 'fast' }[S.botSpeed || 'normal']}`, fn: () => { S.botSpeed = { relaxed: 'normal', normal: 'fast', fast: 'relaxed' }[S.botSpeed || 'normal']; render(); toast(`Bots play at a ${S.botSpeed} pace`); } },
+      { label: reminderSettingLabel(), fn: () => { S.reminders = S.reminders === false; render(); toast(S.reminders === false ? 'Trigger reminders off' : 'Trigger reminders on'); } },
       { label: `Foil effects: ${S.foilFx === false ? 'off' : 'on'}`, fn: () => { S.foilFx = S.foilFx === false; render(); toast(S.foilFx === false ? 'Foil effects off' : 'Foil effects on'); } },
       { label: `Card motion: ${{ full: 'full', reduced: 'reduced', off: 'off' }[S.motion]}`, fn: () => { S.motion = { full: 'reduced', reduced: 'off', off: 'full' }[S.motion]; render(); toast(`Card motion ${S.motion}`); } },
       { sep: true },
@@ -1640,7 +1803,12 @@ function bindUI() {
 }
 
 /* ---------- Boot ---------- */
-function botApi() { return { S, P, moveCard, castToStack, toggleTap, cast: botCast, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife: changeLifeAny, request, net, toast, isMine: (k) => net.isMine(k), lookup, toGraveyard: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'graveyard'); else request(c.controller, 'cardTo', c.id, 'graveyard'); }, toExile: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'exile'); else request(c.controller, 'cardTo', c.id, 'exile'); } }; }
+Rules.setStaticContext((x) => {
+  if (!S || x.zone !== 'battlefield') return null; let p = 0, t = 0; const kw = [];
+  for (const id of (P(x.controller)?.zones.battlefield || [])) { const src = S.cards[id]; if (!src || !src.oracle) continue; const g = staticGrant(src, x); if (g) { p += g[0]; t += g[1]; if (g[2]) kw.push(g[2]); } }
+  return p || t || kw.length ? { p, t, kw: kw.join(',') } : null;
+});
+function botApi() { return { S, P, moveCard, castToStack, toggleTap, cast: botCast, activate: botActivate, fire: fireEvent, runEffects, parseEffects, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife: changeLifeAny, request, net, toast, isMine: (k) => net.isMine(k), lookup, toGraveyard: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'graveyard'); else request(c.controller, 'cardTo', c.id, 'graveyard'); }, toExile: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'exile'); else request(c.controller, 'cardTo', c.id, 'exile'); } }; }
 function roomBar() {
   if (MODE !== 'room') return;
   const t = $('#roomBar'); if (!t) return;
@@ -1671,7 +1839,7 @@ async function boot() {
       }
       net.on('seat', applySeat); net.on('shared', applyShared);
       net.on('req', ({ fn, to, args }) => { if (REQ[fn]) REQ[fn](to, ...args); });
-      net.on('all', ({ fn, kind, cardId, seat, id, on }) => { if (fn === 'ack' || fn === 'hold' || fn === 'counter') { if (net.isHost) respond(fn, id, seat, on); return; } if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); else if (fn === 'kick' && seat === net.seat) { toast('The host removed you from this table', 6000); net.leave(); setTimeout(() => { location.href = '/'; }, 1500); } });
+      net.on('all', ({ fn, kind, cardId, seat, id, on, key, paid }) => { if (fn === 'cast') { if (net.isHost) { const cc = S.cards[cardId] || { name: '?', controller: seat, type: '' }; fireEvent('opponentCasts', { caster: seat, card: cc }); } return; } if (fn === 'answer') { if (asks[key]) { asks[key](paid); delete asks[key]; } return; } if (fn === 'ack' || fn === 'hold' || fn === 'counter') { if (net.isHost) respond(fn, id, seat, on); return; } if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); else if (fn === 'kick' && seat === net.seat) { toast('The host removed you from this table', 6000); net.leave(); setTimeout(() => { location.href = '/'; }, 1500); } });
       net.on('peers', (peers) => {
         const host = Object.values(peers).find((pr) => pr.isHost && pr.seats);
         if (host && !net.isHost) applyLayout(host.seats, host.botList || []);
@@ -1717,3 +1885,4 @@ boot();
 // Read-only hook for the test suite.
 window.__edhState = () => S;
 window.__edhMut = (fn) => { fn(S); render(); };
+window.__edhApi = () => ({ fire: fireEvent, runEffects, parseEffects, parseAbilities, moveCard, activate: botActivate });

@@ -3,14 +3,18 @@
 // Still a manual table: anything not covered here the pod resolves by hand.
 
 const num = (s) => { const n = parseInt(s, 10); return isNaN(n) ? 0 : n; };
+// The table can register a context function that returns static bonuses (anthems, keyword grants) for a card.
+let ctxFn = null;
+export function setStaticContext(fn) { ctxFn = fn; }
+const grant = (c) => (ctxFn && c && c.zone === 'battlefield' ? ctxFn(c) : null) || { p: 0, t: 0, kw: '' };
 export function ptOf(c) {
   if (!c || !c.pt) return [0, 0];
-  const m = String(c.pt).split('/'); const p1 = c.p1 || 0;
-  return [num(m[0]) + p1, num(m[1]) + p1];
+  const m = String(c.pt).split('/'); const p1 = c.p1 || 0; const g = grant(c);
+  return [num(m[0]) + p1 + (c.tp || 0) + g.p, num(m[1]) + p1 + (c.tt || 0) + g.t];
 }
 export const powerOf = (c) => Math.max(0, ptOf(c)[0]);
 export const toughnessOf = (c) => ptOf(c)[1];
-export const kws = (c) => String(c?.kw || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+export const kws = (c) => `${c?.kw || ''},${c?.tkw || ''},${grant(c).kw}`.toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
 export const has = (c, k) => kws(c).includes(k);
 // Stationed spacecraft, crewed vehicles, animated lands and the like: a permanent counts as a creature when its
 // type says so, when the player flags it ("It's a creature now"), or when a Station threshold is met by counters.

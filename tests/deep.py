@@ -17,6 +17,7 @@ IMG = png(63, 88, (90, 60, 110))
 CM = {'Krenko': 'R', 'Talrand': 'U', 'Meren': 'B', 'Sythis': 'G'}
 INSTANTS = {'Lightning Bolt', 'Counterspell', 'Brainstorm', 'Opt', 'Swan Song', 'Beast Within', 'Path to Exile', 'Swords to Plowshares', 'Chaos Warp', 'Cyclonic Rift', 'Mana Drain', 'Arcane Denial', 'Frantic Search', 'High Tide', 'Pongify', 'Rapid Hybridization', 'Reality Shift', "Assassin's Trophy"}
 def collection(route):
+    if route.request.method != 'POST' or not route.request.post_data: route.fulfill(status=404, content_type='application/json', body=json.dumps({'object': 'error', 'code': 'not_found', 'data': []})); return
     body = json.loads(route.request.post_data); data = []
     for k, i in enumerate(body['identifiers']):
         n = i['name']; c = next((v for w, v in CM.items() if w in n), 'R')
@@ -337,16 +338,17 @@ with sync_playwright() as p:
     pg.click('[data-act=pass]'); t0 = time.time()
     def take_all():
         if pg.locator('#prompt [data-act=allowAll]').count(): pg.click('#prompt [data-act=allowAll]'); return True
+        if pg.locator('#prompt [data-act=pok]').count(): pg.click('#prompt [data-act=pok]')
     prompted = False
-    while time.time() - t0 < 40:
+    while time.time() - t0 < 70:
         pg.wait_for_timeout(700); prompted = take_all() or prompted
         if state(pg)['turn']['active'] == 0 and state(pg)['turn']['number'] == 2: break
     pg.click('[data-act=pass]')
-    while time.time() - t0 < 90:
+    while time.time() - t0 < 150:
         pg.wait_for_timeout(700); prompted = take_all() or prompted
         if state(pg)['turn']['active'] == 0 and state(pg)['turn']['number'] == 3: break
     st = state(pg)
-    check('three bots each took two turns and passed back within 90s', st['turn']['active'] == 0 and st['turn']['number'] == 3, f"active={st['turn']['active']} round={st['turn']['number']}")
+    check('three bots each took two turns and passed back within 150s', st['turn']['active'] == 0 and st['turn']['number'] == 3, f"active={st['turn']['active']} round={st['turn']['number']}")
     played = sum(len(st['players'][k]['zones']['battlefield']) for k in (1, 2, 3))
     check('bots played cards to their battlefields', played >= 3, str(played))
     check('bots: no JS errors', not errs, str(errs)[:300])

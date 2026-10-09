@@ -160,6 +160,7 @@ with sync_playwright() as p:
     while time.time() - t0 < 25 and state(pg)['turn']['active'] == 1:
         pg.wait_for_timeout(500)
         if pg.locator('#prompt [data-act=allowAll]').count(): pg.click('#prompt [data-act=allowAll]')
+        if pg.locator('#prompt [data-act=pok]').count(): pg.click('#prompt [data-act=pok]')
     log = ' '.join(l['text'] for l in state(pg)['log'])
     check('bot attacks with the evasive drake', 'Bot Drake attacks' in log, log[:300])
     check('bot keeps the 2/2 home instead of running into a 4/4', 'Bot Bear attacks Planeswalker' not in log, log[:300])
@@ -187,6 +188,7 @@ with sync_playwright() as p:
     t0 = time.time(); seen = False
     while time.time() - t0 < 25 and not seen:
         pg.wait_for_timeout(400)
+        if pg.locator('#prompt [data-act=pok]').count(): pg.click('#prompt [data-act=pok]')
         if pg.locator('#prompt [data-act=allow]').count() >= 2: seen = True
     check('bot with lethal on board sends everything at the 5-life player', seen and all(a['target'] == 0 for a in state(pg)['attacks']) and len(state(pg)['attacks']) >= 2, str(state(pg)['attacks']))
     check('human defender is prompted and nothing resolves until they answer', pg.locator('#prompt [data-act=allow]').count() >= 2 and state(pg)['players'][0]['life'] == 5)
@@ -229,6 +231,7 @@ with sync_playwright() as p:
         pg.wait_for_timeout(400); st = state(pg)
         if any(st['cards'][i]['tapped'] and 'Land' in st['cards'][i]['type'] for i in st['players'][1]['zones']['battlefield']) and any('cast' in l['text'] for l in st['log'][:6]): tapped_seen = True
         if pg.locator('#prompt [data-act=allowAll]').count(): pg.click('#prompt [data-act=allowAll]')
+        if pg.locator('#prompt [data-act=pok]').count(): pg.click('#prompt [data-act=pok]')
     log = ' '.join(l['text'] for l in state(pg)['log'])
     check('bot taps lands when it casts a spell', tapped_seen or 'cast' not in log, log[:200])
     check('commander/tap/bots: no JS errors', not errs, str(errs)[:300])

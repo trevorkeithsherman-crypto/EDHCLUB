@@ -80,3 +80,22 @@ export async function fetchCards(names, onProgress) {
   if (want.length) persist();
   return { missing, fetched: want.length };
 }
+
+/* Token art: Scryfall prints every token as its own card (set type "token"). Look one up by name and P/T,
+   preferring the most recent printing; cached in memory for the session. */
+const tokenCache = {};
+export async function fetchToken(name, pt, colors) {
+  const key = `${name}|${pt}|${colors || ''}`.toLowerCase(); if (tokenCache[key] !== undefined) return tokenCache[key];
+  const q = [`t:token`, `!"${name}"`]; if (pt && /^\d+\/\d+$/.test(pt)) { const [pw, tg] = pt.split('/'); q.push(`pow=${pw}`, `tou=${tg}`); }
+  if (colors) q.push(`c=${colors.toLowerCase()}`); else if (colors === '') q.push('c=c');
+  try {
+    let res = await fetch(`https://api.scryfall.com/cards/search?order=released&unique=art&q=${encodeURIComponent(q.join(' '))}`);
+    if (!res.ok && q.length > 2) res = await fetch(`https://api.scryfall.com/cards/search?order=released&unique=art&q=${encodeURIComponent(`t:token !"${name}"`)}`);
+    if (!res.ok) { tokenCache[key] = null; return null; }
+    const json = await res.json(); const card = (json.data || []).find((c) => c.image_uris || (c.card_faces && c.card_faces[0].image_uris));
+    if (!card) { tokenCache[key] = null; return null; }
+    const face = card.card_faces && !card.image_uris ? card.card_faces[0] : card; const imgs = face.image_uris || card.image_uris || {};
+    tokenCache[key] = { img: imgs.normal || '', big: imgs.large || imgs.normal || '', art: imgs.art_crop || '', artist: card.artist || face.artist || '', kw: (card.keywords || []).join(',').toLowerCase(), oracle: (face.oracle_text || card.oracle_text || '').slice(0, 400), type: face.type_line || card.type_line || '' };
+    return tokenCache[key];
+  } catch { tokenCache[key] = null; return null; }
+}

@@ -56,6 +56,7 @@ with sync_playwright() as p:
     while __import__('time').time() - t0 < 30 and state(pg)['turn']['active'] != 0:
         pg.wait_for_timeout(500)
         if pg.locator('#prompt [data-act=allowAll]').count(): pg.click('#prompt [data-act=allowAll]')
+        if pg.locator('#prompt [data-act=pok]').count(): pg.click('#prompt [data-act=pok]')
     check('bots still play after the reshuffle of seats', state(pg)['turn']['active'] == 0 and state(pg)['turn']['number'] == 2)
     # seat menu shortcuts
     pg.click('.opps .seat[data-seat="1"] .pname'); pg.wait_for_timeout(200)

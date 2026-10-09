@@ -4,9 +4,9 @@
 // table uses. The host's client runs them.
 
 export function makeBot(api) {
-  const { S, P, castToStack, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife, toGraveyard, toExile, moveCard, toggleTap } = api;
+  const { S, P, castToStack, cast, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife, toGraveyard, toExile, moveCard, toggleTap } = api;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const speed = () => (S.botSpeed === 'fast' ? 0.3 : 1);
+  const speed = () => ({ fast: 0.35, relaxed: 1.7 }[S.botSpeed] || 1.25);
   const jitter = (ms) => ms * (0.75 + Math.random() * 0.5);
   let running = false;
 
@@ -151,8 +151,8 @@ export function makeBot(api) {
       const picks = plan(i, mana);
       for (const c of picks) {
         if (!S.cards[c.id] || (c.zone !== 'hand' && c.zone !== 'command')) continue;
-        tapMana(i, c); castToStack(c.id); await d(800); if (S.stack.length) resolveTop();
-        await resolveSpell(i, c, d); await d(500);
+        tapMana(i, c); const ok = await cast(c); if (!ok) { await d(500); continue; }
+        await d(600); await resolveSpell(i, c, d); await d(500);
       }
       // combat
       nextPhase(); await d(500);
@@ -168,7 +168,7 @@ export function makeBot(api) {
       }
       // second main: anything affordable we held back (cheap creatures after combat)
       const late = plan(i, manaOf(i)).filter((c) => isCreature(c) && S.cards[c.id] && c.zone === 'hand');
-      for (const c of late.slice(0, 2)) { tapMana(i, c); castToStack(c.id); await d(700); if (S.stack.length) resolveTop(); }
+      for (const c of late.slice(0, 2)) { tapMana(i, c); await cast(c); await d(600); }
       await d(500);
       log(`${p.name} passes`);
       passTurn();

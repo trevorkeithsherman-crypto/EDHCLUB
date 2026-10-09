@@ -1,4 +1,4 @@
-import { fetchCards, cached, CARD_BACK } from './scryfall.js';
+import { fetchCards, fetchToken, cached, CARD_BACK } from './scryfall.js';
 import { DB, buildSample } from './decks.js';
 import { FX, SFX, Ambient, setFxState } from './fx.js';
 import { net, rememberRoom, recallRoom } from './net.js';
@@ -97,6 +97,7 @@ function applyEntry(c, e) {
 function hydrate() {
   let n = 0;
   for (const c of Object.values(S.cards)) {
+    if (c.token && !c.copyOf && !c.img && !c._tokenTried) { c._tokenTried = true; fetchToken(c.name, c.pt, c.colors).then((t) => { if (t && S.cards[c.id] && !c.img) { Object.assign(c, { img: t.img, big: t.big, art: t.art, artist: t.artist }); render(); } }); continue; }
     if (c.img || (c.token && !c.copyOf)) continue;
     const e = cached(c.copyOf || c.name);
     if (e) { applyEntry(c, e); if (c.token) c.type = /Token/.test(e.type) ? e.type : 'Token ' + e.type; n++; }
@@ -406,11 +407,13 @@ function createTokens(pi, def, count) {
   const p = P(pi); let k = 0;
   const step = () => {
     const c = makeCard(def, pi); c.token = true; c.copyOf = def.copyOf || null; c.zone = 'battlefield'; p.zones.battlefield.push(c.id);
+    if (def._art) Object.assign(c, def._art);
     render(); autoPlace(c); render();
     const el = cardEl(c.id); FX.pop(el); FX.puff(visRect(el), colorHex(c)); SFX.play('pop');
     if (++k < count) setTimeout(step, motionMul() ? 110 : 0);
   };
   step(); log(`${p.name} created ${count} ${def.name} token${count > 1 ? 's' : ''}`);
+  if (!def.copyOf && !def.img) fetchToken(def.name, def.pt, def.colors).then((t) => { if (!t) return; def._art = { img: t.img, big: t.big, art: t.art, artist: t.artist }; Object.values(S.cards).forEach((c) => { if (c.token && c.owner === pi && c.name === def.name && c.pt === (def.pt || '') && !c.img) Object.assign(c, { img: t.img, big: t.big, art: t.art, artist: t.artist, kw: c.kw || t.kw, oracle: c.oracle || t.oracle }); }); render(); });
 }
 function attack(c, t) {
   const ex = S.attacks.find((a) => a.id === c.id);
@@ -571,7 +574,7 @@ function seatSnap(i) {
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
   return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: !!p.empty }, zones: p.zones, cards };
 }
-function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40) }; }
+function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, pending: S.pending || null, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40) }; }
 function applySeat(snap) {
   const i = snap.seat; if (net.isMine(i)) return;
   const p = P(i); Object.assign(p, snap.player); p.zones = snap.zones;
@@ -583,7 +586,7 @@ function applySeat(snap) {
 }
 function applyShared(sn) {
   const turnChanged = S.turn.active !== sn.turn.active || S.turn.number !== sn.turn.number;
-  S.turn = sn.turn; S.stack = sn.stack; S.attacks = sn.attacks; S.outOrder = sn.outOrder; S.stats = sn.stats;
+  S.turn = sn.turn; S.stack = sn.stack; S.attacks = sn.attacks; S.outOrder = sn.outOrder; S.stats = sn.stats; if (!net.isHost) S.pending = sn.pending || null;
   if (turnChanged) { clearDamage(); clearSick(S.turn.active); }
   botDefend();
   const was = S.over; S.over = sn.over;
@@ -823,12 +826,14 @@ function renderPrompt() {
     cls = 'prompt multi';
     html = `<div class="phead">Block <b>${esc(c ? c.name : 'the attacker')}</b>${c ? ptTag(c) : ''} ${kw.map((k) => `<em class="kwb">${esc(k)}</em>`).join('')}</div><div class="prow"><span class="pcard">${bl.length ? `With: <b>${esc(bl.map((b) => b.name).join(', '))}</b>` : ''}<small>${esc(preview)}</small></span><button type="button" class="btn ghost sm" data-act="cancelBlock">Cancel</button><button type="button" class="btn sm hot" data-act="doneBlock" ${bl.length ? '' : 'disabled'}>Done</button></div>`;
   } else {
+    if (S.pending && S.pending.state === 'open' && S.cards[S.pending.id]) { cls = 'prompt multi pending'; html = pendingPromptHTML(); }
     const fromOther = (a) => S.cards[a.id].controller !== a.target;
     const incoming = S.attacks.filter((a) => S.cards[a.id] && mineHuman(a.target) && needsAnswer(a) && fromOther(a));
     const outgoing = S.attacks.filter((a) => S.cards[a.id] && net.isMine(S.cards[a.id].controller) && !P(S.cards[a.id].controller).bot);
     const held = S.attacks.filter((a) => S.cards[a.id] && mineHuman(a.target) && isBlocked(a) && fromOther(a) && !net.isMine(S.cards[a.id].controller));
     const blockRow = (a) => { const c = S.cards[a.id]; const bl = a.blockers.map((id) => S.cards[id]).filter(Boolean); return `<div class="prow"><span class="pcard">${esc(c.name)}${ptTag(c)}<small>${esc(Rules.describe(c, bl, Rules.simulate(c, bl)))}</small></span><span class="pstate">blocked by <b>${esc(bl.map((b) => b.name).join(', ') || '?')}</b></span><button type="button" class="btn ghost sm" data-act="unblock" data-id="${a.id}">Change</button></div>`; };
-    if (incoming.length) {
+    if (html) { /* pending spell shown */ }
+    else if (incoming.length) {
       cls = 'prompt multi incoming';
       const seat = incoming[0].target; const atkName = P(S.cards[incoming[0].id].controller).name;
       const rows = incoming.map((a) => { const c = S.cards[a.id];
@@ -960,6 +965,52 @@ function commandMenu(pi, x, y) {
   if (!cs.length) { toast(`${P(pi).name}'s commander is not in the command zone`); return; }
   const items = []; cs.forEach((c) => { items.push({ label: `Cast ${c.name} (tax +${2 * (c.casts || 0)})`, fn: () => castToStack(c.id), hot: true }); items.push({ label: `Put ${c.name} onto battlefield`, fn: () => moveCard(c.id, pi, 'battlefield', { anim: 'commander' }) }); });
   openMenu(items, x, y, 'Command zone');
+}
+/* ---------- Priority: every non-land spell a bot casts waits for the humans at the table ----------
+   They can let it resolve (OK), hold priority while they cast an instant (Respond), or counter it outright. */
+const humanSeats = () => S.players.map((p, k) => k).filter((k) => k < S.seats && !P(k).bot && !P(k).empty && !P(k).out);
+const mySeats = () => humanSeats().filter((k) => net.isMine(k));
+function respond(fn, id, seat, on) {
+  const p = S.pending; if (!p || p.id !== id || p.state !== 'open') return;
+  if (fn === 'ack') { if (!p.acks.includes(seat)) p.acks.push(seat); p.holds = p.holds.filter((h) => h !== seat); }
+  else if (fn === 'hold') { if (on) { if (!p.holds.includes(seat)) p.holds.push(seat); p.acks = p.acks.filter((a) => a !== seat); } else p.holds = p.holds.filter((h) => h !== seat); }
+  else if (fn === 'counter') { p.state = 'countered'; p.by2 = seat; }
+  render();
+}
+function respondLocal(fn, on) {
+  const p = S.pending; if (!p) return;
+  for (const k of mySeats()) { if (net.active && !net.isHost) net.send('all', { fn, id: p.id, seat: k, on }); else respond(fn, p.id, k, on); }
+  if (fn === 'counter') { const c = S.cards[p.id]; log(`${P(mySeats()[0]).name} counters ${c ? c.name : 'the spell'}`); SFX.play('shatter'); }
+  if (net.active && !net.isHost) { const q = S.pending; if (q) { if (fn === 'ack') mySeats().forEach((k) => { if (!q.acks.includes(k)) q.acks.push(k); }); if (fn === 'hold') mySeats().forEach((k) => { on ? q.holds.push(k) : (q.holds = q.holds.filter((h) => h !== k)); }); render(); } }
+}
+async function botCast(c) {
+  const who = P(c.controller).name; const fromCmd = c.zone === 'command';
+  S.stats.casts[c.controller] = (S.stats.casts[c.controller] || 0) + 1;
+  log(fromCmd ? `${who} casts ${c.name} from the command zone` : `${who} casts ${c.name}`);
+  moveCard(c.id, c.controller, 'stack', { anim: 'cast' });
+  S.pending = { id: c.id, by: c.controller, t: Date.now(), acks: [], holds: [], state: 'open' }; render(); SFX.play('chime', firstColor(c));
+  const t0 = Date.now(); const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (;;) {
+    await wait(200); const p = S.pending; if (!p || p.id !== c.id) return false;
+    if (p.state === 'countered') break;
+    const humans = humanSeats(); if (!humans.length || humans.every((h) => p.acks.includes(h))) break;
+    if (!p.holds.length && Date.now() - t0 > 45000) { log(`No response to ${c.name}; it resolves`); break; }
+  }
+  const countered = S.pending && S.pending.state === 'countered'; S.pending = null;
+  if (countered) { log(`${c.name} was countered`); const top = S.stack.indexOf(c.id); if (top >= 0) S.stack.splice(top, 1); moveCard(c.id, c.owner, 'graveyard', { anim: 'fly' }); render(); return false; }
+  if (S.stack[S.stack.length - 1] === c.id) resolveTop(); else if (S.cards[c.id] && c.zone === 'stack') { const k = S.stack.indexOf(c.id); if (k >= 0) S.stack.splice(k, 1); moveCard(c.id, c.controller, isPerm(c) ? 'battlefield' : 'graveyard', { anim: 'land' }); }
+  render(); return true;
+}
+function pendingPromptHTML() {
+  const p = S.pending; const c = S.cards[p.id]; if (!c) return '';
+  const mine = mySeats(); const waiting = humanSeats().filter((h) => !p.acks.includes(h));
+  const iAcked = mine.length && mine.every((k) => p.acks.includes(k)); const iHold = mine.some((k) => p.holds.includes(k));
+  const card = cardHTML(c, { noid: true, flat: true, reveal: true, cls: 'pend' });
+  const body = !mine.length ? `<span class="pstate">Waiting for ${esc(waiting.map((h) => P(h).name).join(', ') || 'players')}</span>`
+    : iHold ? `<span class="pstate">You have priority. Cast your instant, then…</span><button type="button" class="btn ghost sm" data-act="pcounter">Counter it</button><button type="button" class="btn sm hot" data-act="pok">Let it resolve</button>`
+    : iAcked ? `<span class="pstate">Waiting for ${esc(waiting.map((h) => P(h).name).join(', '))}…</span>`
+    : `<button type="button" class="btn ghost sm" data-act="pcounter" title="Counter the spell: it goes to the graveyard">Counter it</button><button type="button" class="btn ghost sm" data-act="phold" title="Hold priority while you respond">Respond…</button><button type="button" class="btn sm hot" data-act="pok">OK</button>`;
+  return `<div class="phead"><b>${esc(P(p.by).name)}</b> casts <b>${esc(c.name)}</b>${c.isCmdr ? ' <em class="kwb">commander</em>' : ''}${c.type ? `<small> · ${esc(c.type)}</small>` : ''}</div><div class="prow pend-row">${card}<span class="pcard"><small>${esc((c.oracle || '').slice(0, 220))}</small></span></div><div class="prow" style="justify-content:flex-end">${body}</div>`;
 }
 /* ---------- Bot decks: random picks from the Top 100 (samples when offline) ---------- */
 let topCache = null;
@@ -1217,7 +1268,12 @@ function openZone(pi, z, o = {}) {
   const allowed = Object.keys(acts).filter((a) => !(a === z) && !(z === 'library' && a === 'top' && !o.top));
   const items = ids.map((id) => { const c = S.cards[id]; return `<div class="zitem">${cardHTML(c, { noid: true, flat: true, reveal: true }).replace('class="card', `data-mcid="${id}" class="card`)}<div class="zacts">${allowed.map((a) => `<button type="button" class="mini" data-za="${a}" data-cid="${id}">${acts[a]}</button>`).join('')}</div></div>`; }).join('');
   const note = z === 'library' && !o.top ? '<p>The library shuffles when you close this.</p>' : '';
-  openModal(`<h2>${esc(title)}</h2>${note}${ids.length ? `<div class="zgrid">${items}</div>` : '<p>Nothing here yet.</p>'}<div class="row"><button type="button" class="btn" data-act="close">Done</button></div>`, { onClose: z === 'library' && !o.top ? () => shuffleLib(pi, true) : null });
+  const search = ids.length > 8 ? `<input type="search" id="zq" class="zsearch" placeholder="Search by name, type or text…" autocomplete="off" data-autofocus>` : '';
+  openModal(`<h2>${esc(title)}</h2>${note}${search}${ids.length ? `<div class="zgrid">${items}</div>` : '<p>Nothing here yet.</p>'}<div class="row"><span class="muted small" id="zcount"></span><span class="sp"></span><button type="button" class="btn" data-act="close">Done</button></div>`, { onClose: z === 'library' && !o.top ? () => shuffleLib(pi, true) : null });
+  const zq = $('#zq'); if (zq) {
+    const filt = () => { const q = zq.value.trim().toLowerCase(); let n = 0; $$('.zitem').forEach((el) => { const c = S.cards[el.querySelector('[data-mcid]')?.dataset.mcid]; const hit = !q || (c && `${c.name} ${c.type} ${c.oracle || ''} ${c.kw || ''}`.toLowerCase().includes(q)); el.hidden = !hit; if (hit) n++; }); $('#zcount').textContent = q ? `${n} of ${ids.length} cards` : `${ids.length} cards`; };
+    zq.oninput = filt; filt();
+  }
   $('#modal .mpanel').addEventListener('click', (e) => {
     const b = e.target.closest('[data-za]'); if (!b) return; const c = S.cards[b.dataset.cid]; if (!c) return;
     const from = visRect($(`[data-mcid="${c.id}"]`)); const a = b.dataset.za;
@@ -1243,15 +1299,24 @@ function dmgModal(pi) {
 }
 function tokenModal() {
   const opts = ['C', 'W', 'U', 'B', 'R', 'G'].map((k) => `<option value="${k}">${{ C: 'Colorless', W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' }[k]}</option>`).join('');
-  openModal(`<h2>Create tokens</h2><div class="grid2"><label for="tkName">Name<input id="tkName" value="Goblin"></label><label for="tkPT">Power/toughness<input id="tkPT" value="1/1"></label>
+  const src = focusCard && focusCard(); const made = src ? tokensMadeBy(src) : [];
+  openModal(`<h2>Create tokens</h2>${made.length ? `<p>${esc(src.name)} makes:</p><div class="row" style="margin-bottom:12px">${made.map((t, k) => `<button type="button" class="btn ghost sm" data-tk="${k}">${esc(t.pt ? t.pt + ' ' : '')}${esc(t.name)}</button>`).join('')}</div>` : ''}<div class="grid2"><label for="tkName">Name<input id="tkName" value="Goblin"></label><label for="tkPT">Power/toughness<input id="tkPT" value="1/1"></label>
   <label for="tkCol">Color<select id="tkCol">${opts}</select></label><label for="tkN">How many<input id="tkN" type="number" min="1" max="40" value="1"></label>
   <label for="tkFor">For<select id="tkFor">${S.players.map((p, i) => `<option value="${i}" ${i === S.view ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label></div>
   <div class="row"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn" id="tkGo">Create</button></div>`, { cls: 'narrow' });
   $('#tkCol').value = 'R';
+  $$('[data-tk]').forEach((b) => { b.onclick = () => { const t = made[+b.dataset.tk]; $('#tkName').value = t.name; $('#tkPT').value = t.pt; $('#tkCol').value = t.color || 'C'; }; });
   $('#tkGo').onclick = () => {
     const name = $('#tkName').value.trim() || 'Token', pt = $('#tkPT').value.trim(), col = $('#tkCol').value, n = clamp(parseInt($('#tkN').value, 10) || 1, 1, 40), pi = +$('#tkFor').value;
     closeModal(); createTokens(pi, { name, cost: '', type: pt ? 'Token Creature' : 'Token', pt, colors: col === 'C' ? '' : col }, n);
   };
+}
+// "create a 1/1 green Saproling creature token" → { name, pt, color }
+function tokensMadeBy(c) {
+  const out = []; const re = /(?:an?|two|three|four|\d+|x) (\d+)\/(\d+) ((?:white|blue|black|red|green|colorless|and|,| )*?)([A-Z][\w' -]*?) (?:artifact |enchantment )?creature tokens?/gi;
+  let m; const txt = c.oracle || '';
+  while ((m = re.exec(txt))) { const name = m[4].replace(/^(?:(?:white|blue|black|red|green|colorless)[, ]*(?:and )?)+/i, '').trim(); const cols = (m[3] + ' ' + m[4]).toLowerCase(); const color = ['white', 'blue', 'black', 'red', 'green'].filter((w) => cols.includes(w)).map((w) => ({ white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G' }[w])).join(''); if (name) out.push({ name, pt: `${m[1]}/${m[2]}`, color: color || 'C' }); }
+  const seen = new Set(); return out.filter((t) => { const k = t.name + t.pt; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 function logModal() {
   const fmt = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -1399,6 +1464,7 @@ function onClick(e) {
     if (act === 'cancelTarget') stopTargeting(); else if (act === 'cancelBlock') { if (a) a.blockers = []; stopBlocking(); } else if (act === 'doneBlock') { const b = S.attacks.find((x) => x.id === blocking?.attackId); if (b) finishBlock(b); }
     else if (act === 'allow' && a) allowAttack(a); else if (act === 'block' && a) startBlocking(a); else if (act === 'unblock' && a) unblock(a);
     else if (act === 'allowAll') allowAll(+pb.dataset.p); else if (act === 'resolveCombat') resolveCombat(+pb.dataset.p);
+    else if (act === 'pok') respondLocal('ack'); else if (act === 'phold') respondLocal('hold', true); else if (act === 'pcounter') respondLocal('counter');
     return;
   }
   const tab = e.target.closest('.side-tabs .tab');
@@ -1540,6 +1606,7 @@ function bindUI() {
     openMenu([
       { label: `Playmat effects: ${S.fx ? 'on' : 'off'}`, fn: () => $('#fxBtn').click() },
       { label: `Sound: ${S.sound ? 'on' : 'off'}`, fn: () => $('#soundBtn').click() },
+      { label: `Bot pace: ${{ relaxed: 'relaxed', normal: 'normal', fast: 'fast' }[S.botSpeed || 'normal']}`, fn: () => { S.botSpeed = { relaxed: 'normal', normal: 'fast', fast: 'relaxed' }[S.botSpeed || 'normal']; render(); toast(`Bots play at a ${S.botSpeed} pace`); } },
       { label: `Card motion: ${{ full: 'full', reduced: 'reduced', off: 'off' }[S.motion]}`, fn: () => { S.motion = { full: 'reduced', reduced: 'off', off: 'full' }[S.motion]; render(); toast(`Card motion ${S.motion}`); } },
       { sep: true },
       { label: 'Keyboard shortcuts  (?)', fn: shortcutsModal },
@@ -1572,7 +1639,7 @@ function bindUI() {
 }
 
 /* ---------- Boot ---------- */
-function botApi() { return { S, P, moveCard, castToStack, toggleTap, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife: changeLifeAny, request, net, toast, isMine: (k) => net.isMine(k), lookup, toGraveyard: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'graveyard'); else request(c.controller, 'cardTo', c.id, 'graveyard'); }, toExile: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'exile'); else request(c.controller, 'cardTo', c.id, 'exile'); } }; }
+function botApi() { return { S, P, moveCard, castToStack, toggleTap, cast: botCast, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife: changeLifeAny, request, net, toast, isMine: (k) => net.isMine(k), lookup, toGraveyard: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'graveyard'); else request(c.controller, 'cardTo', c.id, 'graveyard'); }, toExile: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'exile'); else request(c.controller, 'cardTo', c.id, 'exile'); } }; }
 function roomBar() {
   if (MODE !== 'room') return;
   const t = $('#roomBar'); if (!t) return;
@@ -1603,7 +1670,7 @@ async function boot() {
       }
       net.on('seat', applySeat); net.on('shared', applyShared);
       net.on('req', ({ fn, to, args }) => { if (REQ[fn]) REQ[fn](to, ...args); });
-      net.on('all', ({ fn, kind, cardId, seat }) => { if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); else if (fn === 'kick' && seat === net.seat) { toast('The host removed you from this table', 6000); net.leave(); setTimeout(() => { location.href = '/'; }, 1500); } });
+      net.on('all', ({ fn, kind, cardId, seat, id, on }) => { if (fn === 'ack' || fn === 'hold' || fn === 'counter') { if (net.isHost) respond(fn, id, seat, on); return; } if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); else if (fn === 'kick' && seat === net.seat) { toast('The host removed you from this table', 6000); net.leave(); setTimeout(() => { location.href = '/'; }, 1500); } });
       net.on('peers', (peers) => {
         const host = Object.values(peers).find((pr) => pr.isHost && pr.seats);
         if (host && !net.isHost) applyLayout(host.seats, host.botList || []);

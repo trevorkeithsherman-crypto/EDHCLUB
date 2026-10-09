@@ -168,7 +168,7 @@ function loadDeck(i, text, cmdName) {
 }
 function newGame(keep) {
   const old = S; S = freshState();
-  if (keep && old) { S.players.forEach((p, i) => { p.name = old.players[i].name; p.deckText = old.players[i].deckText; }); S.motion = old.motion; S.sound = old.sound; S.view = old.view; }
+  if (keep && old) { S.players.forEach((p, i) => { p.name = old.players[i].name; p.deckText = old.players[i].deckText; p.deckSrc = old.players[i].deckSrc; p.deckName = old.players[i].deckName; }); S.motion = old.motion; S.sound = old.sound; S.view = old.view; }
   setFxState(S);
   S.players.forEach((p, i) => { if (p.bot) p.name = BOT_NAMES[i]; if (i < S.seats && net.isMine(i)) loadDeck(i, p.deckText); });
   if (MODE !== 'hotseat') { const me = net.active && net.seat != null ? net.seat : 0; P(me).name = ROOM.name; P(me).empty = false; }
@@ -942,6 +942,41 @@ function commandMenu(pi, x, y) {
   const items = []; cs.forEach((c) => { items.push({ label: `Cast ${c.name} (tax +${2 * (c.casts || 0)})`, fn: () => castToStack(c.id), hot: true }); items.push({ label: `Put ${c.name} onto battlefield`, fn: () => moveCard(c.id, pi, 'battlefield', { anim: 'commander' }) }); });
   openMenu(items, x, y, 'Command zone');
 }
+/* ---------- Bot decks: random picks from the Top 100 (samples when offline) ---------- */
+let topCache = null;
+async function topList() {
+  if (topCache) return topCache;
+  try { const r = await fetch('/api/top-decks'); const j = await r.json(); if (r.ok && Array.isArray(j.decks) && j.decks.length) topCache = j.decks; } catch { /* offline */ }
+  return topCache || [];
+}
+async function topDeckText(id) { const r = await fetch(`/api/deck/${id}`); const d = await r.json(); if (!r.ok || d.error || !d.text) throw new Error(d.error || 'bad deck'); return d; }
+const inUse = () => new Set(S.players.slice(0, S.seats).map((p) => p.deckSrc).filter(Boolean));
+// Give one bot seat a random Top 100 deck nobody else at the table is using. Falls back to a sample deck.
+async function dealBotDeck(k, { quiet } = {}) {
+  const p = P(k); if (!p.bot) return false;
+  const list = (await topList()).filter((d) => !inUse().has('top:' + d.id));
+  for (let tries = 0; tries < 4 && list.length; tries++) {
+    const pick = list.splice(Math.floor(Math.random() * list.length), 1)[0];
+    try {
+      const d = await topDeckText(pick.id);
+      if (!p.bot) return false;
+      loadDeck(k, d.text, null); p.deckSrc = 'top:' + pick.id; p.deckName = d.name; render();
+      if (!quiet) log(`${p.name} shuffled up ${d.name}${d.owner ? ` (by ${d.owner})` : ''}`);
+      ensureArt(allNames(), { quiet: true }); return true;
+    } catch { /* try another */ }
+  }
+  const used = inUse(); let n = k % 4; for (let t = 0; t < 4 && used.has('sample:' + n); t++) n = (n + 1) % 4;
+  loadDeck(k, buildSample(n), null); p.deckSrc = 'sample:' + n; render(); ensureArt(allNames(), { quiet: true }); return false;
+}
+async function dealBotDecks() {
+  const seats = S.players.map((p, k) => k).filter((k) => k < S.seats && P(k).bot && net.isMine(k));
+  if (!seats.length) return;
+  for (const k of seats) await dealBotDeck(k, { quiet: true });
+  const names = seats.map((k) => `${P(k).name}: ${P(k).deckName || commandersOf(k).map((c) => c.name).join(' + ')}`);
+  log(`Bots shuffled up — ${names.join(' · ')}`); toast(`Bots are playing ${seats.map((k) => P(k).deckName || commandersOf(k)[0]?.name || 'a deck').join(', ')}`, 6000);
+  if (net.active) net.resendAll();
+}
+
 /* ---------- Table manager: add or kick bots, open seats for people, swap bot decks ---------- */
 function applyLayout(seats, botList) {
   const before = JSON.stringify([net.seats, net.botSeats()]);
@@ -962,8 +997,9 @@ async function addBot(k) {
   if (MODE === 'room' && net.takenSeats().has(k)) { toast(`${p.name} is sitting there`); return; }
   p.bot = true; p.empty = false; p.out = false; p.name = BOT_NAMES[k]; p.avatar = ''; p.mat = 'auto';
   net.botList = [...new Set([...net.botList, k])].sort();
-  loadDeck(k, p.deckText || buildSample(k)); if (S.outOrder) S.outOrder = S.outOrder.filter((o) => o.i !== k);
+  loadDeck(k, buildSample(k)); p.deckSrc = ''; if (S.outOrder) S.outOrder = S.outOrder.filter((o) => o.i !== k);
   log(`${p.name} joined the table`); render(); ensureArt(allNames(), { quiet: true });
+  dealBotDeck(k);
   if (net.active) { await net.setLayout({ botList: net.botList }); net.resendAll(); }
 }
 async function kickBot(k) {
@@ -1008,7 +1044,7 @@ function tableModal() {
     else if (act === 'kick') { await kickBot(k); tableModal(); }
     else if (act === 'kickh') { confirmModal(`Remove ${P(k).name} from the table? They can rejoin with the code.`, 'Remove player', () => { kickHuman(k); setTimeout(tableModal, 300); }); }
     else if (act === 'deck') { importModal(k); }
-    else if (act === 'random') { const n = Math.floor(Math.random() * 4); loadDeck(k, buildSample(n)); P(k).deckName = ''; log(`${P(k).name} switched decks`); render(); ensureArt(allNames(), { quiet: true }); tableModal(); toast(`${P(k).name} shuffled up a new deck`); }
+    else if (act === 'random') { b.disabled = true; b.textContent = 'Shuffling…'; P(k).deckSrc = ''; await dealBotDeck(k); tableModal(); toast(`${P(k).name} shuffled up ${P(k).deckName || 'a new deck'}`); }
     else if (act === 'seats') { await setSeatCount(k); tableModal(); }
   });
 }
@@ -1150,7 +1186,7 @@ async function importModal(pi) {
     const d = parseDeck(ta.value, $('#impCmd').value); if (!d.count && !d.cmd.length) { toast('The decklist is empty'); return; }
     if (!d.cmd.length) { toast('Pick a commander first'); $('#impCmdPick')?.focus(); return; }
     const text = `Commander\n${d.cmd.map((n) => '1 ' + n).join('\n')}\n\nDeck\n${d.main.map((e) => e.n + ' ' + e.name).join('\n')}`;
-    loadDeck(k, text, null); P(k).deckId = editingId || ''; P(k).deckName = $('#impDeckName').value.trim(); if (editingId) setLastDeckId(editingId); closeModal(); SFX.play('shuffle'); log(`${P(k).name} sat down with ${d.cmd.join(' + ')}`); toast(`${P(k).name} shuffled up and drew 7`); render();
+    loadDeck(k, text, null); P(k).deckId = editingId || ''; P(k).deckSrc = ''; P(k).deckName = $('#impDeckName').value.trim(); if (editingId) setLastDeckId(editingId); closeModal(); SFX.play('shuffle'); log(`${P(k).name} sat down with ${d.cmd.join(' + ')}`); toast(`${P(k).name} shuffled up and drew 7`); render();
     ensureArt([...d.cmd, ...d.main.map((e) => e.name)]);
   };
 }
@@ -1498,6 +1534,7 @@ async function boot() {
     } catch { /* deck library unavailable */ }
   }
   if (net.active) net.resendAll();
+  if (MODE !== 'hotseat' && !seatRestored) dealBotDecks();
 }
 boot();
 // Read-only hook for the test suite.

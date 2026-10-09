@@ -3,12 +3,13 @@ import sys, json
 sys.argv = ['x', sys.argv[1]]
 src = open('tests/deep.py').read().split('with sync_playwright() as p:')[0]
 exec(src)
-TOP = {'decks': [{'id': 100, 'name': 'Top Deck', 'views': 1, 'owner': 'x', 'featured': '', 'colors': 'R', 'bracket': 3, 'size': 100, 'updated': '', 'tags': []}]}
-DECK = {'id': 100, 'name': 'Top Deck', 'owner': 'x', 'commander': 'Krenko, Mob Boss', 'commanders': ['Krenko, Mob Boss'], 'count': 100, 'text': 'Commander\n1 Krenko, Mob Boss\n\nDeck\n1 Goblin Chieftain\n98 Mountain'}
+CMDRS = {100: 'Krenko, Mob Boss', 101: 'Talrand, Sky Summoner', 102: 'Meren of Clan Nel Toth', 103: "Sythis, Harvest's Hand", 104: 'Atraxa, Praetors\' Voice'}
+TOP = {'decks': [{'id': i, 'name': f'Top {c.split(",")[0]}', 'views': 1, 'owner': 'x', 'featured': '', 'colors': 'R', 'bracket': 3, 'size': 100, 'updated': '', 'tags': []} for i, c in CMDRS.items()]}
+def deck_for(i): c = CMDRS[i]; return {'id': i, 'name': f'Top {c.split(",")[0]}', 'owner': 'x', 'commander': c, 'commanders': [c], 'count': 100, 'text': f'Commander\n1 {c}\n\nDeck\n1 Goblin Chieftain\n98 Mountain'}
 def api(route):
     u = route.request.url
     if u.endswith('/api/top-decks'): route.fulfill(status=200, content_type='application/json', body=json.dumps(TOP))
-    elif '/api/deck/' in u: route.fulfill(status=200, content_type='application/json', body=json.dumps(DECK))
+    elif '/api/deck/' in u: route.fulfill(status=200, content_type='application/json', body=json.dumps(deck_for(int(u.rstrip('/').split('/')[-1]))))
     else: route.continue_()
 def seats(pg): return [(p['name'], p['bot'], p.get('empty', False), p['out']) for p in state(pg)['players']]
 
@@ -16,7 +17,11 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     # ---------- bots mode ----------
     ctx = browser.new_context(); pg, errs = setup(ctx); pg.route('**/api/**', api)
-    pg.goto(BASE + '/table.html?mode=bots'); pg.wait_for_timeout(2000)
+    pg.goto(BASE + '/table.html?mode=bots'); pg.wait_for_timeout(2500)
+    st = state(pg); srcs = [st['players'][k].get('deckSrc') for k in (1, 2, 3)]
+    check('each bot starts with its own Top 100 deck', all(x and x.startswith('top:') for x in srcs) and len(set(srcs)) == 3, str(srcs))
+    check('each bot deck is 100 cards (commander + 99)', all(sum(len(st['players'][k]['zones'][z]) for z in ('library', 'hand', 'command', 'battlefield', 'graveyard', 'exile')) == 100 for k in (1, 2, 3)))
+    check('the log says what the bots are playing', any(l['text'].startswith('Bots shuffled up') for l in st['log']))
     pg.click('#tableBtn'); pg.wait_for_timeout(300)
     check('Table modal lists four seats: you + three bots', pg.locator('.tm-row').count() == 4 and pg.locator('.tm-row.is-bot').count() == 3 and 'You' in pg.locator('.tm-row').first.text_content())
     check('bot rows offer Change deck / Random deck / Remove', pg.locator('.tm-row.is-bot [data-tm=deck]').count() == 3 and pg.locator('.tm-row.is-bot [data-tm=random]').count() == 3 and pg.locator('.tm-row.is-bot [data-tm=kick]').count() == 3)
@@ -39,7 +44,7 @@ with sync_playwright() as p:
     pg.click('.tm-row [data-tm=deck][data-k="2"]'); pg.wait_for_timeout(400)
     check('Change deck opens the deck modal on that bot\'s seat', pg.locator('#impSeat').count() == 1 and pg.locator('#impSeat').input_value() == '2' and not pg.locator('label[for=impSeat]').is_hidden())
     pg.click('#topToggle'); pg.wait_for_timeout(600); pg.locator('[data-top-seat]').first.click(); pg.wait_for_timeout(1500); st = state(pg)
-    check('bot now plays the chosen Top 100 deck', any(c['name'] == 'Krenko, Mob Boss' and c['isCmdr'] and c['owner'] == 2 for c in st['cards'].values()) and len(st['players'][2]['zones']['hand']) == 7)
+    check('bot now plays the chosen Top 100 deck', any(c['isCmdr'] and c['owner'] == 2 for c in st['cards'].values()) and len(st['players'][2]['zones']['hand']) == 7 and st['players'][2].get('deckSrc') == '')
     # seat count 2 -> one bot
     pg.click('#tableBtn'); pg.wait_for_timeout(200); pg.click('[data-tm=seats][data-k="2"]'); pg.wait_for_timeout(500); st = state(pg)
     check('seat count 2: seats 3 and 4 sit out', st['seats'] == 2 and st['players'][2]['out'] and st['players'][3]['out'] and pg.locator('.tm-row').count() == 2)

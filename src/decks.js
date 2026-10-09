@@ -104,11 +104,10 @@ const SAMPLES = [
   { cmd: "Sythis, Harvest's Hand", basics: ['Forest', 'Plains'], cards: ['Argothian Enchantress', "Enchantress's Presence", 'Sterling Grove', 'Utopia Sprawl', 'Wild Growth', 'Sanctum Weaver', 'Destiny Spinner', 'Setessan Champion', 'Eidolon of Blossoms', 'Sigil of the Empty Throne', 'Starfield of Nyx', 'Swords to Plowshares', 'Path to Exile', 'Wrath of God', 'Selesnya Signet', 'Cultivate', "Kodama's Reach", 'Sol Ring', 'Arcane Signet', 'Command Tower', 'Temple Garden', 'Evolving Wilds'] },
 ];
 
-/** Sample decklist text for seat i: the listed cards plus basics up to 36 lands. */
+/** Sample decklist text for seat i: a legal 100-card Commander list (commander + 99), padded with basics. */
 export function buildSample(i) {
-  const s = SAMPLES[i];
-  const lands = s.cards.filter((n) => /Land/.test((DB[n.toLowerCase()] || {}).type || '')).length;
-  const need = Math.max(0, 36 - lands);
+  const s = SAMPLES[i % SAMPLES.length];
+  const need = Math.max(0, 99 - s.cards.length);
   const per = s.basics.map((b, k) => Math.floor(need / s.basics.length) + (k < need % s.basics.length ? 1 : 0));
   return `Commander\n1 ${s.cmd}\n\nDeck\n${s.cards.map((n) => '1 ' + n).join('\n')}\n${s.basics.map((b, k) => per[k] + ' ' + b).join('\n')}`;
 }

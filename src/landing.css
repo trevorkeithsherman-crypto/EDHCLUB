@@ -84,3 +84,9 @@ h1 { font: 800 clamp(34px, 4.6vw, 58px)/1.05 var(--f-ui); letter-spacing: -.025e
 #toasts { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 90; display: grid; gap: 6px; justify-items: center; pointer-events: none; width: min(540px, calc(100% - 32px)); }
 .toast { background: var(--glass-2); backdrop-filter: blur(12px); color: var(--text); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 14px; font: 500 13px var(--f-ui); text-align: center; box-shadow: 0 10px 24px rgba(0, 0, 0, .6); }
 @media (max-width: 760px) { .hero { grid-template-columns: 1fr; padding-top: 10px; } }
+
+.pfp { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 8px; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--gold); background: #1a1f2b; }
+.pfp.init { display: inline-grid; place-items: center; font: 700 12px var(--f-ui); color: var(--gold-2); text-transform: uppercase; }
+.pfp.big { width: 72px; height: 72px; font-size: 28px; margin: 0; }
+.pfp-row { display: flex; gap: 18px; align-items: center; padding: 4px 0 18px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+.pfp-row p { margin: 2px 0 8px; }

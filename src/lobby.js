@@ -1,4 +1,4 @@
-import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest } from './supa.js';
+import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest, myProfile, uploadAvatar, removeAvatar, localAvatar } from './supa.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -8,10 +8,10 @@ let user = null; let name = localName();
 
 async function refreshAccount() {
   user = await currentUser();
-  if (user) { name = await displayNameFor(user); setLocalName(name); }
-  const nav = $('#account');
+  if (user) { name = await displayNameFor(user); setLocalName(name); await myProfile(); }
+  const nav = $('#account'); const av = localAvatar();
   nav.innerHTML = user
-    ? `<span class="who">${esc(name)}${user.is_anonymous ? ' (guest)' : ''}</span><button type="button" class="btn ghost sm" data-go="signin">Account</button>`
+    ? `<span class="who">${av ? `<img class="pfp" src="${esc(av)}" alt="">` : `<span class="pfp init">${esc(name[0] || '?')}</span>`}${esc(name)}${user.is_anonymous ? ' (guest)' : ''}</span><button type="button" class="btn ghost sm" data-go="signin">Account</button>`
     : `<button type="button" class="btn ghost" data-go="signin">Sign in</button><button type="button" class="btn" data-go="signup">Create account</button>`;
   renderClubs(); renderDecks();
 }
@@ -86,11 +86,16 @@ function friendlyAuthError(e) {
 }
 function viewAccount() {
   const guest = user.is_anonymous;
-  show('Your account', `${nameField()}<div class="row"><button type="button" class="btn" id="saveName">Save name</button><button type="button" class="btn ghost" id="out">Sign out</button></div>
+  const av = localAvatar(); const discordPic = user.user_metadata?.avatar_url || user.user_metadata?.picture || '';
+  show('Your account', `<div class="pfp-row">${av ? `<img class="pfp big" src="${esc(av)}" alt="Your profile picture">` : `<span class="pfp big init">${esc(name[0] || '?')}</span>`}<div><b>Profile picture</b><p class="muted">Shows on your seat at every table. ${discordPic ? 'Your Discord avatar is used until you upload one.' : 'Square images look best; we resize to 256px.'}</p><div class="row"><button type="button" class="btn ghost sm" id="pfpUp">${av ? 'Change photo' : 'Upload a photo'}</button>${av ? '<button type="button" class="btn ghost sm" id="pfpRm">Remove</button>' : ''}<input type="file" id="pfpFile" accept="image/*" hidden></div></div></div>
+  ${nameField()}<div class="row"><button type="button" class="btn" id="saveName">Save name</button><button type="button" class="btn ghost" id="out">Sign out</button></div>
   ${guest ? `<hr style="border:0;border-top:1px solid rgba(36,28,18,.25);margin:18px 0"><h3 style="font:400 20px var(--f-display);margin:0 0 6px">Make this account permanent</h3><p>You\u2019re playing as a guest. Add an email and password to keep your decks, clubs and history on any device.</p>
   <div class="grid2"><label>Email<input id="em" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="pw" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></label></div>
   <div class="row"><button type="button" class="btn" id="upgrade">Create my account</button></div>` : `<hr style="border:0;border-top:1px solid rgba(36,28,18,.25);margin:18px 0"><h3 style="font:400 20px var(--f-display);margin:0 0 6px">Change password</h3><div class="grid2"><label>New password<input id="pw" type="password" autocomplete="new-password" minlength="8"></label></div><div class="row"><button type="button" class="btn ghost" id="chpw">Update password</button></div>`}`);
   $('#saveName').onclick = async () => { const n = takeName(); await upsertProfile(user, n); await refreshAccount(); toast('Name saved'); };
+  $('#pfpUp').onclick = () => $('#pfpFile').click();
+  $('#pfpFile').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 8 * 1024 * 1024) { toast('That image is over 8 MB; pick a smaller one'); return; } try { await uploadAvatar(f); await refreshAccount(); viewAccount(); toast('Profile picture updated'); } catch (err) { toast(friendlyAuthError(err), 6000); } };
+  const rm = $('#pfpRm'); if (rm) rm.onclick = async () => { try { await removeAvatar(); await refreshAccount(); viewAccount(); toast('Profile picture removed'); } catch (err) { toast(friendlyAuthError(err), 6000); } };
   $('#out').onclick = async () => { await signOut(); await refreshAccount(); go('home'); };
   const up = $('#upgrade'); if (up) up.onclick = async () => {
     const e = $('#em').value.trim().toLowerCase(), p = $('#pw').value;

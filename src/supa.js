@@ -43,11 +43,50 @@ export async function signInDiscord() {
 
 export async function signOut() { if (supa) await supa.auth.signOut(); }
 
+const AVATAR_KEY = 'edhclub-avatar';
+export function localAvatar() { try { return localStorage.getItem(AVATAR_KEY) || ''; } catch { return ''; } }
+export function setLocalAvatar(u) { try { if (u) localStorage.setItem(AVATAR_KEY, u); else localStorage.removeItem(AVATAR_KEY); } catch { /* ignore */ } }
 export async function upsertProfile(user, name) {
   if (!supa || !user) return;
   const display = name || user.user_metadata?.display_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Planeswalker';
-  await supa.from('profiles').upsert({ id: user.id, display_name: display }, { onConflict: 'id' });
-  setLocalName(display);
+  const row = { id: user.id, display_name: display };
+  // A Discord sign-in brings its avatar along; use it unless the player already uploaded their own.
+  const { data: cur } = await supa.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle();
+  const social = user.user_metadata?.avatar_url || user.user_metadata?.picture || '';
+  if (!cur?.avatar_url && social) row.avatar_url = social;
+  await supa.from('profiles').upsert(row, { onConflict: 'id' });
+  setLocalName(display); const av = row.avatar_url || cur?.avatar_url; if (av) setLocalAvatar(av);
+}
+export async function myProfile() {
+  const user = await currentUser(); if (!user) return null;
+  const { data } = await supa.from('profiles').select('display_name, avatar_url').eq('id', user.id).maybeSingle();
+  setLocalAvatar(data?.avatar_url || '');
+  return data;
+}
+// Shrink to a 256px square JPEG in the browser, then store it under the user's own folder.
+async function squareJpeg(file, size = 256) {
+  const bmp = await createImageBitmap(file);
+  const s = Math.min(bmp.width, bmp.height); const cv = document.createElement('canvas'); cv.width = cv.height = size;
+  cv.getContext('2d').drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, size, size);
+  return new Promise((res) => cv.toBlob(res, 'image/jpeg', 0.86));
+}
+export async function uploadAvatar(file) {
+  const user = await currentUser(); if (!user) throw new Error('Sign in first');
+  if (!/^image\//.test(file.type)) throw new Error('Choose an image file');
+  const blob = await squareJpeg(file);
+  const path = `${user.id}/avatar.jpg`;
+  const { error } = await supa.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg', cacheControl: '60' });
+  if (error) throw error;
+  const url = supa.storage.from('avatars').getPublicUrl(path).data.publicUrl + '?v=' + Date.now();
+  const { error: e2 } = await supa.from('profiles').update({ avatar_url: url }).eq('id', user.id); if (e2) throw e2;
+  setLocalAvatar(url); return url;
+}
+export async function removeAvatar() {
+  const user = await currentUser(); if (!user) return;
+  await supa.storage.from('avatars').remove([`${user.id}/avatar.jpg`]);
+  const social = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
+  await supa.from('profiles').update({ avatar_url: social }).eq('id', user.id);
+  setLocalAvatar(social || '');
 }
 
 export async function displayNameFor(user) {

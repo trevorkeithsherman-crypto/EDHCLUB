@@ -3,7 +3,7 @@ import { DB, buildSample } from './decks.js';
 import { FX, SFX, Ambient, setFxState } from './fx.js';
 import { net, rememberRoom, recallRoom } from './net.js';
 import { makeBot } from './bots.js';
-import { online, currentUser, recordGame, setRoomStatus, localName, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
+import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
 
 /* ---------- Mode from the URL ---------- */
 const Q = new URLSearchParams(location.search);
@@ -533,7 +533,7 @@ const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'con
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
-  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, mat: p.mat, bot: p.bot, empty: false }, zones: p.zones, cards };
+  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: false }, zones: p.zones, cards };
 }
 function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40) }; }
 function applySeat(snap) {
@@ -600,8 +600,9 @@ const others = () => [1, 2, 3].map((k) => (S.view + k) % 4).filter((k) => k < (S
 function avatarHTML(i, big) {
   const p = P(i); const c = commandersOf(i)[0];
   const ring = c ? colorHex(c) : css('--gold');
-  const art = c && c.art ? ` style="background-image:url(${esc(c.art)});--ring:${ring}"` : ` style="--ring:${ring}"`;
-  return `<div class="avatar ${p.bot ? 'bot' : ''}"${art}>${c && c.art ? '' : `<span class="init">${esc((p.name || '?')[0].toUpperCase())}</span>`}<button type="button" class="lifebadge" data-life="${i}" data-act="dmg" data-p="${i}" title="Damage, poison and commander damage">${p.life}</button></div>`;
+  const pic = !p.bot && p.avatar ? p.avatar : (c && c.art ? c.art : '');
+  const art = pic ? ` style="background-image:url(${esc(pic)});--ring:${ring}"` : ` style="--ring:${ring}"`;
+  return `<div class="avatar ${p.bot ? 'bot' : ''} ${!p.bot && p.avatar ? 'photo' : ''}"${art}>${pic ? '' : `<span class="init">${esc((p.name || '?')[0].toUpperCase())}</span>`}<button type="button" class="lifebadge" data-life="${i}" data-act="dmg" data-p="${i}" title="Damage, poison and commander damage">${p.life}</button></div>`;
 }
 function seatHTML(i, full) {
   const p = P(i); const active = S.turn.active === i;
@@ -1270,7 +1271,7 @@ async function boot() {
       if (!ROOM.host && online) { try { const { getRoom } = await import('./supa.js'); const row = await getRoom(ROOM.code); if (row) { ROOM.seats = row.seats; ROOM.bots = row.bots || 0; } } catch { /* fall back to presence */ } }
       const seat = await net.join({ code: ROOM.code, name: ROOM.name, isHost: ROOM.host, seats: ROOM.seats, bots: ROOM.bots });
       ROOM.seats = net.seats; ROOM.bots = net.bots;
-      S = null; newGame(false); S.view = seat;
+      S = null; newGame(false); S.view = seat; P(seat).avatar = localAvatar();
       const prior = recallRoom(ROOM.code);
       if (prior && prior.mine && prior.mine.some((m) => m.seat === seat)) {
         seatRestored = true;
@@ -1292,7 +1293,7 @@ async function boot() {
       document.body.insertAdjacentHTML('afterbegin', `<div class="toast" style="position:fixed;left:50%;top:40%;transform:translateX(-50%);z-index:99;pointer-events:auto;max-width:460px">${esc(e.message)}<br><a href="/">Back to the lobby</a></div>`);
       S = null; newGame(false);
     }
-  } else if (MODE === 'bots') { S = null; newGame(false); S.view = 0; }
+  } else if (MODE === 'bots') { S = null; newGame(false); S.view = 0; P(0).avatar = localAvatar(); }
   else if (!S) { S = null; newGame(false); }
   if (MODE !== 'hotseat') bot = makeBot(botApi());
   bindUI(); hydrate(); render(); roomBar();

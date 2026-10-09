@@ -61,3 +61,13 @@ create table if not exists public.games (
 alter table public.games enable row level security;
 create policy "games readable" on public.games for select using (true);
 create policy "signed-in users record games" on public.games for insert with check (auth.uid() is not null);
+
+-- Profile pictures: a public bucket where each user can only write inside their own folder.
+alter table public.profiles add column if not exists avatar_url text;
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('avatars', 'avatars', true, 2097152, array['image/jpeg','image/png','image/webp'])
+on conflict (id) do update set public = true, file_size_limit = 2097152, allowed_mime_types = array['image/jpeg','image/png','image/webp'];
+create policy "avatars are public" on storage.objects for select using (bucket_id = 'avatars');
+create policy "own avatar insert" on storage.objects for insert with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "own avatar update" on storage.objects for update using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "own avatar delete" on storage.objects for delete using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);

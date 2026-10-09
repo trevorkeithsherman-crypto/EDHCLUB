@@ -392,3 +392,4 @@ body.is-drag, body.is-drag * { cursor: grabbing !important; }
 .prompt.outgoing { flex-direction: row; align-items: center; }
 @media (max-width: 760px) { .prompt { top: auto; bottom: 90px; width: calc(100vw - 24px); } .prompt.multi { min-width: 0; } }
 .small { font-size: 12px; } .mpanel .muted { color: var(--muted); }
+.avatar.photo { background-size: cover; background-position: center; }

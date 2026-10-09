@@ -51,6 +51,18 @@ with sync_playwright() as p:
         check(T('expanding an opponent tile makes it taller and full width'), exp_h > base_h + 20 and pg.eval_on_selector('.opps .seat[data-seat="1"]', 'e=>e.getBoundingClientRect().width') > w * 0.9, f'{base_h}->{exp_h}')
         check(T('expanded tile shows piles; my hand still on screen'), pg.locator('.opps .seat.expanded .minipiles').is_visible() and inside(pg, '.me .hand .card >> nth=-1', w, h)[0] and no_overflow(pg))
         pg.locator('.xp[data-p="1"]').tap(); pg.wait_for_timeout(200); check(T('collapses again'), pg.locator('.seat.expanded').count() == 0)
+        # ---- tap action bar (no long-press needed) ----
+        first = pg.locator('.me .hand .card').last; first.tap(); pg.wait_for_timeout(250)
+        ok, note = inside(pg, '#tapbar', w, h); check(T('one tap shows the action bar inside the viewport'), ok and pg.locator('#tapbar [data-tb=look]').count() == 1 and pg.locator('#tapbar [data-tb=quick]').count() == 1 and pg.locator('#tapbar [data-tb=more]').count() == 1, note)
+        check(T('action bar buttons are tap-sized'), *tall_enough(pg, '#tapbar button', 36))
+        pg.locator('#tapbar [data-tb=look]').tap(); pg.wait_for_timeout(400)
+        ok, note = inside(pg, '.mpanel', w, h); check(T('Look closer opens a modal that fits'), ok and pg.locator('#tapbar').is_hidden(), note)
+        pg.keyboard.press('Escape'); pg.wait_for_timeout(150)
+        first = pg.locator('.me .hand .card').last; first.tap(); pg.wait_for_timeout(250); pg.locator('#tapbar [data-tb=more]').tap(); pg.wait_for_timeout(250)
+        ok, note = inside(pg, '.menu', w, h); check(T('More… opens the card menu inside the viewport'), ok and pg.locator('.menu .mi').count() >= 2, note)
+        pg.keyboard.press('Escape'); pg.wait_for_timeout(150)
+        pg.touchscreen.tap(w / 2, 60); pg.wait_for_timeout(600)
+        check(T('nothing is text-selectable on the table surface'), pg.evaluate("getComputedStyle(document.querySelector('#table')).userSelect === 'none' && getComputedStyle(document.querySelector('.me .hand .card')).webkitUserSelect === 'none'"))
         # ---- play by touch: double-tap a land ----
         before = len(state(pg)['players'][0]['zones']['hand'])
         land = pg.locator('.me .hand .card.f-land').last

@@ -25,6 +25,8 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body { color: var(--text); font: 14px/1.4 var(--f-ui); background: var(--bg); overflow: hidden; -webkit-tap-highlight-color: transparent; }
+#table, .rail, .prompt, .tapbar, .menu, #zoom, #layer { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#table img, .menu img, #zoom img { -webkit-touch-callout: none; -webkit-user-drag: none; }
 button, select, input, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 a { color: var(--blue); }
@@ -464,3 +466,10 @@ body.is-drag, body.is-drag * { cursor: grabbing !important; }
 .toprank { font: 800 11px var(--f-ui); color: var(--gold-2); }
 .topname { min-width: 0; display: grid; } .topname b { font: 600 13px var(--f-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .topname small { color: var(--muted); font-size: 11px; }
 .toprow .pips { font-size: 13px; display: flex; gap: 2px; }
+
+/* Touch: a tap on a card shows a small action bar instead of relying on long-press. */
+.tapbar { position: fixed; z-index: 74; display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--glass-2); backdrop-filter: blur(12px); border: 1px solid var(--line-2); box-shadow: 0 10px 30px rgba(0, 0, 0, .6); transform: translateX(-50%); animation: tapbar .15s ease-out; }
+@keyframes tapbar { from { opacity: 0; transform: translate(-50%, 6px); } }
+.tapbar button { border: 0; border-radius: 999px; padding: 9px 13px; min-height: 38px; background: transparent; color: var(--text); font: 600 12px var(--f-ui); white-space: nowrap; }
+.tapbar button.hot { background: linear-gradient(180deg, #2f8fe0, #1a5fb4); color: #fff; }
+.tapbar button:active { background: rgba(255, 255, 255, .1); }

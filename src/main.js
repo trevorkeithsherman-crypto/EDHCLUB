@@ -671,6 +671,7 @@ function render() {
   maybeBot();
   if (zoomId && !S.cards[zoomId]) hideZoom();
   renderPrompt();
+  const tb = $('#tapbar'); if (tb && !tb.hidden) { const tc = S.cards[tb.dataset.id]; if (tc && cardEl(tc.id)) requestAnimationFrame(() => showTapbar(tc)); else hideTapbar(); }
   requestAnimationFrame(drawArrows); queueSave();
 }
 // Lay the hand out as a fan: overlapping, rotated around a pivot below the cards.
@@ -1083,12 +1084,27 @@ function logModal() {
 }
 
 /* ---------- Input ---------- */
+let lastPointerType = 'mouse';
 function onCardClick(c) {
   const now = performance.now();
-  if (lastClick && lastClick.id === c.id && now - lastClick.t < 420) { lastClick = null; quick(c); return; }
+  if (lastClick && lastClick.id === c.id && now - lastClick.t < 420) { lastClick = null; hideTapbar(); quick(c); return; }
   lastClick = { id: c.id, t: now }; S.sel = c.id;
   $$('#table .card.sel').forEach((x) => x.classList.remove('sel')); cardEl(c.id)?.classList.add('sel');
+  if (lastPointerType !== 'mouse') showTapbar(c);
 }
+// On touch, one tap selects a card and offers its actions in a bar; no long-press needed (and nothing for the OS to copy).
+function quickLabel(c) { return c.zone === 'battlefield' ? (c.tapped ? 'Untap' : 'Tap') : /Land/.test(c.type) ? 'Play' : 'Cast'; }
+function showTapbar(c) {
+  const bar = $('#tapbar'); const el = cardEl(c.id); if (!bar || !el) return;
+  const canAct = net.isMine(c.controller) && ['hand', 'battlefield', 'command'].includes(c.zone);
+  bar.innerHTML = `${canSee(c) ? `<button type="button" data-tb="look">Look closer</button>` : ''}${canAct ? `<button type="button" class="hot" data-tb="quick">${quickLabel(c)}</button>` : ''}<button type="button" data-tb="more">More…</button>`;
+  bar.hidden = false; bar.dataset.id = c.id;
+  const r = el.getBoundingClientRect(); const bw = bar.offsetWidth || 200, bh = bar.offsetHeight || 46;
+  let x = r.left + r.width / 2; x = Math.max(bw / 2 + 6, Math.min(innerWidth - bw / 2 - 6, x));
+  let y = r.top - bh - 10; if (y < 50) y = Math.min(innerHeight - bh - 8, r.bottom + 10);
+  bar.style.left = x + 'px'; bar.style.top = y + 'px';
+}
+function hideTapbar() { const bar = $('#tapbar'); if (bar && !bar.hidden) { bar.hidden = true; bar.innerHTML = ''; } }
 function quick(c) {
   if (c.zone === 'battlefield') toggleTap(c);
   else if (c.zone === 'hand' || c.zone === 'command') castToStack(c.id);
@@ -1096,7 +1112,8 @@ function quick(c) {
 }
 function clearHot() { $$('.hot').forEach((x) => x.classList.remove('hot')); }
 function onDown(e) {
-  hideZoom(); untilt();
+  hideZoom(); untilt(); lastPointerType = e.pointerType || 'mouse';
+  if (!e.target.closest('#tapbar')) hideTapbar();
   if (e.button > 0) return;
   if (!e.target.closest('#menu')) closeMenu();
   const el = e.target.closest('#table .card[data-id]'); if (!el) return;
@@ -1179,6 +1196,13 @@ function drop(d, x, y, cancel) {
   }
 }
 function onClick(e) {
+  const tb = e.target.closest('#tapbar [data-tb]');
+  if (tb) {
+    const c = S.cards[$('#tapbar').dataset.id]; if (!c) { hideTapbar(); return; }
+    const r = cardEl(c.id)?.getBoundingClientRect();
+    if (tb.dataset.tb === 'look') closerModal(c); else if (tb.dataset.tb === 'quick') quick(c); else cardMenu(c, r ? r.left + r.width / 2 : innerWidth / 2, r ? r.top : innerHeight / 2);
+    hideTapbar(); return;
+  }
   if (isCompact() && $('#app').classList.contains('show-side') && !e.target.closest('.side, #sideBtn')) { $('#app').classList.remove('show-side'); if (!e.target.closest('[data-act], .card, .seat')) return; }
   if (targeting) {
     const seat = e.target.closest('.seat.targetable');

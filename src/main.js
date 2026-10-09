@@ -286,7 +286,7 @@ function moveCard(id, pi, zone, o = {}) {
   detach(c);
   if (c.token && zone !== 'battlefield' && zone !== 'stack') { delete S.cards[id]; S.attacks = S.attacks.filter((a) => a.id !== id); render(); FX.puff(from, colorHex(c)); SFX.play('pop'); return; }
   if (fromZone === 'battlefield' && zone !== 'battlefield') { c.tapped = false; c.p1 = 0; c.ctr = 0; c.dmg = 0; c.sick = false; c.faceDown = false; c.flipped = false; S.attacks = S.attacks.filter((a) => a.id !== id); S.attacks.forEach((a) => { if (a.blockers && a.blockers.includes(id)) { a.blockers = a.blockers.filter((b) => b !== id); } }); }
-  if (fromZone === 'command' && c.isCmdr && (zone === 'stack' || zone === 'battlefield')) c.casts = (c.casts || 0) + 1;
+  if (fromZone === 'command' && c.isCmdr && o.cast) c.casts = (c.casts || 0) + 1;
   c.controller = (zone === 'battlefield' || zone === 'stack' || zone === 'hand') ? pi : c.owner;
   c.zone = zone;
   // Commander rule: when it would hit a graveyard, exile, hand or library, its owner may send it to the command zone instead.
@@ -339,11 +339,12 @@ function castToStack(id, fromRect) {
   S.stats.casts[c.controller] = (S.stats.casts[c.controller] || 0) + 1;
   if (fromCmd) log(`${who} cast ${c.name} from the command zone (tax ${2 * (c.casts || 0)})`); else log(`${who} cast ${c.name}`);
   if (MODE !== 'hotseat') { if (net.active && !net.isHost) net.send('all', { fn: 'cast', seat: c.controller, cardId: c.id }); else { fireEvent('opponentCasts', { caster: c.controller, card: c }); fireEvent('youCast', { caster: c.controller, card: c }); } }
-  if (isPerm(c)) { moveCard(id, c.controller, 'battlefield', { anim: fromCmd ? 'commander' : 'cast', fromRect }); return; }
+  if (isPerm(c)) { moveCard(id, c.controller, 'battlefield', { anim: fromCmd ? 'commander' : 'cast', fromRect, cast: fromCmd }); return; }
   // Instants and sorceries: announce, flash the card at the table, then it goes to the graveyard.
   const from = fromRect || visRect(cardEl(id)); const dest = c.isCmdr ? 'command' : 'graveyard';
   S.lastSpell = { id, t: Date.now() };
   spellFlash(c, from);
+  if (fromCmd) c.casts = (c.casts || 0) + 1;
   moveCard(id, c.owner, dest, { anim: 'none', fromRect: from, forced: true });
 }
 function spellFlash(c, from) {
@@ -680,7 +681,7 @@ function seatHTML(i, full) {
       const list = p.zones[z]; let inner;
       if (z === 'library') inner = list.length ? `<div class="card"><div class="ci back stackback ${backOk ? 'pic' : ''}"><span>EC</span>${backOk ? `<img src="${CARD_BACK}" alt="" draggable="false">` : ''}</div></div>` : '<span class="empty">Empty</span>';
       else inner = list.length ? cardHTML(S.cards[list[list.length - 1]]) : `<span class="empty">${z === 'command' ? 'None' : 'Empty'}</span>`;
-      const tax = z === 'command' ? commandersOf(i).filter((c) => c.zone === 'command').map((c) => `<span class="tax">Tax +${2 * (c.casts || 0)}</span>`).join('') : '';
+      const tax = z === 'command' ? commandersOf(i).filter((c) => c.zone === 'command').map((c) => `<span class="tax" title="${esc(c.name)}: commander tax">${net.isMine(i) ? `<button type="button" class="taxbtn" data-act="tax" data-id="${c.id}" data-d="-1" title="Lower tax" ${c.casts ? '' : 'disabled'}>−</button>` : ''}Tax +${2 * (c.casts || 0)}${net.isMine(i) ? `<button type="button" class="taxbtn" data-act="tax" data-id="${c.id}" data-d="1" title="Raise tax">+</button>` : ''}</span>`).join('') : '';
       const cnt = (z !== 'command' && list.length) ? `<span class="cnt">${list.length}</span>` : '';
       return `<div class="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}"><div class="slot" data-act="pileclick" data-zone="p${i}-${z}" title="${z === 'library' ? 'Click to draw. Right-click for more.' : label}">${inner}${cnt}</div><button type="button" class="pl" data-act="pile" data-zone="p${i}-${z}">${label}</button>${tax}</div>`;
     };
@@ -918,6 +919,8 @@ function cardMenu(c, x, y) {
     openMenu(items.length ? items : [{ label: 'Not your card', fn: () => {} }], x, y, `${P(c.controller).name}'s card`); return;
   }
   if (canSee(c)) { add('Look closer', () => closerModal(c)); if (!c.token && net.isMine(c.controller)) { add('Choose artwork…', () => artworkModal(c)); add(c.foil ? 'Make it non-foil' : 'Make it foil', () => { c.foil = !c.foil; render(); SFX.play('chime', firstColor(c)); }); } sep(); }
+  if (c.isCmdr && !c.token) { add(`Commander tax: {${2 * (c.casts || 0)}} — raise`, () => adjustTax(c, 1)); if (c.casts) add('Commander tax — lower', () => adjustTax(c, -1)); sep(); }
+  if (c.zone === 'command') commandersOf(c.owner).filter((x) => x.zone === 'command' && x.id !== c.id).forEach((x) => { add(`Cast ${x.name} (tax +${2 * (x.casts || 0)})`, () => castToStack(x.id)); add(`Put ${x.name} onto battlefield (no tax)`, () => moveCard(x.id, x.owner, 'battlefield', { anim: 'commander' })); sep(); });
   if (c.zone === 'battlefield') {
     add(c.tapped ? 'Untap' : 'Tap', () => toggleTap(c));
     if (c.backImg) add(c.flipped ? 'Transform to front' : 'Transform', () => { c.flipped = !c.flipped; render(); FX.slam(cardEl(c.id), 1.08); SFX.play('whoosh'); });
@@ -972,15 +975,51 @@ function libraryMenu(pi, x, y) {
     { label: 'Draw a card', fn: () => draw(pi, 1), hot: true }, { label: 'Draw 7', fn: () => draw(pi, 7) }, { sep: true },
     { label: 'Shuffle', fn: () => shuffleLib(pi) },
     { label: 'Mill 1', fn: () => { const id = p.zones.library[0]; if (id) { log(`${p.name} milled ${S.cards[id].name}`); moveCard(id, pi, 'graveyard'); } } },
+    { label: 'Scry…', fn: () => peekModal(pi, 'scry') }, { label: 'Surveil…', fn: () => peekModal(pi, 'surveil') },
     { label: 'Look at the top 3', fn: () => openZone(pi, 'library', { top: 3 }) },
     { label: 'Search library', fn: () => openZone(pi, 'library', { search: true }) },
     { label: 'Reveal the top card', fn: () => { const id = p.zones.library[0]; if (id) { toast(`Top of ${p.name}'s library: ${S.cards[id].name}`); log(`${p.name} revealed ${S.cards[id].name} from the top of their library`); } } },
   ], x, y, `${p.name}'s library`);
 }
+// Commander tax is counted automatically on each cast from the command zone; these nudge it for the odd case
+// (a partner moved aside by hand, a Command Beacon, a take-back).
+function adjustTax(c, d) {
+  if (!c || !c.isCmdr) return; const next = Math.max(0, (c.casts || 0) + d); if (next === (c.casts || 0)) return;
+  c.casts = next; log(`${P(c.owner).name} set ${c.name}'s commander tax to {${2 * next}}`); render();
+}
+/* ---------- Scry and surveil ----------
+   Scry N (CR 701.22): look at the top N, put any number on the bottom in any order and the rest back on top in any
+   order. Surveil N (CR 701.49): the same, but the ones you don't keep go to the graveyard instead of the bottom. */
+function peekModal(pi, mode, n = null) {
+  const p = P(pi); const lib = p.zones.library; if (!lib.length) { toast('The library is empty'); return; }
+  if (n == null) {
+    const verb = mode === 'surveil' ? 'Surveil' : 'Scry';
+    openModal(`<h2>${verb}</h2><p>${mode === 'surveil' ? 'Look at the top cards; keep each on top or put it in the graveyard.' : 'Look at the top cards; keep each on top or send it to the bottom.'}</p><div class="row" id="peekN">${[1, 2, 3, 4, 5].map((k) => `<button type="button" class="btn ${k === 1 ? '' : 'ghost'}" data-n="${k}" ${k > lib.length ? 'disabled' : ''}>${verb} ${k}</button>`).join('')}</div>`, { cls: 'narrow' });
+    $$('#peekN [data-n]').forEach((b) => { b.onclick = () => peekModal(pi, mode, +b.dataset.n); }); return;
+  }
+  n = Math.min(n, lib.length); const ids = lib.slice(0, n); const away = new Set(); const order = ids.slice();
+  const awayWord = mode === 'surveil' ? 'Graveyard' : 'Bottom';
+  const draw = () => {
+    const kept = order.filter((id) => !away.has(id)); const gone = order.filter((id) => away.has(id));
+    $('#peekBody').innerHTML = `<div class="peekrow">${order.map((id) => { const c = S.cards[id]; const isAway = away.has(id); const ki = kept.indexOf(id); return `<div class="peek ${isAway ? 'away' : ''}" data-pid="${id}">${cardHTML(c, { noid: true, flat: true, reveal: true })}<div class="peekacts"><span class="peekpos">${isAway ? awayWord.toLowerCase() : ki === 0 ? 'top' : `top ${ki + 1}`}</span><button type="button" class="btn ghost sm" data-pk="toggle" data-id="${id}">${isAway ? 'Keep on top' : awayWord}</button>${!isAway && kept.length > 1 ? `<span class="row tight"><button type="button" class="btn ghost sm" data-pk="left" data-id="${id}" ${ki === 0 ? 'disabled' : ''} title="Closer to the top">◀</button><button type="button" class="btn ghost sm" data-pk="right" data-id="${id}" ${ki === kept.length - 1 ? 'disabled' : ''} title="Further down">▶</button></span>` : ''}</div></div>`; }).join('')}</div>
+    <p class="muted small">${kept.length} stay${kept.length === 1 ? 's' : ''} on top${kept.length > 1 ? ' (left is the very top)' : ''}; ${gone.length} to the ${awayWord.toLowerCase()}.</p>`;
+    $$('#peekBody [data-pk]').forEach((b) => { b.onclick = () => { const id = b.dataset.id; const a = b.dataset.pk; if (a === 'toggle') { away.has(id) ? away.delete(id) : away.add(id); } else { const k = order.indexOf(id); const dir = a === 'left' ? -1 : 1; let j = k + dir; while (j >= 0 && j < order.length && away.has(order[j])) j += dir; if (j >= 0 && j < order.length) { [order[k], order[j]] = [order[j], order[k]]; } } draw(); }; });
+  };
+  openModal(`<h2>${mode === 'surveil' ? 'Surveil' : 'Scry'} ${n}</h2><div id="peekBody"></div><div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn" id="peekGo" data-autofocus>Done</button></div>`, { cls: 'wide' });
+  draw();
+  $('#peekGo').onclick = () => {
+    const kept = order.filter((id) => !away.has(id)); const gone = order.filter((id) => away.has(id));
+    const rest = lib.slice(n);
+    if (mode === 'surveil') { p.zones.library = [...kept, ...rest]; gone.forEach((id) => { const c = S.cards[id]; c.zone = 'graveyard'; p.zones.graveyard.push(id); }); }
+    else p.zones.library = [...kept, ...rest, ...gone];
+    log(`${p.name} ${mode === 'surveil' ? 'surveiled' : 'scried'} ${n}${gone.length ? ` (${gone.length} to the ${awayWord.toLowerCase()})` : ' (kept all on top)'}`);
+    closeModal(); render(); if (gone.length) SFX.play('whoosh');
+  };
+}
 function commandMenu(pi, x, y) {
   const cs = commandersOf(pi).filter((c) => c.zone === 'command');
   if (!cs.length) { toast(`${P(pi).name}'s commander is not in the command zone`); return; }
-  const items = []; cs.forEach((c) => { items.push({ label: `Cast ${c.name} (tax +${2 * (c.casts || 0)})`, fn: () => castToStack(c.id), hot: true }); items.push({ label: `Put ${c.name} onto battlefield`, fn: () => moveCard(c.id, pi, 'battlefield', { anim: 'commander' }) }); });
+  const items = []; cs.forEach((c, k) => { if (k) items.push({ sep: true }); items.push({ label: `Cast ${c.name} (tax +${2 * (c.casts || 0)})`, fn: () => castToStack(c.id), hot: true }); items.push({ label: `Put ${c.name} onto battlefield (no tax)`, fn: () => moveCard(c.id, pi, 'battlefield', { anim: 'commander' }) }); items.push({ label: `${c.name}: tax +{2}`, fn: () => adjustTax(c, 1) }); if (c.casts) items.push({ label: `${c.name}: tax −{2}`, fn: () => adjustTax(c, -1) }); });
   openMenu(items, x, y, 'Command zone');
 }
 /* ---------- Card text runtime: bots act on what their cards say ----------
@@ -1040,7 +1079,11 @@ async function runEffects(src, effects, ctx = {}) {
       case 'untap': { tapAll(i, e.what); done.push(`untap ${e.what}s`); break; }
       case 'mill': { const who = e.who === 'you' ? [i] : e.who === 'all' ? [i, ...oppsOf(i)] : [oppsOf(i)[0]].filter((k) => k != null); who.forEach((k) => { if (net.isMine(k)) REQ.mill(k, n); else request(k, 'mill', n); }); done.push(`mill ${n}`); break; }
       case 'mana': { P(i).floating = (P(i).floating || 0) + (e.n === 'x' ? 1 : e.n); break; }
-      case 'scry': { done.push(`scry ${n} (kept)`); break; }
+      case 'scry': { // bots scry like a sensible player: bottom extra lands when flooded, bottom spells when short on lands
+        const lib = P(i).zones.library; const top = lib.slice(0, n); const landsOut = seatCards(i, (c) => /Land/.test(c.type)).length; const inHand = P(i).zones.hand.map((id) => S.cards[id]).filter((c) => /Land/.test(c.type)).length;
+        const wantLand = landsOut + inHand < 5; const gone = top.filter((id) => { const l = /Land/.test(S.cards[id].type); return wantLand ? !l && landsOut < 3 : l && landsOut + inHand >= 6; });
+        if (gone.length) { P(i).zones.library = [...top.filter((id) => !gone.includes(id)), ...lib.slice(n), ...gone]; }
+        done.push(`scry ${n}${gone.length ? ` (${gone.length} to the bottom)` : ''}`); break; }
       case 'tax': break; // handled by the trigger that owns it
     }
     await wait(120);
@@ -1648,6 +1691,7 @@ function onClick(e) {
   if (SPECTATE && !['pile', 'pileclick', 'seatmenu', 'expand', 'close'].includes(act)) { toast('You\'re watching this table'); return; }
   switch (act) {
     case 'life': { const d = (+a.dataset.d) * (e.shiftKey ? 5 : 1); if (net.isMine(p)) changeLife(p, d, { manual: true }); else request(p, 'changeLife', d); break; }
+    case 'tax': { const c = S.cards[a.dataset.id]; if (c && net.isMine(c.owner)) adjustTax(c, +a.dataset.d); break; }
     case 'pile': case 'pileclick': pileClick(a.dataset.zone, a); break;
     case 'seatmenu': seatMenu(p, r.left, r.bottom + 4); break;
     case 'dmg': dmgModal(p); break;
@@ -1669,7 +1713,7 @@ function onClick(e) {
 function onContext(e) {
   if (e.target.closest('#modal')) return;
   const cardElm = e.target.closest('#table .card[data-id]');
-  if (cardElm) { e.preventDefault(); const c = S.cards[cardElm.dataset.id]; if (c) cardMenu(c, e.clientX, e.clientY); return; }
+  if (cardElm) { e.preventDefault(); const c = S.cards[cardElm.dataset.id]; if (c && c.zone === 'command' && net.isMine(c.owner) && commandersOf(c.owner).filter((x) => x.zone === 'command').length > 1) { commandMenu(c.owner, e.clientX, e.clientY); return; } if (c) cardMenu(c, e.clientX, e.clientY); return; }
   const pile = e.target.closest('[data-pile]');
   if (pile) {
     const [pi, z] = parseZone(pile.dataset.pile); if (pi < 0) return; e.preventDefault();

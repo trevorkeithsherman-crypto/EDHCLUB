@@ -552,3 +552,14 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 #roomBar .watching { font: 600 11px/1 var(--f-ui, system-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--gold, #e3c56a); border: 1px solid rgba(227,197,106,.45); border-radius: 999px; padding: 5px 9px; }
 #roomBar .eye { font-size: 12px; opacity: .8; margin-left: 4px; }
 .spectator .handbar .btn { display: none; }
+
+/* Commander tax nudge on the command pile */
+.tax .taxbtn { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.45); color: var(--text); font: 700 11px/1 var(--f-ui); margin: 0 3px; padding: 0; cursor: pointer; vertical-align: middle; }
+.tax .taxbtn:hover { background: rgba(255,255,255,.12); } .tax .taxbtn:disabled { opacity: .35; cursor: default; }
+/* Scry / surveil */
+.peekrow { display: flex; gap: 12px; overflow-x: auto; padding: 6px 2px 10px; }
+.peek { flex: 0 0 auto; width: 132px; display: grid; gap: 6px; justify-items: center; transition: opacity .15s, transform .15s; }
+.peek .card { --cw: 124px; cursor: default; }
+.peek.away { opacity: .55; transform: translateY(6px); }
+.peekacts { display: grid; gap: 4px; justify-items: center; } .peekpos { font: 600 10px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--gold, #e3c56a); }
+.row.tight { gap: 4px; }

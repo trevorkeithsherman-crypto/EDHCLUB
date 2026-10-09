@@ -13,8 +13,10 @@ def mock(route):
     if '/storage/v1/object/avatars/' in url:
         uploads.append((m, route.request.headers.get('content-type', ''))); route.fulfill(status=200, content_type='application/json', body=json.dumps({'Key': 'avatars/x/avatar.jpg'})); return
     if '/rest/v1/profiles' in url:
-        if m == 'PATCH':
-            body = json.loads(route.request.post_data or '{}'); state_av['url'] = body.get('avatar_url'); route.fulfill(status=200, content_type='application/json', body='[]'); return
+        if m in ('PATCH', 'POST'):
+            body = json.loads(route.request.post_data or '{}')
+            if 'avatar_url' in body: state_av['url'] = body.get('avatar_url')
+            route.fulfill(status=201, content_type='application/json', body='[]'); return
         row = {'id': FAKE_USER['id'], 'display_name': 'Tester', 'avatar_url': state_av['url']}
         route.fulfill(status=200, content_type='application/json', body=json.dumps(row if 'single' in route.request.headers.get('accept', '') or 'object' in route.request.headers.get('accept', '') else [row]) if m == 'GET' else '[]'); return
     supabase_mock(route)

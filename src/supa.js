@@ -48,18 +48,23 @@ export function localAvatar() { try { return localStorage.getItem(AVATAR_KEY) ||
 export function setLocalAvatar(u) { try { if (u) localStorage.setItem(AVATAR_KEY, u); else localStorage.removeItem(AVATAR_KEY); } catch { /* ignore */ } }
 export async function upsertProfile(user, name) {
   if (!supa || !user) return;
-  const display = name || user.user_metadata?.display_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Planeswalker';
-  const row = { id: user.id, display_name: display };
-  // A Discord sign-in brings its avatar along; use it unless the player already uploaded their own.
-  const { data: cur } = await supa.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle();
-  const social = user.user_metadata?.avatar_url || user.user_metadata?.picture || '';
-  if (!cur?.avatar_url && social) row.avatar_url = social;
-  await supa.from('profiles').upsert(row, { onConflict: 'id' });
-  setLocalName(display); const av = row.avatar_url || cur?.avatar_url; if (av) setLocalAvatar(av);
+  const display = name || user.user_metadata?.display_name || user.user_metadata?.full_name || user.email?.split('@')[0] || localName() || 'Planeswalker';
+  // Create or rename first; the avatar is a separate, best-effort step so a missing column or policy can never block the profile itself.
+  const { error } = await supa.from('profiles').upsert({ id: user.id, display_name: display }, { onConflict: 'id' });
+  if (error) console.warn('profile upsert failed', error.message);
+  setLocalName(display);
+  try {
+    const { data: cur } = await supa.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle();
+    // A Discord sign-in brings its avatar along; use it unless the player already uploaded their own.
+    const social = user.user_metadata?.avatar_url || user.user_metadata?.picture || '';
+    if (!cur?.avatar_url && social) await supa.from('profiles').update({ avatar_url: social }).eq('id', user.id);
+    const av = cur?.avatar_url || social; if (av) setLocalAvatar(av);
+  } catch { /* avatar is optional */ }
 }
 export async function myProfile() {
   const user = await currentUser(); if (!user) return null;
-  const { data } = await supa.from('profiles').select('display_name, avatar_url').eq('id', user.id).maybeSingle();
+  let { data } = await supa.from('profiles').select('display_name, avatar_url').eq('id', user.id).maybeSingle();
+  if (!data) { await upsertProfile(user); ({ data } = await supa.from('profiles').select('display_name, avatar_url').eq('id', user.id).maybeSingle()); }
   setLocalAvatar(data?.avatar_url || '');
   return data;
 }
@@ -78,14 +83,14 @@ export async function uploadAvatar(file) {
   const { error } = await supa.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg', cacheControl: '60' });
   if (error) throw error;
   const url = supa.storage.from('avatars').getPublicUrl(path).data.publicUrl + '?v=' + Date.now();
-  const { error: e2 } = await supa.from('profiles').update({ avatar_url: url }).eq('id', user.id); if (e2) throw e2;
+  const { error: e2 } = await supa.from('profiles').upsert({ id: user.id, display_name: localName() || 'Planeswalker', avatar_url: url }, { onConflict: 'id' }); if (e2) throw e2;
   setLocalAvatar(url); return url;
 }
 export async function removeAvatar() {
   const user = await currentUser(); if (!user) return;
   await supa.storage.from('avatars').remove([`${user.id}/avatar.jpg`]);
   const social = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
-  await supa.from('profiles').update({ avatar_url: social }).eq('id', user.id);
+  await supa.from('profiles').upsert({ id: user.id, display_name: localName() || 'Planeswalker', avatar_url: social }, { onConflict: 'id' });
   setLocalAvatar(social || '');
 }
 

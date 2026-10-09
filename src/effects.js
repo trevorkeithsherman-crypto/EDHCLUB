@@ -39,12 +39,12 @@ export function parseEffects(text) {
     if ((m = s.match(/put (a|an|two|three|x|\d+) \+1\/\+1 counters? on (it|this creature|this permanent|target creature|each creature you control|~)/))) out.push({ k: 'counter', n: num(m[1]), on: /target/.test(m[2]) ? 'target' : /each/.test(m[2]) ? 'mine' : 'self' });
     if ((m = s.match(/(target creature|creatures you control|it|this creature|that creature|~) gets? \+(\d+)\/\+(\d+)(?: and gains? ([a-z ]+?))? until end of turn/))) out.push({ k: 'pump', p: +m[2], t: +m[3], on: /creatures you control/.test(m[1]) ? 'mine' : /target/.test(m[1]) ? 'target' : 'self', kw: (m[4] || '').replace(/ and /g, ',') });
     if ((m = s.match(/(each opponent|target opponent|target player) (?:discards|discard) (a|two|three|\d+) cards?/))) out.push({ k: 'discard', n: num(m[2]), who });
-    if ((m = s.match(/(?:each opponent|target opponent|target player|each player) sacrifices? (a|an|two|\d+) (creature|artifact|enchantment|permanent|land)s?/))) out.push({ k: 'edict', n: num(m[1]), what: m[2], who });
+    if ((m = s.match(/(?:each opponent|target opponent|target player|each player|that player) sacrifices? (a|an|two|\d+) (creature|artifact|enchantment|permanent|land)s?/))) out.push({ k: 'edict', n: num(m[1]), what: m[2], who: /that player/.test(s) && who === 'you' ? 'opponent' : who });
     if (/^untap (all|each) (creature|land|permanent)s? you control/.test(s) || /untap target (creature|land|permanent)/.test(s)) out.push({ k: 'untap', what: (s.match(/untap (?:all |each |target )?(creature|land|permanent)/) || [])[1] || 'permanent' });
     if ((m = s.match(/(?:each player|target player|target opponent|each opponent)? ?(?:mills?|puts? the top (\w+) cards? of (?:their|your|his or her) library into (?:their|your|his or her) graveyard)/)) && /mill|library into/.test(s)) { const n = (s.match(/mills? (\w+)/) || [])[1] || m[2]; if (n) out.push({ k: 'mill', n: num(n), who: /each player/.test(s) ? 'all' : /opponent|target player/.test(s) ? 'opponent' : 'you' }); }
     if (/add (?:\{[wubrgc]\})+|add one mana of any color|add (?:one|two|three) mana/.test(s) && !/\{t\}/.test(s)) out.push({ k: 'mana', n: (s.match(/\{[wubrgc]\}/g) || ['x']).length });
     if ((m = s.match(/scry (\d+)/))) out.push({ k: 'scry', n: +m[1] });
-    if (/you may pay \{(\d+)\}/.test(s) || /unless (?:that player|they) pays? \{(\d+)\}/.test(s)) out.push({ k: 'tax', n: +((s.match(/pays? \{(\d+)\}/) || [])[1] || 1) });
+    if (/you may pay \{(\d+|x)\}/.test(s) || /unless (?:that player|they) pays? \{(\d+|x)\}/.test(s) || /(?:that player|they) may pay \{(\d+|x)\}/.test(s)) { const v = (s.match(/pays? \{(\d+|x)\}/) || [])[1]; out.push({ k: 'tax', n: v === 'x' ? 'x' : +(v || 1) }); }
   }
   return out;
 }
@@ -61,7 +61,7 @@ export function parseAbilities(c) {
       continue;
     }
     if ((m = l.match(/^(whenever|when|at the beginning of) (.+?), (.+)$/))) {
-      const cond = m[2]; let event = null; let scope = 'self';
+      const cond = m[2]; let event = null; let scope = 'self'; let extra = {}; let m2;
       if (/^~ enters|^this (creature|permanent|artifact|enchantment) enters/.test(cond)) event = 'etb';
       else if (/^~ or another creature dies|^~ or another creature you control dies/.test(cond)) { event = 'anyDies'; scope = /you control/.test(cond) ? 'mine' : 'any'; }
       else if (/^~ dies|^this creature dies|^~ is put into a graveyard/.test(cond)) event = 'dies';
@@ -71,14 +71,15 @@ export function parseAbilities(c) {
       else if (/^~ attacks|^this creature attacks/.test(cond)) event = 'attacks';
       else if (/^(a|another|one or more) creatures? you control attacks?/.test(cond)) event = 'anyAttacks';
       else if (/^~ deals combat damage to a player|^this creature deals combat damage to a player/.test(cond)) event = 'combatDamage';
-      else if (/^an opponent casts a spell|^an opponent casts an? (instant|sorcery|creature|noncreature) spell|^a player casts a spell/.test(cond)) { event = 'opponentCasts'; scope = /a player casts/.test(cond) ? 'any' : 'opponents'; }
+      else if ((m2 = cond.match(/^(?:an opponent|a player|another player) casts (?:a|an|their (first|second|third)) ?(instant|sorcery|creature|noncreature|artifact|enchantment|instant or sorcery)? ?spell/))) { event = 'opponentCasts'; scope = /^a player|^another player/.test(cond) ? 'any' : 'opponents'; extra = { nth: m2[1] ? { first: 1, second: 2, third: 3 }[m2[1]] : 0, spell: m2[2] || 'all' }; }
+      else if (/^an opponent draws a card|^a player draws a card|^an opponent draws their (first|second) card/.test(cond)) { event = 'opponentDraws'; scope = /^a player/.test(cond) ? 'any' : 'opponents'; }
       else if (/^you cast a (creature|spell|noncreature|instant or sorcery)/.test(cond)) event = 'youCast';
       else if (/^(your|each) upkeep|^the upkeep of each player/.test(cond) || /beginning of your upkeep/.test(l)) event = 'upkeep';
       else if (/^your end step|^the end step|^each end step/.test(cond) || /beginning of your end step/.test(l)) event = 'endStep';
       else if (/^(a|one or more) creature tokens? enters|^one or more tokens enter/.test(cond)) event = 'tokenEnters';
       else if (/^you gain life/.test(cond)) event = 'gainLife';
       else if (/^you draw a card|^you draw your (first|second) card/.test(cond)) event = 'youDraw';
-      if (event) { abilities.push({ kind: 'trigger', event, scope, may: /you may/.test(m[3]), effects: parseEffects(m[3]), text: line }); continue; }
+      if (event) { abilities.push({ kind: 'trigger', event, scope, may: /you may/.test(m[3]), effects: parseEffects(m[3]), text: line, ...extra }); continue; }
     }
     if ((m = l.match(/^(other )?(creatures|goblin creatures|elf creatures|[a-z]+ creatures|creature tokens|tokens) you control (?:get|have) (\+(\d+)\/\+(\d+))?(?: and (?:have|gain) )?([a-z ,]+?)?\.?$/))) {
       const filt = m[2].replace(/ you control.*/, ''); abilities.push({ kind: 'static', other: !!m[1], filter: /^creatures$/.test(filt) ? null : filt.replace(/ creatures?$/, '').replace(/^creature /, ''), tokens: /tokens?/.test(filt), p: +(m[4] || 0), t: +(m[5] || 0), kw: (m[6] || '').replace(/ and /g, ',').trim(), text: line }); continue;
@@ -101,3 +102,136 @@ export function staticGrant(src, x) {
 }
 export const isCreatureType = (c) => /Creature/.test(c?.type || '');
 export const needsHumanChoice = (eff) => eff.some((e) => e.k === 'tax');
+
+/* ---------- Board rules: static effects that change what a player may do ----------
+   Stax, taxes, pillow fort, hate bears. Parsed from oracle text so unnamed cards with the same wording work too.
+   Each rule carries a scope: 'all' (every player), 'opp' (the controller's opponents) or 'self'. */
+const TYPE_WORDS = { creature: 'creature', creatures: 'creature', artifact: 'artifact', artifacts: 'artifact', enchantment: 'enchantment', enchantments: 'enchantment', land: 'land', lands: 'land', 'nonbasic land': 'nonbasic', 'nonbasic lands': 'nonbasic', permanent: 'permanent', permanents: 'permanent', noncreature: 'noncreature', nonartifact: 'nonartifact', nonland: 'nonland', instant: 'instant', sorcery: 'sorcery', 'instant and sorcery': 'instant|sorcery', 'artifact and enchantment': 'artifact|enchantment', 'artifact, creature, and enchantment': 'artifact|creature|enchantment' };
+const kindOf = (w) => TYPE_WORDS[w.trim()] || null;
+export function parseRules(c) {
+  const name = String(c.name || ''); const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const text = lc(name ? String(c.oracle || '').replace(new RegExp(esc(name.split(' // ')[0]), 'g'), '~').replace(new RegExp(esc(name.split(',')[0]), 'g'), '~') : c.oracle).replace(/\(.*?\)/g, '');
+  const rules = [];
+  for (const raw of text.split(/\n/)) {
+    const s = raw.trim().replace(/\s+/g, ' '); if (!s || /^(whenever|when|at the beginning)/.test(s) || /^\{[^}]*\}[^:]*:/.test(s)) continue;
+    const scope = /your opponents|an opponent controls|opponents can't|each opponent|your opponents'|opponents control/.test(s) ? 'opp' : /\byou\b|your\b/.test(s) && !/each player|players\b/.test(s) ? 'self' : 'all';
+    const cond = /as long as ~ is untapped|as long as this permanent is untapped/.test(s) ? 'untapped' : /during your turn|on your turn/.test(s) ? 'myTurn' : null;
+    let m;
+    // one spell a turn (Rule of Law, Arcane Laboratory, Eidolon of Rhetoric, Archon of Emeria, Deafening Silence, Ethersworn Canonist)
+    if ((m = s.match(/(?:each player|players|each opponent|your opponents|you) can't cast more than (one|two) (noncreature |nonartifact |creature |)spells? each turn/))) { rules.push({ k: 'spellLimit', n: num(m[1]), kind: kindOf(m[2]) || 'all', scope, cond }); continue; }
+    // cost taxes (Thalia, Sphere, Thorn, Lodestone, Grand Arbiter, Aura of Silence, Vryn Wingmare, Glowrider, Defense Grid, Aether Barrier)
+    if ((m = s.match(/^((?:noncreature |nonartifact |creature |artifact |enchantment |instant |sorcery |instant and sorcery |artifact and enchantment |artifact, creature, and enchantment )?)spells?(?: your opponents cast| each opponent casts| you cast| that aren't [a-z]+)? costs? \{(\d+)\} more to cast(?: for each [a-z ]+)?/))) {
+      if (/for each/.test(s)) continue; rules.push({ k: 'tax', n: +m[2], kind: kindOf(m[1]) || 'all', scope: /your opponents cast|each opponent casts/.test(s) ? 'opp' : /you cast/.test(s) ? 'self' : 'all', cond }); continue;
+    }
+    if (/each spell costs \{3\} more to cast unless it's that player's turn|each spell costs \{3\} more to cast unless its controller cast it during their turn/.test(s)) { rules.push({ k: 'tax', n: 3, kind: 'all', scope: 'all', cond: 'notMyTurn' }); continue; }
+    if (/each spell with mana value less than 3 costs \{3\} to cast|spells with mana value less than 3 cost \{3\}|each spell that costs less than three mana to cast costs three mana to cast/.test(s) || /^spells cost as if they had mana value 3/.test(s)) { rules.push({ k: 'minCost', n: 3, scope: 'all' }); continue; }
+    // enters tapped (Kismet, Frozen Aether, Loxodon Gatekeeper, Authority of the Consuls, Blind Obedience, Urabrask, Imposing Sovereign, Thalia Heretic Cathar, Root Maze, Archon of Emeria for lands, Manglehorn)
+    if ((m = s.match(/^((?:(?:nonbasic )?(?:creatures|artifacts|lands|permanents|enchantments)(?:, | and |, and ))*(?:nonbasic )?(?:creatures|artifacts|lands|permanents|enchantments))(?: your opponents control| an opponent controls)? enters? (?:the battlefield )?tapped/))) {
+      const kinds = m[1].split(/, and |, | and /).map((w) => kindOf(w)).filter(Boolean); rules.push({ k: 'entersTapped', kinds, scope: /your opponents control|an opponent controls/.test(s) ? 'opp' : 'all', cond }); continue;
+    }
+    // attack taxes (Propaganda, Ghostly Prison, Windborn Muse, Baird, Koskun Falls, Archangel of Tithes, Sphere of Safety, Norn's Annex)
+    if ((m = s.match(/creatures can't attack you(?: or planeswalkers you control)? unless their controller pays (\{[^}]+\}|\{x\})(?: for each creature| for each of those creatures| for each creature they control that's attacking you)/))) {
+      const cst = m[1]; const life = /\{w\/p\}|\{[wubrg]\/p\}/.test(cst) ? 2 : 0; const n = cst === '{x}' ? 'x' : +(cst.match(/\d+/) || [1])[0]; rules.push({ k: 'attackTax', n: life ? 1 : n, life, scope: 'opp', cond, xCount: cst === '{x}' ? (s.match(/number of ([a-z]+)s? you control/) || [])[1] : null }); continue;
+    }
+    if ((m = s.match(/no more than (one|two|three) creatures? can attack (?:you )?each combat/))) { rules.push({ k: 'maxAttackers', n: num(m[1]), scope: /attack you/.test(s) ? 'opp' : 'all', cond }); continue; }
+    if (/^creatures can't attack\.?$/.test(s) || /^creatures can't attack(?: or block)?\.?$/.test(s)) { rules.push({ k: 'noAttack', kind: 'all', scope: 'all', cond }); continue; }
+    if (/^creatures without flying can't attack/.test(s)) { rules.push({ k: 'noAttack', kind: 'nonflying', scope: 'all', cond }); continue; }
+    if (/^creatures can't attack you(?: or planeswalkers you control)?\.?$/.test(s)) { rules.push({ k: 'noAttack', kind: 'you', scope: 'opp', cond }); continue; }
+    if (/creatures with power greater than the number of cards in your hand can't attack/.test(s)) { rules.push({ k: 'noAttack', kind: 'bridge', scope: 'all', cond }); continue; }
+    if (/^creatures can't block\.?$/.test(s)) { rules.push({ k: 'noBlock', kind: 'all', scope: 'all', cond }); continue; }
+    if (/your opponents can't block with creatures with even power/.test(s)) { rules.push({ k: 'noBlock', kind: 'even', scope: 'opp', cond }); continue; }
+    if (/your opponents can't cast spells with even mana values/.test(s)) { rules.push({ k: 'noCast', kind: 'even', scope: 'opp', cond }); continue; }
+    // activated abilities (Cursed Totem, Linvala, Null Rod, Stony Silence, Collector Ouphe, Karn, Clarion Conqueror)
+    if ((m = s.match(/activated abilities of (creatures|artifacts|artifacts and creatures|creatures and artifacts|nonland permanents|planeswalkers)(?: your opponents control| an opponent controls)? can't be activated/))) { const kinds = m[1].split(' and ').map((w) => kindOf(w)).filter(Boolean); rules.push({ k: 'noAbilities', kinds, scope: /your opponents control|an opponent controls/.test(s) ? 'opp' : 'all', cond }); continue; }
+    // ETB / dies hate (Torpor Orb, Hushwing Gryff, Hushbringer, Tocatli Honor Guard)
+    if (/creatures entering the battlefield(?: or dying)? don't cause abilities to trigger/.test(s)) { rules.push({ k: 'noETB', dies: /or dying/.test(s), scope: 'all' }); continue; }
+    if (/^creatures entering the battlefield don't cause abilities to trigger/.test(s)) { rules.push({ k: 'noETB', scope: 'all' }); continue; }
+    // searching (Stranglehold, Mindlock Orb, Ashiok, Leonin Arbiter, Aven Mindcensor, Ob Nixilis Unshackled, Opposition Agent)
+    if (/players can't search libraries|your opponents can't search libraries|can't search libraries/.test(s)) { rules.push({ k: 'noSearch', scope: /your opponents/.test(s) ? 'opp' : 'all' }); continue; }
+    if ((m = s.match(/players can't search libraries\. any player may pay \{(\d+)\}|any player may pay \{(\d+)\} for that player to ignore this effect/))) { rules.push({ k: 'searchTax', n: +(m[1] || m[2]), scope: 'all' }); continue; }
+    if (/if an opponent would search a library, that player searches the top four cards of that library instead/.test(s)) { rules.push({ k: 'searchTop', n: 4, scope: 'opp' }); continue; }
+    if (/whenever an opponent searches (?:their|his or her) library, that player loses 10 life/.test(s)) { rules.push({ k: 'noSearch', scope: 'opp', penalty: 10 }); continue; }
+    // casting from the command zone / outside hand (Drannith Magistrate, Lavinia, Gaddock Teeg, Void Winnower above)
+    if (/your opponents can't cast spells from anywhere other than their hands/.test(s)) { rules.push({ k: 'handOnly', scope: 'opp' }); continue; }
+    if (/each opponent can't cast noncreature spells with mana value greater than the number of lands that player controls/.test(s)) { rules.push({ k: 'noCast', kind: 'lavinia', scope: 'opp' }); continue; }
+    if (/noncreature spells with mana value 4 or greater can't be cast/.test(s)) { rules.push({ k: 'noCast', kind: 'mv4+', scope: 'all' }); continue; }
+    // untap restrictions (Winter Orb, Static Orb, Stasis, Hokori, Rising Waters, Mana Vortex-ish)
+    if (/players can't untap more than one land during their untap steps/.test(s)) { rules.push({ k: 'untap', lands: 1, scope: 'all', cond }); continue; }
+    if (/players can't untap more than two permanents during their untap steps/.test(s)) { rules.push({ k: 'untap', permanents: 2, scope: 'all', cond }); continue; }
+    if (/^permanents don't untap during their controllers' untap steps/.test(s)) { rules.push({ k: 'untap', permanents: 0, scope: 'all' }); continue; }
+    if (/^lands don't untap during their controllers' untap steps/.test(s)) { rules.push({ k: 'untap', lands: 0, plusUpkeep: /untaps a land/.test(text) ? 1 : 0, scope: 'all' }); continue; }
+    // life / draw (Sulfuric Vortex, Erebos, Narset, Spirit of the Labyrinth, Alms Collector)
+    if (/players can't gain life|your opponents can't gain life/.test(s)) { rules.push({ k: 'noLifeGain', scope: /your opponents/.test(s) ? 'opp' : 'all' }); continue; }
+    if (/(?:each opponent|your opponents|each player|players) can't draw more than one card each turn/.test(s)) { rules.push({ k: 'drawLimit', n: 1, scope: /opponent/.test(s) ? 'opp' : 'all' }); continue; }
+    if (/you have no maximum hand size/.test(s)) { rules.push({ k: 'noMaxHand', scope: 'self' }); continue; }
+    if (/creature cards in graveyards and libraries can't enter the battlefield/.test(s)) { rules.push({ k: 'noReanimate', scope: 'all' }); continue; }
+  }
+  return rules;
+}
+/** Everything the board says seat `me` must obey, from every permanent on the battlefield. */
+export function boardRules(cards, me, isCreatureFn, handSizeOf) {
+  const out = { spellLimit: null, taxes: [], minCost: 0, entersTapped: new Set(), attackTax: [], maxAttackers: null, noAttack: [], noBlock: [], noCast: [], noAbilities: new Set(), noETB: false, noDies: false, noSearch: false, searchTax: 0, searchTop: 0, handOnly: false, untap: null, noLifeGain: false, drawLimit: null, noMaxHand: false, noReanimate: false, sources: [] };
+  for (const c of cards) {
+    if (!c || c.zone !== 'battlefield' || !c.oracle) continue;
+    for (const r of parseRules(c)) {
+      const applies = r.scope === 'all' || (r.scope === 'opp' && c.controller !== me) || (r.scope === 'self' && c.controller === me);
+      if (!applies) continue;
+      if (r.cond === 'untapped' && c.tapped) continue;
+      out.sources.push({ name: c.name, rule: r.k, by: c.controller });
+      switch (r.k) {
+        case 'spellLimit': if (!out.spellLimit || r.n < out.spellLimit.n) out.spellLimit = { n: r.n, kind: r.kind, src: c.name }; break;
+        case 'tax': out.taxes.push({ n: r.n, kind: r.kind, src: c.name, cond: r.cond }); break;
+        case 'minCost': out.minCost = Math.max(out.minCost, r.n); break;
+        case 'entersTapped': r.kinds.forEach((k) => out.entersTapped.add(k)); break;
+        case 'attackTax': out.attackTax.push({ n: r.n === 'x' ? cards.filter((x) => x.controller === c.controller && x.zone === 'battlefield' && new RegExp((r.xCount || 'enchantment').replace(/s$/, ''), 'i').test(x.type)).length : r.n, life: r.life, src: c.name, by: c.controller }); break;
+        case 'maxAttackers': if (!out.maxAttackers || r.n < out.maxAttackers.n) out.maxAttackers = { n: r.n, src: c.name, by: r.scope === 'opp' ? c.controller : null }; break;
+        case 'noAttack': out.noAttack.push({ kind: r.kind, src: c.name, by: c.controller, hand: handSizeOf ? handSizeOf(c.controller) : 0 }); break;
+        case 'noBlock': out.noBlock.push({ kind: r.kind, src: c.name, by: c.controller }); break;
+        case 'noCast': out.noCast.push({ kind: r.kind, src: c.name }); break;
+        case 'noAbilities': r.kinds.forEach((k) => out.noAbilities.add(k)); break;
+        case 'noETB': out.noETB = true; if (r.dies) out.noDies = true; break;
+        case 'noSearch': out.noSearch = true; break;
+        case 'searchTax': out.searchTax = Math.max(out.searchTax, r.n); break;
+        case 'searchTop': out.searchTop = r.n; break;
+        case 'handOnly': out.handOnly = true; break;
+        case 'untap': out.untap = { lands: Math.min(r.lands ?? Infinity, out.untap?.lands ?? Infinity), permanents: Math.min(r.permanents ?? Infinity, out.untap?.permanents ?? Infinity), plusUpkeep: Math.max(r.plusUpkeep || 0, out.untap?.plusUpkeep || 0), src: c.name }; break;
+        case 'noLifeGain': out.noLifeGain = true; break;
+        case 'drawLimit': out.drawLimit = r.n; break;
+        case 'noMaxHand': out.noMaxHand = true; break;
+        case 'noReanimate': out.noReanimate = true; break;
+      }
+    }
+  }
+  return out;
+}
+/** Does a spell of this card's type fall under `kind`? */
+export function spellKind(c, kind) {
+  const t = c.type || ''; const creature = /Creature/.test(t);
+  switch (kind) {
+    case 'all': return true; case 'creature': return creature; case 'noncreature': return !creature;
+    case 'artifact': return /Artifact/.test(t); case 'nonartifact': return !/Artifact/.test(t); case 'enchantment': return /Enchantment/.test(t);
+    case 'instant': return /Instant/.test(t); case 'sorcery': return /Sorcery/.test(t); case 'instant|sorcery': return /Instant|Sorcery/.test(t); case 'artifact|enchantment': return /Artifact|Enchantment/.test(t);
+    case 'artifact|creature|enchantment': return /Artifact|Creature|Enchantment/.test(t); case 'land': return /Land/.test(t); case 'nonbasic': return /Land/.test(t) && !/Basic/.test(t);
+    case 'permanent': return !/Instant|Sorcery/.test(t); case 'nonland': return !/Land/.test(t); default: return false;
+  }
+}
+export const manaValue = (c) => (String(c.cost || '').match(/\{[^}]+\}/g) || []).reduce((a, t) => { const v = t.slice(1, -1); return a + (/^\d+$/.test(v) ? +v : v === 'X' ? 0 : 1); }, 0);
+/** Extra mana a spell costs under the board's taxes. */
+export function castTax(rules, c, myTurn = true) {
+  let extra = 0;
+  for (const t of rules.taxes) { if (t.cond === 'notMyTurn' && myTurn) continue; if (spellKind(c, t.kind)) extra += t.n; }
+  const mv = manaValue(c); if (rules.minCost && mv + extra < rules.minCost) extra = rules.minCost - mv;
+  return extra;
+}
+/** Why this seat can't cast the card right now under the board rules, or null. */
+export function castBlock(rules, c, ctx) {
+  const mv = manaValue(c);
+  if (rules.handOnly && c.zone !== 'hand') return 'can only cast from hand';
+  if (rules.spellLimit && ctx.castsThisTurn >= rules.spellLimit.n && (rules.spellLimit.kind === 'all' || spellKind(c, rules.spellLimit.kind))) return `${rules.spellLimit.src}: one spell this turn`;
+  for (const b of rules.noCast) {
+    if (b.kind === 'even' && mv % 2 === 0) return `${b.src}: no even mana values`;
+    if (b.kind === 'mv4+' && !/Creature/.test(c.type) && mv >= 4) return `${b.src}: no noncreature spells of 4+`;
+    if (b.kind === 'lavinia' && !/Creature/.test(c.type) && mv > (ctx.lands || 0)) return `${b.src}: mana value above land count`;
+  }
+  return null;
+}

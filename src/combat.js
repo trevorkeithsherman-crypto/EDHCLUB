@@ -4,8 +4,10 @@
 
 const num = (s) => { const n = parseInt(s, 10); return isNaN(n) ? 0 : n; };
 // The table can register a context function that returns static bonuses (anthems, keyword grants) for a card.
-let ctxFn = null;
+let ctxFn = null; let vetoFn = { attack: null, block: null };
 export function setStaticContext(fn) { ctxFn = fn; }
+/** The table can veto attacks and blocks from board rules (Peacekeeper, Moat, Ensnaring Bridge, Bedlam, Void Winnower). */
+export function setVetoes(o) { vetoFn = { ...vetoFn, ...o }; }
 const grant = (c) => (ctxFn && c && c.zone === 'battlefield' ? ctxFn(c) : null) || { p: 0, t: 0, kw: '' };
 export function ptOf(c) {
   if (!c || !c.pt) return [0, 0];
@@ -29,6 +31,7 @@ export function canAttack(c) {
   if (c.tapped) return { ok: false, why: 'Tapped' };
   if (has(c, 'defender')) return { ok: false, why: 'Defender' };
   if (c.sick && !has(c, 'haste')) return { ok: false, why: 'Summoning sick' };
+  const v = vetoFn.attack && vetoFn.attack(c); if (v) return { ok: false, why: v };
   return { ok: true };
 }
 /** Can this creature block that attacker (ignoring menace, which is a property of the whole block)? */
@@ -36,6 +39,7 @@ export function canBlock(b, a) {
   if (!isCreature(b) || b.tapped) return false;
   if (kws(b).some((k) => k === "can't block")) return false;
   if (has(a, 'flying') && !(has(b, 'flying') || has(b, 'reach'))) return false;
+  if (vetoFn.block && vetoFn.block(b, a)) return false;
   return true;
 }
 export function blockLegal(a, blockers) {

@@ -84,8 +84,8 @@ with sync_playwright() as p:
     host.click('.me .pname'); host.click('.mi:has-text("Choose playmat")'); host.wait_for_timeout(200); host.set_input_files('#matFile', SP + 'm.jpg'); host.wait_for_timeout(800); host.keyboard.press('Escape'); guest.wait_for_timeout(800)
     check('host custom mat is private to host (KNOWN GAP: not shared)', guest.eval_on_selector('.seat[data-seat="0"]', 'e=>e.dataset.mat') != 'custom')
     # built-in mat choice IS synced
-    host.click('.me .pname'); host.click('.mi:has-text("Choose playmat")'); host.wait_for_timeout(200); host.click('[data-mat-pick=sun]'); host.wait_for_timeout(300); host.keyboard.press('Escape'); guest.wait_for_timeout(900)
-    check('built-in mat choice syncs to the other player', guest.eval_on_selector('.seat[data-seat="0"]', 'e=>e.dataset.mat') == 'sun')
+    host.click('.me .pname'); host.click('.mi:has-text("Choose playmat")'); host.wait_for_timeout(200); host.click('[data-mat-pick=orzhov]'); host.wait_for_timeout(300); host.keyboard.press('Escape'); guest.wait_for_timeout(900)
+    check('built-in mat choice syncs to the other player', guest.eval_on_selector('.seat[data-seat="0"]', 'e=>e.dataset.mat') == 'orzhov')
     # guest views host graveyard (allowed) and cannot draw for host
     menu(host, host.locator('.me .bf .card').first, 'Put in graveyard'); guest.wait_for_timeout(900)
     guest.locator('.seat[data-seat="0"] [data-zone$=graveyard]').click(); guest.wait_for_timeout(300)

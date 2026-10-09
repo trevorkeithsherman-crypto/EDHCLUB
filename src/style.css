@@ -66,11 +66,16 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round
 .seat.targetable::after { opacity: 1; box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 70px rgba(226, 182, 89, .3); }
 .seat.targetable { cursor: crosshair; }
 .seat .amb { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-.seat[data-mat="ember"] { --mat-accent: #ff8a3d; background-image: url(/mats/ember.jpg); }
-.seat[data-mat="tide"] { --mat-accent: #5fd0ff; background-image: url(/mats/tide.jpg); }
-.seat[data-mat="grave"] { --mat-accent: #9fd9a4; background-image: url(/mats/grave.jpg); }
-.seat[data-mat="sun"] { --mat-accent: #ffe08a; background-image: url(/mats/sun.jpg); }
-.seat[data-mat="wild"] { --mat-accent: #b8ff7a; background-image: url(/mats/wild.jpg); }
+.seat[data-mat="azorius"] { --mat-accent: #8fc8ff; background-image: url(/mats/azorius.jpg); }
+.seat[data-mat="orzhov"] { --mat-accent: #ffd68a; background-image: url(/mats/orzhov.jpg); }
+.seat[data-mat="dimir"] { --mat-accent: #9a8cff; background-image: url(/mats/dimir.jpg); }
+.seat[data-mat="izzet"] { --mat-accent: #ff6a5a; background-image: url(/mats/izzet.jpg); }
+.seat[data-mat="rakdos"] { --mat-accent: #ff7a3a; background-image: url(/mats/rakdos.jpg); }
+.seat[data-mat="golgari"] { --mat-accent: #7fd8a8; background-image: url(/mats/golgari.jpg); }
+.seat[data-mat="gruul"] { --mat-accent: #b8e36a; background-image: url(/mats/gruul.jpg); }
+.seat[data-mat="boros"] { --mat-accent: #ffb04a; background-image: url(/mats/boros.jpg); }
+.seat[data-mat="selesnya"] { --mat-accent: #d8f08a; background-image: url(/mats/selesnya.jpg); }
+.seat[data-mat="simic"] { --mat-accent: #8ee8ff; background-image: url(/mats/simic.jpg); }
 .seat.out .bf, .seat.out .dock { filter: grayscale(.9) brightness(.45); }
 .me .seat { grid-template-rows: minmax(120px, 1fr) auto; }
 
@@ -325,8 +330,7 @@ body.is-drag, body.is-drag * { cursor: grabbing !important; }
 .matopt > span { position: relative; z-index: 1; }
 .matopt.on { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(79, 195, 255, .5), 0 0 18px rgba(79, 195, 255, .4); }
 .matopt small { display: block; font: 500 11px var(--f-ui); color: var(--muted); }
-.matopt.ember { background-image: url(/mats/ember-thumb.jpg); } .matopt.tide { background-image: url(/mats/tide-thumb.jpg); } .matopt.grave { background-image: url(/mats/grave-thumb.jpg); }
-.matopt.sun { background-image: url(/mats/sun-thumb.jpg); } .matopt.wild { background-image: url(/mats/wild-thumb.jpg); }
+.matopt.azorius { background-image: url(/mats/azorius-thumb.jpg); } .matopt.orzhov { background-image: url(/mats/orzhov-thumb.jpg); } .matopt.dimir { background-image: url(/mats/dimir-thumb.jpg); } .matopt.izzet { background-image: url(/mats/izzet-thumb.jpg); } .matopt.rakdos { background-image: url(/mats/rakdos-thumb.jpg); } .matopt.golgari { background-image: url(/mats/golgari-thumb.jpg); } .matopt.gruul { background-image: url(/mats/gruul-thumb.jpg); } .matopt.boros { background-image: url(/mats/boros-thumb.jpg); } .matopt.selesnya { background-image: url(/mats/selesnya-thumb.jpg); } .matopt.simic { background-image: url(/mats/simic-thumb.jpg); }
 .matopt.auto { background-image: linear-gradient(135deg, #3a1c14, #12304a 33%, #1e2320 50%, #4a3d2c 70%, #1f3a1c); }
 
 #toasts { position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 90; display: grid; gap: 6px; justify-items: center; pointer-events: none; width: min(540px, calc(100% - 32px)); }
@@ -387,3 +391,4 @@ body.is-drag, body.is-drag * { cursor: grabbing !important; }
 .prompt .btn.hot { background: linear-gradient(180deg, #2f8fe0, #1a5fb4); border-color: rgba(79, 195, 255, .6); color: #fff; }
 .prompt.outgoing { flex-direction: row; align-items: center; }
 @media (max-width: 760px) { .prompt { top: auto; bottom: 90px; width: calc(100vw - 24px); } .prompt.multi { min-width: 0; } }
+.small { font-size: 12px; } .mpanel .muted { color: var(--muted); }

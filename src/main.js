@@ -23,13 +23,19 @@ const HEX = {};
 const ZLABEL = { library: 'Library', hand: 'Hand', battlefield: 'Battlefield', graveyard: 'Graveyard', exile: 'Exile', command: 'Command zone', stack: 'Stack' };
 const RATIO = 1.397;
 const MATS = {
-  ember: { name: 'Emberforge', blurb: 'Volcanic stone, rising sparks' },
-  tide: { name: 'Tidehollow', blurb: 'Deep water, drifting bubbles' },
-  grave: { name: 'Gravewood', blurb: 'Rolling mist, will-o-wisps' },
-  sun: { name: 'Sunspire', blurb: 'Warm marble, falling light' },
-  wild: { name: 'Wildheart', blurb: 'Forest canopy, fireflies' },
+  azorius: { name: 'Azorius Senate', blurb: 'Blue domes, drifting haze and gulls', credit: 'Richard Wright' },
+  orzhov: { name: 'Orzhov Basilica', blurb: 'Gilded spires, candlelit windows', credit: 'Richard Wright' },
+  dimir: { name: 'Dimir Waterways', blurb: 'Sunlit stone over dark water', credit: 'Richard Wright' },
+  izzet: { name: 'Izzet Boilerworks', blurb: 'Steam, sparks and arcing current', credit: 'Richard Wright' },
+  rakdos: { name: 'Rakdos Rix Maadi', blurb: 'Firelit halls, rising embers', credit: 'Richard Wright' },
+  golgari: { name: 'Golgari Undercity', blurb: 'Rot-light, mist and spores', credit: 'Richard Wright' },
+  gruul: { name: 'Gruul Rubblebelt', blurb: 'Overgrown ruins, sun dapple', credit: 'Richard Wright' },
+  boros: { name: 'Boros Sunhome', blurb: 'War forges, heat and cinders', credit: 'Richard Wright' },
+  selesnya: { name: 'Selesnya Vitu-Ghazi', blurb: 'Great tree, pollen on the wind', credit: 'Richard Wright' },
+  simic: { name: 'Simic Zonot', blurb: 'Cloud sea, bio-lights pulsing', credit: 'Richard Wright' },
 };
-const MAT_BY_COLOR = { W: 'sun', U: 'tide', B: 'grave', R: 'ember', G: 'wild' };
+const MAT_BY_COLOR = { W: 'orzhov', U: 'azorius', B: 'golgari', R: 'rakdos', G: 'selesnya' };
+const MAT_BY_PAIR = { WU: 'azorius', UB: 'dimir', BR: 'rakdos', RG: 'gruul', GW: 'selesnya', WB: 'orzhov', UR: 'izzet', BG: 'golgari', RW: 'boros', GU: 'simic' };
 const CUSTOM_KEY = 'edhclub-custom-mats';
 let customMats = {};
 try { customMats = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '{}'); } catch { customMats = {}; }
@@ -586,8 +592,9 @@ function matOf(i) {
   const p = P(i);
   if (p.mat === 'custom' && customMats[i]) return 'custom';
   if (p.mat && p.mat !== 'auto' && MATS[p.mat]) return p.mat;
-  const c = commandersOf(i)[0]; const col = c ? (c.colors || '')[0] : '';
-  return MAT_BY_COLOR[col] || ['wild', 'tide', 'grave', 'sun'][i % 4];
+  const c = commandersOf(i)[0]; const cols = c ? (c.colors || '') : '';
+  const pair = cols.length === 2 ? (MAT_BY_PAIR[cols] || MAT_BY_PAIR[cols[1] + cols[0]]) : null;
+  return pair || MAT_BY_COLOR[cols[0]] || ['azorius', 'rakdos', 'selesnya', 'dimir'][i % 4];
 }
 const others = () => [1, 2, 3].map((k) => (S.view + k) % 4).filter((k) => k < (S.seats || 4));
 function avatarHTML(i, big) {
@@ -922,8 +929,9 @@ function matModal(pi) {
   const seatStyle = (k) => { const el = document.createElement('div'); el.className = 'seat'; el.dataset.mat = k; document.body.appendChild(el); const bg = getComputedStyle(el).backgroundImage; el.remove(); return `style="background:${bg.replace(/"/g, '&quot;')}"`; };
   const now = matOf(pi); const nowName = now === 'custom' ? 'your upload' : MATS[now].name;
   const custom = customMats[pi] ? opt('custom', 'Your mat', 'Uploaded image', `style="background-image:url(${customMats[pi]})"`) : '';
-  openModal(`<h2>${esc(p.name)}'s playmat</h2><p>Each mat is its own corner of the multiverse, with its own weather. Auto matches the commander's colors. Upload your own art to play on it; wide images (about 3:2) fit best.</p>
-  <div class="matgrid">${opt('auto', 'Auto', `Now: ${nowName}`)}${Object.entries(MATS).map(([k, m]) => opt(k, m.name, m.blurb, seatStyle(k))).join('')}${custom}</div>
+  openModal(`<h2>${esc(p.name)}'s playmat</h2><p>Ten guild halls of Ravnica, each with its own weather. Auto picks the guild that matches your commander's colors. Upload your own art to play on it; wide images (about 2:1) fit best.</p>
+  <div class="matgrid">${opt('auto', 'Auto', `Now: ${nowName}`)}${Object.entries(MATS).map(([k, m]) => opt(k, m.name, m.blurb)).join('')}${custom}</div>
+  <p class="muted small">Guild art by Richard Wright, © Wizards of the Coast, used under the Fan Content Policy.</p>
   <input type="file" id="matFile" accept="image/*" hidden>
   <div class="row" style="justify-content:space-between"><span><button type="button" class="btn ghost" id="matUpload">${customMats[pi] ? 'Replace your mat' : 'Upload your own'}</button> ${customMats[pi] ? '<button type="button" class="btn ghost" id="matRemove">Remove</button>' : ''}</span><button type="button" class="btn" data-act="close">Done</button></div>`);
   $('#modal .mpanel').addEventListener('click', (e) => { const b = e.target.closest('[data-mat-pick]'); if (!b) return; p.mat = b.dataset.matPick; render(); matModal(pi); });

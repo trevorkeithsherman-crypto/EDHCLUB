@@ -261,7 +261,7 @@ with sync_playwright() as p:
     # seat switch (hotseat), rename, playmat
     pg.select_option('#viewSel', '2'); pg.wait_for_timeout(500); check('Playing as switches seat', state(pg)['view'] == 2 and 'Dax' in pg.locator('.me .pname').text_content())
     pg.click('.me .pname'); pg.click('.mi:has-text("Rename")'); pg.fill('#rnIn', 'Renamed'); pg.keyboard.press('Enter'); pg.wait_for_timeout(300); check('rename seat', state(pg)['players'][2]['name'] == 'Renamed')
-    pg.click('.me .pname'); pg.click('.mi:has-text("Choose playmat")'); pg.wait_for_timeout(300); pg.click('[data-mat-pick=sun]'); pg.wait_for_timeout(300); check('choose playmat', pg.eval_on_selector('.me .seat', 'e=>e.dataset.mat') == 'sun'); pg.keyboard.press('Escape')
+    pg.click('.me .pname'); pg.click('.mi:has-text("Choose playmat")'); pg.wait_for_timeout(300); pg.click('[data-mat-pick=orzhov]'); pg.wait_for_timeout(300); check('choose playmat', pg.eval_on_selector('.me .seat', 'e=>e.dataset.mat') == 'orzhov'); pg.keyboard.press('Escape')
     pg.select_option('#viewSel', '0'); pg.wait_for_timeout(400)
     # settings menu
     pg.click('#settingsBtn'); pg.wait_for_timeout(200); pg.click('.mi:has-text("Playmat effects")'); pg.wait_for_timeout(300); check('settings: effects toggle', state(pg)['fx'] is False)

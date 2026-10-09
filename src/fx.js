@@ -102,45 +102,41 @@ export const SFX = {
 
 /* ---------- Ambient worlds: one small canvas per playmat ---------- */
 const R = (a, b) => a + Math.random() * (b - a);
-const WORLDS = {
-  ember: {
-    density: 0.00035,
-    spawn: (w, h) => ({ x: R(0, w), y: h + 6, vx: R(-0.15, 0.15), vy: R(-0.9, -0.35), s: R(1, 3), life: 0, max: R(120, 260), c: Math.random() < 0.3 ? '#ffd08a' : '#ff7a2a', wob: R(0, 6.3) }),
-    step: (p, t) => { p.x += p.vx + Math.sin(t / 25 + p.wob) * 0.25; p.y += p.vy; },
-    draw: (cx, p, a) => { cx.globalAlpha = a * 0.9; cx.fillStyle = p.c; cx.shadowColor = p.c; cx.shadowBlur = 8; cx.beginPath(); cx.arc(p.x, p.y, p.s * (0.6 + 0.4 * a), 0, 6.3); cx.fill(); },
-    glow: (cx, w, h, t) => { const g = cx.createRadialGradient(w * 0.5, h * 1.05, 0, w * 0.5, h * 1.05, h * 0.7); const k = 0.1 + Math.sin(t / 90) * 0.04; g.addColorStop(0, `rgba(255,120,50,${k})`); g.addColorStop(1, 'rgba(255,120,50,0)'); cx.fillStyle = g; cx.fillRect(0, 0, w, h); },
-  },
-  tide: {
-    density: 0.00025,
-    spawn: (w, h) => ({ x: R(0, w), y: h + 6, vx: 0, vy: R(-0.5, -0.2), s: R(1.5, 4), life: 0, max: R(200, 380), c: '#9fe3ff', wob: R(0, 6.3) }),
-    step: (p, t) => { p.x += Math.sin(t / 30 + p.wob) * 0.35; p.y += p.vy; },
-    draw: (cx, p, a) => { cx.globalAlpha = a * 0.55; cx.strokeStyle = p.c; cx.lineWidth = 1; cx.beginPath(); cx.arc(p.x, p.y, p.s, 0, 6.3); cx.stroke(); cx.globalAlpha = a * 0.5; cx.fillStyle = '#fff'; cx.beginPath(); cx.arc(p.x - p.s * 0.35, p.y - p.s * 0.35, p.s * 0.25, 0, 6.3); cx.fill(); },
-    glow: (cx, w, h, t) => { cx.globalAlpha = 0.07; cx.strokeStyle = '#bfefff'; cx.lineWidth = 1.5; for (let i = 0; i < 5; i++) { cx.beginPath(); for (let x = 0; x <= w; x += 12) { const y = h * (0.15 + i * 0.18) + Math.sin(x / 70 + t / 60 + i) * 9 + Math.cos(x / 31 - t / 80) * 4; x ? cx.lineTo(x, y) : cx.moveTo(x, y); } cx.stroke(); } },
-  },
-  grave: {
-    density: 0.00006,
-    spawn: (w, h) => ({ x: R(-80, w), y: R(h * 0.45, h * 1.05), vx: R(0.12, 0.35), vy: R(-0.04, 0.02), s: R(50, 130), life: 0, max: R(500, 900), c: '#c8d8cc', wob: R(0, 6.3) }),
-    step: (p, t) => { p.x += p.vx; p.y += p.vy + Math.sin(t / 90 + p.wob) * 0.05; },
-    draw: (cx, p, a) => { const g = cx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.s); g.addColorStop(0, `rgba(200,216,204,${0.13 * a})`); g.addColorStop(1, 'rgba(200,216,204,0)'); cx.globalAlpha = 1; cx.fillStyle = g; cx.fillRect(p.x - p.s, p.y - p.s, p.s * 2, p.s * 2); },
-    glow: (cx, w, h, t) => { if (Math.random() < 0.004) { cx.globalAlpha = 0.5; cx.fillStyle = '#b6ffc0'; cx.shadowColor = '#b6ffc0'; cx.shadowBlur = 12; cx.beginPath(); cx.arc(R(0, w), R(h * 0.3, h), 1.5, 0, 6.3); cx.fill(); } },
-  },
-  sun: {
-    density: 0.0002,
-    spawn: (w, h) => ({ x: R(0, w * 1.2), y: -6, vx: R(-0.25, -0.1), vy: R(0.18, 0.45), s: R(1, 2.6), life: 0, max: R(220, 420), c: '#ffe9b0', wob: R(0, 6.3) }),
-    step: (p, t) => { p.x += p.vx + Math.sin(t / 40 + p.wob) * 0.15; p.y += p.vy; },
-    draw: (cx, p, a) => { cx.globalAlpha = a * (0.5 + 0.5 * Math.sin(p.life / 9 + p.wob)); cx.fillStyle = p.c; cx.shadowColor = p.c; cx.shadowBlur = 6; cx.beginPath(); cx.arc(p.x, p.y, p.s, 0, 6.3); cx.fill(); },
-    glow: (cx, w, h, t) => { cx.save(); cx.globalAlpha = 0.07 + Math.sin(t / 120) * 0.02; cx.translate(w * 0.72, -h * 0.4); cx.rotate(0.55); const g = cx.createLinearGradient(0, 0, 0, h * 2); g.addColorStop(0, '#fff2c4'); g.addColorStop(1, 'rgba(255,242,196,0)'); cx.fillStyle = g; for (let i = 0; i < 4; i++) cx.fillRect(i * 70 + Math.sin(t / 200 + i) * 10, 0, 18 + i * 6, h * 2.2); cx.restore(); },
-  },
-  wild: {
-    density: 0.00022,
-    spawn: (w, h) => (Math.random() < 0.65
-      ? { k: 'fly', x: R(0, w), y: R(h * 0.2, h), vx: R(-0.25, 0.25), vy: R(-0.2, 0.2), s: R(1.2, 2.2), life: 0, max: R(200, 400), c: '#d8ff7a', wob: R(0, 6.3) }
-      : { k: 'leaf', x: R(0, w), y: -8, vx: R(-0.3, 0.1), vy: R(0.3, 0.6), s: R(3, 6), life: 0, max: R(260, 420), c: Math.random() < 0.5 ? '#7fb35a' : '#b8933a', wob: R(0, 6.3), rot: R(0, 6.3) }),
-    step: (p, t) => { if (p.k === 'fly') { p.vx += R(-0.03, 0.03); p.vy += R(-0.03, 0.03); p.vx *= 0.98; p.vy *= 0.98; p.x += p.vx; p.y += p.vy; } else { p.x += p.vx + Math.sin(t / 35 + p.wob) * 0.5; p.y += p.vy; p.rot += 0.02; } },
-    draw: (cx, p, a) => { if (p.k === 'fly') { const b = Math.max(0, Math.sin(p.life / 14 + p.wob)); cx.globalAlpha = a * b; cx.fillStyle = p.c; cx.shadowColor = p.c; cx.shadowBlur = 10; cx.beginPath(); cx.arc(p.x, p.y, p.s, 0, 6.3); cx.fill(); } else { cx.globalAlpha = a * 0.7; cx.fillStyle = p.c; cx.save(); cx.translate(p.x, p.y); cx.rotate(p.rot); cx.beginPath(); cx.ellipse(0, 0, p.s, p.s * 0.45, 0, 0, 6.3); cx.fill(); cx.restore(); } },
-    glow: (cx, w, h, t) => { const g = cx.createRadialGradient(w * 0.85, 0, 0, w * 0.85, 0, h * 0.9); const k = 0.08 + Math.sin(t / 110) * 0.03; g.addColorStop(0, `rgba(200,255,150,${k})`); g.addColorStop(1, 'rgba(200,255,150,0)'); cx.fillStyle = g; cx.fillRect(0, 0, w, h); },
-  },
-};
+// Building blocks: each world is a particle recipe plus a slow "glow" pass painted under the particles.
+// Everything is deliberately quiet; the painting is the star and the weather should only be noticed on a second look.
+const motes = (o) => ({
+  density: o.density,
+  spawn: (w, h) => ({ x: R(o.x ? o.x[0] * w : 0, o.x ? o.x[1] * w : w), y: o.up ? h + 6 : (o.band ? R(o.band[0] * h, o.band[1] * h) : -6), vx: R(o.vx[0], o.vx[1]), vy: R(o.vy[0], o.vy[1]), s: R(o.s[0], o.s[1]), life: 0, max: R(o.max[0], o.max[1]), c: Array.isArray(o.c) ? o.c[Math.floor(Math.random() * o.c.length)] : o.c, wob: R(0, 6.3) }),
+  step: (p, t) => { p.x += p.vx + Math.sin(t / (o.sway || 30) + p.wob) * (o.swayAmt || 0.2); p.y += p.vy; },
+  draw: (cx, p, a) => { const tw = o.twinkle ? 0.45 + 0.55 * Math.abs(Math.sin(p.life / 11 + p.wob)) : 1; cx.globalAlpha = a * (o.alpha || 0.8) * tw; cx.fillStyle = p.c; if (o.blur) { cx.shadowColor = p.c; cx.shadowBlur = o.blur; } cx.beginPath(); cx.arc(p.x, p.y, p.s, 0, 6.3); cx.fill(); },
+});
+const mist = (o) => ({
+  density: o.density || 0.00006,
+  spawn: (w, h) => ({ x: R(-80, w), y: R((o.band ? o.band[0] : 0.45) * h, (o.band ? o.band[1] : 1.05) * h), vx: R(o.vx ? o.vx[0] : 0.12, o.vx ? o.vx[1] : 0.35), vy: R(-0.04, 0.02), s: R(60, 150), life: 0, max: R(500, 900), c: o.c, wob: R(0, 6.3) }),
+  step: (p, t) => { p.x += p.vx; p.y += p.vy + Math.sin(t / 90 + p.wob) * 0.05; },
+  draw: (cx, p, a) => { const g = cx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.s); g.addColorStop(0, `rgba(${o.c},${(o.alpha || 0.12) * a})`); g.addColorStop(1, `rgba(${o.c},0)`); cx.globalAlpha = 1; cx.fillStyle = g; cx.fillRect(p.x - p.s, p.y - p.s, p.s * 2, p.s * 2); },
+});
+// Mix two recipes: the second gets a share of the spawns.
+const mix = (A, B, shareB = 0.4) => ({
+  density: A.density + B.density,
+  spawn: (w, h) => { const b = Math.random() < shareB; const p = (b ? B : A).spawn(w, h); p._r = b ? B : A; return p; },
+  step: (p, t) => p._r.step(p, t),
+  draw: (cx, p, a) => p._r.draw(cx, p, a),
+});
+const pulse = (cx, x, y, r, rgb, k) => { const g = cx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(${rgb},${k})`); g.addColorStop(1, `rgba(${rgb},0)`); cx.fillStyle = g; cx.fillRect(x - r, y - r, r * 2, r * 2); };
+const shafts = (cx, w, h, t, rgb, ox = 0.7, rot = 0.5, n = 4, base = 0.06) => { cx.save(); cx.globalAlpha = base + Math.sin(t / 140) * 0.02; cx.translate(w * ox, -h * 0.4); cx.rotate(rot); const g = cx.createLinearGradient(0, 0, 0, h * 2); g.addColorStop(0, `rgba(${rgb},1)`); g.addColorStop(1, `rgba(${rgb},0)`); cx.fillStyle = g; for (let i = 0; i < n; i++) cx.fillRect(i * 80 + Math.sin(t / 220 + i) * 12, 0, 16 + i * 7, h * 2.2); cx.restore(); };
+const W_ = {};
+W_.azorius = { ...motes({ density: 0.00004, c: '#eef4ff', vx: [-0.5, -0.25], vy: [-0.05, 0.05], s: [0.8, 1.4], max: [400, 700], band: [0.05, 0.4], alpha: 0.5 }), glow: (cx, w, h, t) => { shafts(cx, w, h, t, '220,235,255', 0.25, -0.35, 3, 0.05); pulse(cx, w * 0.5, h * 0.1, h * 0.8, '190,215,255', 0.05 + Math.sin(t / 160) * 0.015); } };
+W_.orzhov = { ...motes({ density: 0.00009, c: ['#ffe2a0', '#fff1c8'], up: true, vx: [-0.1, 0.1], vy: [-0.25, -0.08], s: [0.7, 1.6], max: [300, 600], alpha: 0.6, twinkle: true, blur: 6 }), glow: (cx, w, h, t) => { const k = 0.07 + Math.sin(t / 50) * 0.012 + Math.sin(t / 17) * 0.006; pulse(cx, w * 0.68, h * 0.55, h * 0.55, '255,190,90', k); pulse(cx, w * 0.5, h * 0.45, h * 0.3, '255,200,110', k * 0.6); } };
+W_.dimir = { ...mix(mist({ density: 0.00005, c: '120,110,170', alpha: 0.1, band: [0.55, 1.05], vx: [0.05, 0.15] }), motes({ density: 0.00003, c: '#b9a8ff', vx: [-0.05, 0.05], vy: [-0.08, -0.02], s: [0.7, 1.3], max: [200, 400], band: [0.6, 1], up: false, alpha: 0.7, twinkle: true, blur: 8 }), 0.4), glow: (cx, w, h, t) => { shafts(cx, w, h, t, '255,236,190', 0.3, 0.45, 4, 0.05); if (Math.random() < 0.003) { cx.globalAlpha = 0.35; cx.fillStyle = '#d6c9ff'; cx.shadowColor = '#d6c9ff'; cx.shadowBlur = 14; cx.beginPath(); cx.arc(R(w * 0.5, w), R(h * 0.55, h), 1.3, 0, 6.3); cx.fill(); } } };
+W_.izzet = { ...mix(mist({ density: 0.00006, c: '170,200,255', alpha: 0.09, band: [0.6, 1.05], vx: [-0.2, 0.2] }), motes({ density: 0.00007, c: ['#7fd4ff', '#ff8a6a', '#fff'], up: true, vx: [-0.3, 0.3], vy: [-0.9, -0.3], s: [0.6, 1.4], max: [60, 140], x: [0.3, 0.75], alpha: 0.9, blur: 8, sway: 8, swayAmt: 0.8 }), 0.5), glow: (cx, w, h, t) => { const k = 0.07 + Math.abs(Math.sin(t / 23)) * 0.05; pulse(cx, w * 0.58, h * 0.6, h * 0.45, '255,80,50', k); pulse(cx, w * 0.5, h * 0.35, h * 0.3, '70,140,255', 0.06 + Math.abs(Math.sin(t / 37 + 1)) * 0.05); if (Math.random() < 0.012) { cx.globalAlpha = 0.5; cx.strokeStyle = '#bfe8ff'; cx.lineWidth = 1; cx.shadowColor = '#7fd4ff'; cx.shadowBlur = 10; cx.beginPath(); let x = R(w * 0.4, w * 0.65), y = R(h * 0.25, h * 0.55); cx.moveTo(x, y); for (let i = 0; i < 5; i++) { x += R(-18, 18); y += R(-14, 14); cx.lineTo(x, y); } cx.stroke(); } } };
+W_.rakdos = { ...motes({ density: 0.0003, c: ['#ff8a3a', '#ffc27a', '#ff5a2a'], up: true, vx: [-0.15, 0.15], vy: [-0.8, -0.3], s: [0.8, 2.4], max: [120, 260], alpha: 0.85, blur: 8, sway: 25, swayAmt: 0.25 }), glow: (cx, w, h, t) => { const k = 0.1 + Math.sin(t / 19) * 0.02 + Math.sin(t / 7) * 0.012; pulse(cx, w * 0.55, h * 0.95, h * 0.8, '255,110,40', k); } };
+W_.golgari = { ...mix(mist({ density: 0.00006, c: '150,200,180', alpha: 0.11, band: [0.5, 1.05] }), motes({ density: 0.00008, c: ['#b6ffc0', '#d8ffb0'], vx: [-0.15, 0.15], vy: [-0.12, 0.08], s: [0.8, 1.6], max: [200, 420], band: [0.3, 1], up: false, alpha: 0.7, twinkle: true, blur: 10 }), 0.55), glow: (cx, w, h, t) => { const k = 0.07 + Math.sin(t / 29) * 0.015; pulse(cx, w * 0.6, h * 0.62, h * 0.4, '255,170,60', k); pulse(cx, w * 0.33, h * 0.75, h * 0.25, '255,170,60', k * 0.6); } };
+W_.gruul = { ...motes({ density: 0.00009, c: ['#e8f0a0', '#cfe67a', '#fff6c0'], vx: [-0.2, 0.2], vy: [-0.08, 0.12], s: [0.8, 1.8], max: [260, 520], band: [0.1, 1], up: false, alpha: 0.6, twinkle: true, blur: 5, sway: 35, swayAmt: 0.35 }), glow: (cx, w, h, t) => { shafts(cx, w, h, t, '240,255,200', 0.55, 0.3, 5, 0.06); } };
+W_.boros = { ...mix(motes({ density: 0.00018, c: ['#ffb060', '#ffd89a', '#ff7a3a'], up: true, vx: [-0.1, 0.1], vy: [-0.7, -0.25], s: [0.7, 2], max: [120, 280], alpha: 0.8, blur: 7, sway: 20, swayAmt: 0.3 }), motes({ density: 0.00002, c: '#3a2a20', vx: [-0.6, -0.2], vy: [-0.1, 0.1], s: [1, 1.6], max: [300, 500], band: [0.02, 0.3], alpha: 0.6 }), 0.1), glow: (cx, w, h, t) => { const k = 0.09 + Math.sin(t / 23) * 0.02 + Math.sin(t / 9) * 0.01; pulse(cx, w * 0.5, h * 0.3, h * 0.6, '255,170,60', k); } };
+W_.selesnya = { ...motes({ density: 0.00012, c: ['#ffffff', '#e9ffb3', '#fff4d0'], vx: [-0.35, -0.1], vy: [0.08, 0.25], s: [0.8, 2], max: [300, 560], x: [0.2, 1.2], alpha: 0.65, twinkle: true, blur: 4, sway: 40, swayAmt: 0.4 }), glow: (cx, w, h, t) => { shafts(cx, w, h, t, '255,250,220', 0.7, 0.45, 5, 0.06); } };
+W_.simic = { ...mix(mist({ density: 0.00008, c: '235,240,250', alpha: 0.13, band: [0.45, 1.05], vx: [0.15, 0.4] }), motes({ density: 0.00005, c: ['#7fe6ff', '#a8f3ff'], vx: [0, 0], vy: [0, 0], s: [0.9, 1.8], max: [140, 260], band: [0.25, 0.85], up: false, alpha: 0.9, twinkle: true, blur: 12, x: [0.4, 0.9] }), 0.4), glow: (cx, w, h, t) => { pulse(cx, w * 0.6, h * 0.5, h * 0.5, '120,220,255', 0.05 + Math.sin(t / 60) * 0.02); } };
+const WORLDS = W_;
 
 export const Ambient = {
   seats: new Map(), raf: 0, t: 0,

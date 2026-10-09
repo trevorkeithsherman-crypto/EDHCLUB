@@ -638,8 +638,8 @@ function seatHTML(i, full) {
   }
   const mat = matOf(i); const matStyle = mat === 'custom' ? ` style="background-image:url(${customMats[i]})"` : '';
   const labels = full ? '<span class="zl top">Battlefield</span><span class="zl bot">Lands</span>' : '';
-  const minis = full ? '' : `<div class="minipiles">${mp('hand', 'Hand', p.zones.hand.length)}${mp('library', 'Lib', p.zones.library.length)}${mp('graveyard', 'GY', p.zones.graveyard.length)}${mp('exile', 'Ex', p.zones.exile.length)}${mp('command', 'Cmd', p.zones.command.length)}</div>`;
-  return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''} ${targeting && i !== targeting.from && !p.out && i < S.seats ? 'targetable' : ''}" data-seat="${i}" data-mat="${mat}"${matStyle}>${plate}<div class="bf" data-zone="p${i}-battlefield">${labels}${empty}${bf}</div>${minis}${dock}${crack}</div>`;
+  const minis = full ? '' : `<button type="button" class="xp" data-act="expand" data-p="${i}" title="Expand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button><div class="minipiles">${mp('hand', 'Hand', p.zones.hand.length)}${mp('library', 'Lib', p.zones.library.length)}${mp('graveyard', 'GY', p.zones.graveyard.length)}${mp('exile', 'Ex', p.zones.exile.length)}${mp('command', 'Cmd', p.zones.command.length)}</div>`;
+  return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''} ${expandedSeats.has(i) ? 'expanded' : ''} ${targeting && i !== targeting.from && !p.out && i < S.seats ? 'targetable' : ''}" data-seat="${i}" data-mat="${mat}"${matStyle}>${plate}<div class="bf" data-zone="p${i}-battlefield">${labels}${empty}${bf}</div>${minis}${dock}${crack}</div>`;
 }
 function renderTurn() { $('#turn').innerHTML = ''; }
 function renderMid() {
@@ -744,6 +744,8 @@ const sideVisible = () => { const sd = $('#side'); return sd && getComputedStyle
 
 /* ---------- Attack targeting ---------- */
 let targeting = null;
+const expandedSeats = new Set();
+const isCompact = () => matchMedia('(max-width: 760px), (max-height: 520px)').matches;
 function startTargeting(c) { targeting = { id: c.id, from: c.controller }; render(); }
 function stopTargeting() { targeting = null; render(); }
 const ptTag = (c) => (ptOf(c) ? ` <small>${esc(ptOf(c))}</small>` : '');
@@ -1083,7 +1085,7 @@ function logModal() {
 /* ---------- Input ---------- */
 function onCardClick(c) {
   const now = performance.now();
-  if (lastClick && lastClick.id === c.id && now - lastClick.t < 330) { lastClick = null; quick(c); return; }
+  if (lastClick && lastClick.id === c.id && now - lastClick.t < 420) { lastClick = null; quick(c); return; }
   lastClick = { id: c.id, t: now }; S.sel = c.id;
   $$('#table .card.sel').forEach((x) => x.classList.remove('sel')); cardEl(c.id)?.classList.add('sel');
 }
@@ -1177,6 +1179,7 @@ function drop(d, x, y, cancel) {
   }
 }
 function onClick(e) {
+  if (isCompact() && $('#app').classList.contains('show-side') && !e.target.closest('.side, #sideBtn')) { $('#app').classList.remove('show-side'); if (!e.target.closest('[data-act], .card, .seat')) return; }
   if (targeting) {
     const seat = e.target.closest('.seat.targetable');
     if (seat) { const c = S.cards[targeting.id]; const k = +seat.dataset.seat; stopTargeting(); if (c) attack(c, k); return; }
@@ -1206,6 +1209,7 @@ function onClick(e) {
     case 'dmg': dmgModal(p); break;
     case 'draw': if (net.isMine(p)) draw(p, 1); break;
     case 'mull': if (net.isMine(p)) mulligan(p); break;
+    case 'expand': { const k = +a.dataset.p; expandedSeats.has(k) ? expandedSeats.delete(k) : (expandedSeats.clear(), expandedSeats.add(k)); render(); break; }
     case 'phase': { const k = +a.dataset.k; if (S.turn.phase === 2 && k !== 2) { S.attacks = []; blocking = null; } S.turn.phase = k; render(); break; }
     case 'next': nextPhase(); break;
     case 'pass': passTurn(); break;
@@ -1255,7 +1259,7 @@ function bindUI() {
   };
   $('#soundBtn').onclick = () => { S.sound = !S.sound; if (S.sound) { SFX.init(); SFX.play('chime', 'U'); } render(); };
   $('#importBtn').onclick = () => importModal(S.view);
-  $('#sideBtn').onclick = () => { const app = $('#app'); if (innerWidth <= 1280) app.classList.toggle('show-side'); else app.classList.toggle('no-side'); requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); };
+  $('#sideBtn').onclick = () => { const app = $('#app'); if (innerWidth <= 1280 || isCompact()) app.classList.toggle('show-side'); else app.classList.toggle('no-side'); requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); };
   $('#newBtn').onclick = () => { if (net.active && !net.isHost) { toast('Only the host can start a new game'); return; } confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { if (net.active) net.send('all', { fn: 'newGame' }); newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); }); };
   document.addEventListener('pointerdown', (e) => { if (S.sound) SFX.init(); onDown(e); });
   document.addEventListener('pointermove', onMove, { passive: false });

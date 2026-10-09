@@ -6,12 +6,14 @@ import { makeBot } from './bots.js';
 import * as Rules from './combat.js';
 import { parseList, deckStats, deckText } from './decklist.js';
 import { parseAbilities, parseEffects, staticGrant } from './effects.js';
+import { deckLink, fetchLinkedDeck } from './deckimport.js';
 import { registerSW, canInstall, install, onInstallable, isIOS, toggleFullscreen, fullscreenOn, fullscreenSupported } from './pwa.js';
 import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
 
 /* ---------- Mode from the URL ---------- */
 const Q = new URLSearchParams(location.search);
 const MODE = Q.get('room') ? 'room' : Q.get('mode') === 'bots' ? 'bots' : 'hotseat';
+const SPECTATE = MODE === 'room' && Q.get('spectate') === '1';
 const ROOM = { code: (Q.get('room') || '').toUpperCase(), host: Q.get('host') === '1', name: Q.get('name') || localName() || 'Planeswalker', seats: clampInt(Q.get('seats'), 2, 4, 4), bots: clampInt(Q.get('bots'), 0, 3, MODE === 'bots' ? 3 : 0), club: Q.get('club') || null };
 function clampInt(v, a, b, d) { const n = parseInt(v, 10); return isNaN(n) ? d : Math.max(a, Math.min(b, n)); }
 const BOT_NAMES = ['Goblin Bot', 'Sphinx Bot', 'Lich Bot', 'Druid Bot'];
@@ -682,7 +684,7 @@ function seatHTML(i, full) {
       const cnt = (z !== 'command' && list.length) ? `<span class="cnt">${list.length}</span>` : '';
       return `<div class="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}"><div class="slot" data-act="pileclick" data-zone="p${i}-${z}" title="${z === 'library' ? 'Click to draw. Right-click for more.' : label}">${inner}${cnt}</div><button type="button" class="pl" data-act="pile" data-zone="p${i}-${z}">${label}</button>${tax}</div>`;
     };
-    const hand = p.zones.hand.map((id) => cardHTML(S.cards[id])).join('') || '<span class="hand-empty">Your hand is empty</span>';
+    const hand = p.zones.hand.map((id) => cardHTML(S.cards[id], SPECTATE ? { back: true } : {})).join('') || `<span class="hand-empty">${SPECTATE ? 'Empty hand' : 'Your hand is empty'}</span>`;
     const mine = net.isMine(S.turn.active) && S.turn.active === i;
     dock = `<div class="dock"><div class="piles">${slot('command', 'Command')}${slot('library', 'Library')}${slot('graveyard', 'Graveyard')}${slot('exile', 'Exile')}</div>
       <div class="handwrap"><div class="handbar"><span>Hand · ${p.zones.hand.length}</span><span class="sp"></span><button type="button" class="btn ghost sm" data-act="draw" data-p="${i}">Draw</button><button type="button" class="btn ghost sm" data-act="mull" data-p="${i}">Mulligan</button></div>
@@ -720,7 +722,7 @@ function render() {
   $('#opps').style.gridTemplateColumns = `repeat(${Math.max(1, (S.seats || 4) - 1)}, minmax(0, 1fr))`;
   sizeBattlefields(); Ambient.sync();
   net.queueSync(seatSnap, sharedSnap);
-  if (net.active && net.ready) rememberRoom(ROOM.code, { seat: net.seat, clientId: undefined, ...recallRoom(ROOM.code), mine: net.ownedSeats().map(seatSnap), shared: sharedSnap(), deck: { id: P(net.seat).deckId, name: P(net.seat).deckName } });
+  if (net.active && net.ready && net.seat != null) rememberRoom(ROOM.code, { seat: net.seat, clientId: undefined, ...recallRoom(ROOM.code), mine: net.ownedSeats().map(seatSnap), shared: sharedSnap(), deck: { id: P(net.seat).deckId, name: P(net.seat).deckName } });
   maybeBot();
   if (zoomId && !S.cards[zoomId]) hideZoom();
   renderPrompt();
@@ -850,7 +852,8 @@ function renderPrompt() {
 function hurtFlash() { if (!motionMul()) return; const h = document.createElement('div'); h.className = 'hurt'; $('#layer').appendChild(h); setTimeout(() => h.remove(), 800); }
 
 /* ---------- Zoom ---------- */
-const canSee = (c) => c && !(c.zone === 'hand' && c.controller !== S.view) && c.zone !== 'library' && !(c.faceDown && c.controller !== S.view);
+const viewer = () => (SPECTATE ? -1 : S.view);
+const canSee = (c) => c && !(c.zone === 'hand' && c.controller !== viewer()) && c.zone !== 'library' && !(c.faceDown && c.controller !== viewer());
 function showZoom(id) {
   const c = S.cards[id]; if (!canSee(c)) { hideZoom(); return; }
   if (sideVisible()) { $('#sideCard').innerHTML = sideCardHTML(c); zoomId = id; return; }
@@ -1353,7 +1356,7 @@ async function importModal(pi) {
   const lib = await deckLibraryHTML();
   openModal(`<h2>Decks</h2>${lib}
   <div class="top100"><div class="eyebrow">Top 100 on Archidekt <button type="button" class="link" id="topToggle">Browse</button></div><div id="topBody" hidden><input id="topQ" type="search" placeholder="Search by name, builder or colors (e.g. UR)" autocomplete="off"><div class="toplist" id="topList"><p class="muted">Loading…</p></div></div></div>
-  <p>Paste a text export from Moxfield, Archidekt or any deck site, one card per line like "1 Sol Ring". Put the commander under a "Commander" heading, or type it below. Seating a deck resets that seat's board and life.</p>
+  <p>Paste a text export from any deck site, one card per line like "1 Sol Ring" — or just paste an Archidekt or Moxfield deck link. Put the commander under a "Commander" heading, or type it below. Seating a deck resets that seat's board and life.</p>
   <div class="grid2"><label for="impSeat" ${S.players.filter((p, i) => i < S.seats && net.isMine(i) && !p.empty).length > 1 ? '' : 'hidden'}>Seat<select id="impSeat">${S.players.filter((p, i) => i < S.seats && net.isMine(i) && !p.empty).map((p) => { const i = S.players.indexOf(p); return `<option value="${i}" ${i === pi ? 'selected' : ''}>${esc(p.name)}</option>`; }).join('')}</select></label>
   <label for="impName">Player name<input id="impName" maxlength="24" value="${esc(P(pi).name)}"></label></div>
   <label for="impCmd">Commander (optional)<input id="impCmd" placeholder="Taken from the list if left blank"></label>
@@ -1410,7 +1413,14 @@ async function importModal(pi) {
     }
     $('#impSum').innerHTML = `Commander: <b>${esc(d.cmd.join(' + '))}</b> · ${d.count} cards in the library${size !== 100 ? ` <span class="bad">· Commander decks run 100 cards; this list has ${size}.</span>` : ''}`;
   };
-  ta.oninput = sum; $('#impCmd').oninput = sum;
+  ta.oninput = async () => {
+    const link = deckLink(ta.value);
+    if (!link) { sum(); return; }
+    ta.disabled = true; const was = ta.value; ta.value = `Importing from ${link.site === 'moxfield' ? 'Moxfield' : 'Archidekt'}…`;
+    try { const j = await fetchLinkedDeck(link); ta.value = j.text; $('#impDeckName').value = j.name; editingId = ''; toast(`Loaded ${j.name}. Seat it, or save it to your decks.`); }
+    catch (e) { ta.value = e.fallback === 'paste' ? '' : was; toast(e.fallback === 'paste' ? e.message : `Import failed: ${e.message}`, e.fallback ? 9000 : 6000); }
+    ta.disabled = false; sum();
+  }; $('#impCmd').oninput = sum;
   $('#impSeat').onchange = (e) => { const k = +e.target.value; $('#impName').value = P(k).name; ta.value = P(k).deckText || ''; sum(); };
   sum();
   $('#impGo').onclick = () => {
@@ -1635,6 +1645,7 @@ function onClick(e) {
   if (performance.now() < ignoreClick && e.target.closest('.card[data-id]')) return;
   if (a.dataset.act === 'pileclick' && e.target.closest('.card[data-id]') && !/-(graveyard|exile)$/.test(a.dataset.zone || '')) return;
   const act = a.dataset.act, p = +a.dataset.p; const r = a.getBoundingClientRect();
+  if (SPECTATE && !['pile', 'pileclick', 'seatmenu', 'expand', 'close'].includes(act)) { toast('You\'re watching this table'); return; }
   switch (act) {
     case 'life': { const d = (+a.dataset.d) * (e.shiftKey ? 5 : 1); if (net.isMine(p)) changeLife(p, d, { manual: true }); else request(p, 'changeLife', d); break; }
     case 'pile': case 'pileclick': pileClick(a.dataset.zone, a); break;
@@ -1709,6 +1720,7 @@ function onKey(e) {
   const act = (fn) => { e.preventDefault(); fn(); };
   if (k === '?' || (k === '/' && e.shiftKey)) return act(shortcutsModal);
   if (k === 'F' && e.shiftKey) return act(() => doFullscreen());
+  if (SPECTATE) { if (k.toLowerCase() === 'z' && c) return act(() => closerModal(c)); return; }
   if (k === ' ' && !e.target.closest('button')) return act(nextPhase);
   switch (k.toLowerCase()) {
     case 'd': if (mine(me)) act(() => draw(me, 1)); return;
@@ -1760,7 +1772,7 @@ function bindUI() {
   $('#viewSel').onchange = (e) => { S.view = +e.target.value; S.sel = null; render(); };
   $('#motionSel').onchange = (e) => { S.motion = e.target.value; render(); };
   $('#fxBtn').onclick = () => { S.fx = !S.fx; render(); toast(S.fx ? 'Playmat effects on' : 'Playmat effects off'); };
-  $('#tableBtn').onclick = () => tableModal();
+  $('#tableBtn').onclick = () => { if (SPECTATE) { toast('Only players can manage the table'); return; } tableModal(); };
   $('#fsBtn').onclick = doFullscreen; document.addEventListener('fullscreenchange', syncFsBtn); document.addEventListener('webkitfullscreenchange', syncFsBtn);
   registerSW();
   $('#settingsBtn').onclick = (e) => {
@@ -1781,9 +1793,9 @@ function bindUI() {
     ], r.left, r.bottom + 4, 'Settings');
   };
   $('#soundBtn').onclick = () => { S.sound = !S.sound; if (S.sound) { SFX.init(); SFX.play('chime', 'U'); } render(); };
-  $('#importBtn').onclick = () => importModal(S.view);
+  $('#importBtn').onclick = () => { if (SPECTATE) { toast('Spectators don\'t bring a deck. Join with the table code to play.'); return; } importModal(S.view); };
   $('#sideBtn').onclick = () => { const app = $('#app'); if (innerWidth <= 1280 || isCompact()) app.classList.toggle('show-side'); else app.classList.toggle('no-side'); requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); };
-  $('#newBtn').onclick = () => { if (net.active && !net.isHost) { toast('Only the host can start a new game'); return; } confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { if (net.active) net.send('all', { fn: 'newGame' }); newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); }); };
+  $('#newBtn').onclick = () => { if (SPECTATE) { toast('You\'re watching this table'); return; } if (net.active && !net.isHost) { toast('Only the host can start a new game'); return; } confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { if (net.active) net.send('all', { fn: 'newGame' }); newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); }); };
   document.addEventListener('pointerdown', (e) => { if (S.sound) SFX.init(); onDown(e); });
   document.addEventListener('pointermove', onMove, { passive: false });
   document.addEventListener('pointerup', onUp);
@@ -1798,6 +1810,7 @@ function bindUI() {
   }, true);
   const probe = new Image(); probe.onerror = () => { backOk = false; render(); }; probe.src = CARD_BACK;
   addEventListener('resize', () => requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }));
+  addEventListener('pagehide', () => { if (net.active) net.leave(); });
   $('#table').addEventListener('scroll', () => requestAnimationFrame(drawArrows), true);
   addEventListener('scroll', () => requestAnimationFrame(drawArrows));
 }
@@ -1813,8 +1826,11 @@ function roomBar() {
   if (MODE !== 'room') return;
   const t = $('#roomBar'); if (!t) return;
   const humans = new Set(Object.values(net.peers).filter((p) => p.seat != null && !net.botSeats().includes(p.seat)).map((p) => p.seat)).size;
-  t.innerHTML = `<span class="code">${esc(ROOM.code)}</span><button type="button" class="btn ghost sm" id="copyInvite" title="Copy invite link">Invite</button><span>${humans}/${net.humanSeats().length}</span>`;
-  $('#copyInvite').onclick = async () => { const link = `${location.origin}/?join=${ROOM.code}`; try { await navigator.clipboard.writeText(link); toast('Invite link copied'); } catch { toast(link, 8000); } };
+  const watching = net.spectators().length;
+  t.innerHTML = `<span class="code">${esc(ROOM.code)}</span>${SPECTATE ? '<span class="watching" title="You are watching this table">Watching</span>' : '<button type="button" class="btn ghost sm" id="copyInvite" title="Copy invite link">Invite</button>'}<button type="button" class="btn ghost sm" id="copyWatch" title="Copy a watch-only link">Watch link</button><span>${humans}/${net.humanSeats().length}</span>${watching ? `<span class="eye" title="${watching} watching">👁 ${watching}</span>` : ''}`;
+  const copy = async (link, what) => { try { await navigator.clipboard.writeText(link); toast(`${what} copied`); } catch { toast(link, 8000); } };
+  if ($('#copyInvite')) $('#copyInvite').onclick = () => copy(`${location.origin}/?join=${ROOM.code}`, 'Invite link');
+  $('#copyWatch').onclick = () => copy(`${location.origin}/?watch=${ROOM.code}`, 'Watch link');
 }
 let seatRestored = false;
 async function boot() {
@@ -1825,10 +1841,11 @@ async function boot() {
     try {
       if (online) { const u = await currentUser(); if (!u) { const { signInGuest } = await import('./supa.js'); await signInGuest(ROOM.name); } }
       if (!ROOM.host && online) { try { const { getRoom } = await import('./supa.js'); const row = await getRoom(ROOM.code); if (row) { ROOM.seats = row.seats; ROOM.bots = row.bots || 0; } } catch { /* fall back to presence */ } }
-      const seat = await net.join({ code: ROOM.code, name: ROOM.name, isHost: ROOM.host, seats: ROOM.seats, bots: ROOM.bots });
+      const seat = await net.join({ code: ROOM.code, name: ROOM.name, isHost: ROOM.host && !SPECTATE, seats: ROOM.seats, bots: ROOM.bots, spectate: SPECTATE });
       ROOM.seats = net.seats; ROOM.bots = net.bots;
-      S = null; newGame(false); S.view = seat; P(seat).avatar = localAvatar();
-      const prior = recallRoom(ROOM.code);
+      S = null; newGame(false); S.view = seat ?? 0; if (seat != null) P(seat).avatar = localAvatar();
+      if (SPECTATE) { document.body.classList.add('spectator'); S.players.forEach((p, k) => { if (k < S.seats) p.empty = !net.botSeats().includes(k); }); }
+      const prior = SPECTATE ? null : recallRoom(ROOM.code);
       if (prior && prior.mine && prior.mine.some((m) => m.seat === seat)) {
         seatRestored = true;
         prior.mine.forEach((snap) => { if (!net.isMine(snap.seat)) return; const p = P(snap.seat); Object.assign(p, snap.player); p.zones = snap.zones; Object.values(S.cards).forEach((c) => { if (c.owner === snap.seat) delete S.cards[c.id]; }); snap.cards.forEach((c) => { S.cards[c.id] = { img: '', big: '', backImg: '', backBig: '', artist: '', ...c }; }); });
@@ -1843,15 +1860,18 @@ async function boot() {
       net.on('peers', (peers) => {
         const host = Object.values(peers).find((pr) => pr.isHost && pr.seats);
         if (host && !net.isHost) applyLayout(host.seats, host.botList || []);
-        Object.values(peers).forEach((pr) => { if (pr.seat != null && pr.seat < S.seats && !net.isMine(pr.seat)) { const p = P(pr.seat); p.empty = false; if (p.name === SEAT_NAMES[pr.seat] || p.bot) { p.name = pr.name; p.bot = false; } } });
+        Object.values(peers).forEach((pr) => { if (pr.spectator) return; if (pr.seat != null && pr.seat < S.seats && !net.isMine(pr.seat)) { const p = P(pr.seat); p.empty = false; if (p.name === SEAT_NAMES[pr.seat] || p.bot) { p.name = pr.name; p.bot = false; } } });
         // seats with no peer and no bot are open
         const seated = new Set(Object.values(peers).map((pr) => pr.seat));
         S.players.forEach((p, k) => { if (k < S.seats && k !== net.seat && !net.botSeats().includes(k) && !seated.has(k)) { if (!p.empty) { p.empty = true; purgeOwner(k); } } });
         roomBar(); render();
       });
       net.on('resend', () => { net.queueSync(seatSnap, sharedSnap); });
+      let lastWatch = new Set();
+      const watchNote = () => { const now = new Set(net.spectators().map((p) => p.name + '|' + (p.clientId || ''))); if (!SPECTATE && net.isHost) { [...now].filter((k) => !lastWatch.has(k)).forEach((k) => log(`${k.split('|')[0]} is watching`)); [...lastWatch].filter((k) => !now.has(k)).forEach((k) => log(`${k.split('|')[0]} stopped watching`)); } lastWatch = now; };
+      const prevPeers = net.handlers.peers; net.on('peers', (peers) => { prevPeers(peers); watchNote(); });
       if (!ROOM.host) { ROOM.seats = S.seats; }
-      toast(ROOM.host ? `Table ${ROOM.code} is open. Share the code.` : `You're seated at ${ROOM.code}`, 4000);
+      toast(SPECTATE ? `Watching table ${ROOM.code}. Hands stay hidden; you can look at anything on the board.` : ROOM.host ? `Table ${ROOM.code} is open. Share the code.` : `You're seated at ${ROOM.code}`, 5000);
     } catch (e) {
       net.leave(); net.seat = null; net.ready = false;
       document.body.insertAdjacentHTML('afterbegin', `<div class="toast" style="position:fixed;left:50%;top:40%;transform:translateX(-50%);z-index:99;pointer-events:auto;max-width:460px">${esc(e.message)}<br><a href="/">Back to the lobby</a></div>`);
@@ -1862,7 +1882,7 @@ async function boot() {
   if (MODE !== 'hotseat') bot = makeBot(botApi());
   bindUI(); hydrate(); render(); roomBar();
   ensureArt(allNames());
-  const want = Q.get('deck') || '';
+  const want = SPECTATE ? '' : (Q.get('deck') || '');
   if (/^top:\d+$/.test(want) && !seatRestored) {
     try {
       const r = await fetch(`/api/deck/${want.slice(4)}`); const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || r.statusText);
@@ -1872,7 +1892,7 @@ async function boot() {
   } else if (want && !want.startsWith('top:') && online && !seatRestored) {
     try { const d = await getDeck(want); if (d) { const me = net.active ? net.seat : 0; loadDeck(me, d.list, null); P(me).deckId = d.id; P(me).deckName = d.name; if (d.mat && d.mat !== 'auto') P(me).mat = d.mat; render(); toast(`Seated with ${d.name}`); ensureArt(allNames(), { quiet: true }); bumpDeckPlays(d.id); } else toast('That deck isn\'t on your account', 5000); }
     catch (e) { toast(`Couldn't load that deck: ${e.message}`, 6000); }
-  } else if (MODE !== 'hotseat' && online && !seatRestored) {
+  } else if (MODE !== 'hotseat' && online && !seatRestored && !SPECTATE) {
     try {
       const id = await defaultDeckId(); const d = id ? await getDeck(id) : null;
       if (d) { const me = net.active ? net.seat : 0; loadDeck(me, d.list, null); P(me).deckId = d.id; P(me).deckName = d.name; if (d.mat && d.mat !== 'auto') P(me).mat = d.mat; render(); toast(`Seated with ${d.name}`); ensureArt(allNames(), { quiet: true }); bumpDeckPlays(d.id); }
@@ -1885,4 +1905,4 @@ boot();
 // Read-only hook for the test suite.
 window.__edhState = () => S;
 window.__edhMut = (fn) => { fn(S); render(); };
-window.__edhApi = () => ({ fire: fireEvent, runEffects, parseEffects, parseAbilities, moveCard, activate: botActivate });
+window.__edhApi = () => ({ fire: fireEvent, runEffects, parseEffects, parseAbilities, moveCard, activate: botActivate, spectate: SPECTATE, net });

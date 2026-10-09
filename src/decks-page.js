@@ -2,6 +2,7 @@
 import { online, currentUser, saveDeck, getDeck, listDecks, deleteDeck, updateDeckMeta, setDefaultDeck, defaultDeckId, lastDeckId, setLastDeckId, localAvatar, displayNameFor, DECK_LIMIT } from './supa.js';
 import { fetchCards, fetchPrintings, cached } from './scryfall.js';
 import { parseList, deckStats, deckText } from './decklist.js';
+import { deckLink, fetchLinkedDeck } from './deckimport.js';
 
 const $ = (s, r = document) => r.querySelector(s); const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -17,7 +18,7 @@ let user = null, mine = [], defaultId = '';
 function openModal(html, cls = '') { const m = $('#modal'); m.innerHTML = `<div class="scrim" data-close="1"></div><div class="mpanel ${cls}" role="dialog" aria-modal="true">${html}</div>`; m.hidden = false; const f = m.querySelector('[data-autofocus]'); if (f) setTimeout(() => f.focus(), 30); }
 function closeModal() { const m = $('#modal'); m.hidden = true; m.innerHTML = ''; }
 document.addEventListener('click', (e) => { if (e.target.closest('[data-close]') || e.target.closest('#modal [data-act=close]')) closeModal(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#modal').hidden) closeModal(); });
+document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; const m2 = $('#modal2'), em = $('#edMenu'); if (em && !em.hidden) { em.hidden = true; return; } if (m2 && !m2.hidden) { m2.hidden = true; m2.innerHTML = ''; return; } if (!$('#modal').hidden) closeModal(); });
 
 /* ---------- My decks ---------- */
 async function loadMine() {
@@ -63,14 +64,14 @@ function deckMenu(d, anchor) {
   }; });
 }
 /* Editor: name, commander (auto), list with live validation. */
-async function editor(d, keep = null, openTab = 'list') {
+async function editor(d, keep = null, openTab = 'auto') {
   const full = keep ? { name: keep.name, commander: '', list: keep.list, mat: d ? (await getDeck(d.id)).mat : 'auto' } : d ? await getDeck(d.id) : { name: '', commander: '', list: '', mat: 'auto' };
   openModal(`<h2>${d ? 'Edit deck' : 'New deck'}</h2>
   <div class="grid2"><label>Deck name<input id="edName" maxlength="40" value="${esc(full.name)}" placeholder="Krenko goblins" data-autofocus></label><label>Commander (optional)<input id="edCmd" value="${esc(keep ? keep.cmd : '')}" placeholder="Taken from the list if left blank"></label></div>
-  <div class="tabs"><button type="button" class="tab on" data-ed="list">List</button><button type="button" class="tab" data-ed="art">Artwork</button></div>
+  <div class="tabs"><button type="button" class="tab" data-ed="art">Cards</button><button type="button" class="tab on" data-ed="list">List</button></div>
   <div id="edListWrap"><label>Decklist<textarea id="edList" rows="14" spellcheck="false" placeholder="Paste a Moxfield or Archidekt export, one card per line: 1 Sol Ring">${esc(full.list)}</textarea></label>
   <div class="summary" id="edSum"></div></div>
-  <div id="edArt" hidden><p class="muted small">Click a card to pick its printing. Choices are written into the list as <code>(set) number</code>, with <code>*F*</code> for foil, so Moxfield and Archidekt understand them too.</p><input type="search" id="edArtQ" class="zsearch" placeholder="Filter cards…" autocomplete="off"><div class="artcards" id="edArtCards"></div></div>
+  <div id="edArt" hidden><p class="muted small">Right-click a card (or tap ⋯) to change its artwork, foil, or count. Choices are written into the list as <code>(set) number</code> and <code>*F*</code>, so Moxfield and Archidekt read them too.</p><input type="search" id="edArtQ" class="zsearch" placeholder="Filter cards…" autocomplete="off"><div id="edArtCards"></div></div>
   <div class="row" style="justify-content:space-between"><span class="muted small" id="edHint">${d ? '' : `${mine.length}/${DECK_LIMIT} decks used`}</span><span class="row"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn" id="edSave">${d ? 'Save changes' : 'Save deck'}</button></span></div>`, 'wide');
   const ta = $('#edList'); let names = [];
   const sum = async () => {
@@ -79,35 +80,57 @@ async function editor(d, keep = null, openTab = 'list') {
     $('#edSum').innerHTML = `${p.cmd.length ? `Commander: <b>${esc(p.cmd.join(' + '))}</b>` : '<span class="bad">No commander marked</span> — add a "Commander" heading or type it above'} · ${st.total} cards · ${st.lands} lands${st.issues.filter((i) => !i.startsWith('No commander')).map((i) => ` · <span class="bad">${esc(i)}</span>`).join('')}${st.ok ? ' · <span class="good">Commander legal count ✓</span>' : ''}`;
     if (unknown.length && unknown.length <= 150 && JSON.stringify(unknown) !== JSON.stringify(names)) { names = unknown; try { await fetchCards(unknown.slice(0, 150)); sum(); } catch { /* offline */ } }
   };
-  ta.oninput = sum; $('#edCmd').oninput = sum; sum();
-  // ---- artwork mode ----
+  ta.oninput = () => { if (deckLink(ta.value)) { linkInTextarea(ta, (j) => { if (!$('#edName').value) $('#edName').value = j.name; }); return; } sum(); }; $('#edCmd').oninput = sum; sum();
+  // ---- cards view: every card as art. Right-click (or the ⋯ menu) changes the printing in place. ----
+  let entries = [];
   const artCards = async () => {
     const p = parseList(ta.value, $('#edCmd').value, typeOf);
-    const entries = [...p.cmd.map((n) => ({ name: n, n: 1, ...(p.cmdPrints[n] || {}), cmdr: true })), ...p.main];
+    entries = [...p.cmd.map((n) => ({ name: n, n: 1, ...(p.cmdPrints[n] || {}), cmdr: true })), ...p.main];
     const q = ($('#edArtQ').value || '').toLowerCase();
     const want = entries.map((e) => (e.set && e.num ? { name: e.name, set: e.set, num: e.num } : e.name));
-    try { await fetchCards(want.slice(0, 150)); } catch { /* offline */ }
-    $('#edArtCards').innerHTML = entries.filter((e) => !q || e.name.toLowerCase().includes(q)).map((e, k) => { const c = cached(e.name, e.set, e.num) || {}; const idx = entries.indexOf(e);
-      return `<button type="button" class="artcard ${e.foil ? 'foil' : ''}" data-ai="${idx}" title="Choose artwork">${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy">` : `<span class="ph">${esc(e.name)}</span>`}<span class="cap">${e.n > 1 ? e.n + '× ' : ''}${esc(e.name)}${e.cmdr ? ' · cmdr' : ''}<small>${e.set ? esc(e.set.toUpperCase()) + ' #' + esc(e.num) : 'default printing'}${e.foil ? ' · foil' : ''}</small></span></button>`; }).join('');
-    $$('[data-ai]').forEach((b) => { b.onclick = () => pickArt(entries[+b.dataset.ai]); });
+    const need = want.filter((w) => !cached(typeof w === 'string' ? w : w.name, w.set, w.num));
+    if (need.length) { try { await fetchCards(need.slice(0, 150)); } catch { /* offline */ } }
+    const groups = [['Commander', entries.filter((e) => e.cmdr)], ['Deck', entries.filter((e) => !e.cmdr)]];
+    $('#edArtCards').innerHTML = groups.map(([title, list]) => { const rows = list.filter((e) => !q || e.name.toLowerCase().includes(q)); if (!rows.length) return ''; return `<div class="artgroup"><div class="eyebrow">${title} · ${rows.reduce((n, e) => n + e.n, 0)}</div><div class="artcards">${rows.map((e) => { const c = cached(e.name, e.set, e.num) || {}; const idx = entries.indexOf(e);
+      return `<div class="artcard ${e.foil ? 'foil' : ''} ${e.cmdr ? 'cmdr' : ''}" data-ai="${idx}" tabindex="0" title="Right-click to change the artwork">${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy" draggable="false">` : `<span class="ph">${esc(e.name)}</span>`}${e.n > 1 ? `<span class="qty">×${e.n}</span>` : ''}<button type="button" class="more" data-more="${idx}" aria-label="Card options">⋯</button><span class="cap">${esc(e.name)}<small>${e.set ? esc(e.set.toUpperCase()) + ' #' + esc(e.num) : 'default printing'}${e.foil ? ' · foil' : ''}</small></span></div>`; }).join('')}</div></div>`; }).join('') || '<p class="muted">No cards yet. Paste a list, or a deck link, in the List tab.</p>';
+    $$('[data-ai]').forEach((b) => {
+      b.oncontextmenu = (ev) => { ev.preventDefault(); pickArt(entries[+b.dataset.ai]); };
+      b.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); cardOptions(entries[+b.dataset.ai], b); } };
+      b.ondblclick = () => pickArt(entries[+b.dataset.ai]);
+    });
+    $$('[data-more]').forEach((b) => { b.onclick = (ev) => { ev.stopPropagation(); cardOptions(entries[+b.dataset.more], b.closest('.artcard')); }; });
   };
   const applyPrintText = (text, e, pr, foil) => text.split(/\r?\n/).map((line) => { const m = line.match(/^(\d+x?\s+)?(.+?)(\s+\([A-Za-z0-9]{2,6}\)\s+[\w★-]+)?(\s+\*[A-Za-z]\*)?\s*$/); if (!m) return line; const base = m[2].replace(/\s*\*[A-Za-z]+\*\s*/g, '').replace(/\s*\[[^\]]*\]\s*/g, ' ').trim(); if (base.toLowerCase() !== e.name.toLowerCase()) return line; return `${m[1] || ''}${base}${pr ? ` (${pr.set}) ${pr.num}` : ''}${foil ? ' *F*' : ''}`; }).join('\n');
+  const setText = (text) => { ta.value = text; sum(); artCards(); };
+  const changeQty = (e, d) => { const lines = ta.value.split(/\r?\n/); let done = false; const out = []; for (const line of lines) { const m = line.match(/^(\d+)x?\s+(.+)$/); const base = m ? m[2].replace(/\s*\([A-Za-z0-9]{2,6}\)\s+[\w★-]+/, '').replace(/\s*\*[A-Za-z]\*/g, '').trim() : ''; if (!done && m && base.toLowerCase() === e.name.toLowerCase()) { done = true; const n = +m[1] + d; if (n > 0) out.push(`${n} ${m[2]}`); } else out.push(line); } setText(out.join('\n')); };
+  function cardOptions(e, anchor) {
+    const r = anchor.getBoundingClientRect();
+    const items = [{ label: 'Change artwork…', fn: () => pickArt(e) }, { label: e.foil ? 'Make it non-foil' : 'Make it foil', fn: () => setText(applyPrintText(ta.value, e, e.set ? { set: e.set, num: e.num } : null, !e.foil)) }, { sep: true }];
+    if (!e.cmdr) items.push({ label: 'Add a copy', fn: () => changeQty(e, 1) }, { label: e.n > 1 ? 'Remove one copy' : 'Remove from deck', fn: () => changeQty(e, -1), danger: e.n <= 1 }, { label: 'Make it the commander', fn: () => { $('#edCmd').value = e.name; sum(); artCards(); } });
+    const m = $('#edMenu'); m.innerHTML = `<div class="menu-list">${items.map((it, k) => it.sep ? '<hr>' : `<button type="button" class="mi ${it.danger ? 'danger' : ''}" data-mi="${k}">${esc(it.label)}</button>`).join('')}</div>`; m.hidden = false;
+    const mw = 220; m.style.left = Math.max(8, Math.min(innerWidth - mw - 8, r.left)) + 'px'; m.style.top = Math.min(innerHeight - 220, r.bottom + 4) + 'px';
+    m.onclick = (ev) => { const b = ev.target.closest('[data-mi]'); if (!b) return; m.hidden = true; items[+b.dataset.mi].fn(); };
+    setTimeout(() => document.addEventListener('pointerdown', (ev) => { if (!ev.target.closest('#edMenu')) m.hidden = true; }, { once: true }), 0);
+  }
+  // The printing picker opens on top of the editor and writes the choice straight into the list.
   async function pickArt(e) {
-    const kept = { list: ta.value, name: $('#edName').value, cmd: $('#edCmd').value };
-    const reopen = () => editor(d, kept, 'art');
-    openModal(`<h2>Artwork for ${esc(e.name)}</h2><p>Loading printings from Scryfall…</p>`, 'wide');
-    const prints = await fetchPrintings(e.name); const cur = `${e.set}|${e.num}`;
-    openModal(`<h2>Artwork for ${esc(e.name)}</h2><p>${prints.length} printing${prints.length === 1 ? '' : 's'} on Scryfall.</p>
-    <div class="artgrid">${prints.map((x, k) => `<button type="button" class="artopt ${`${x.set}|${x.num}` === cur ? 'on' : ''}" data-pr="${k}"><img src="${esc(x.img)}" alt="" loading="lazy"><span><b>${esc(x.setName)}</b><small>${esc(x.set.toUpperCase())} #${esc(x.num)} · ${esc(x.year)}${x.fullArt ? ' · full art' : ''}${x.finishes && !/nonfoil/.test(x.finishes) ? ' · foil only' : ''}</small><em>${esc(x.artist)}</em></span></button>`).join('') || '<p class="muted">Nothing found.</p>'}</div>
-    <div class="row" style="justify-content:space-between"><label class="chk"><input type="checkbox" id="artFoil" ${e.foil ? 'checked' : ''}> Foil</label><span class="row"><button type="button" class="btn ghost" id="artReset">Default printing</button><button type="button" class="btn" id="artBack">Back to deck</button></span></div>`, 'wide');
-    $('#artBack').onclick = reopen;
-    $('#artReset').onclick = () => { kept.list = applyPrintText(kept.list, e, null, $('#artFoil').checked); reopen(); };
-    $('#artFoil').onchange = (ev) => { kept.list = applyPrintText(kept.list, e, e.set ? { set: e.set, num: e.num } : null, ev.target.checked); e.foil = ev.target.checked; };
-    $$('[data-pr]').forEach((b) => { b.onclick = () => { const x = prints[+b.dataset.pr]; const foil = $('#artFoil').checked || (x.finishes && !/nonfoil/.test(x.finishes)); kept.list = applyPrintText(kept.list, e, { set: x.set, num: x.num }, foil); reopen(); }; });
+    $('#edMenu').hidden = true;
+    const pop = $('#modal2'); const show = (html) => { pop.innerHTML = `<div class="scrim" data-close2="1"></div><div class="mpanel wide" role="dialog" aria-modal="true">${html}</div>`; pop.hidden = false; };
+    const close = () => { pop.hidden = true; pop.innerHTML = ''; };
+    show(`<h2>Artwork for ${esc(e.name)}</h2><p>Loading printings from Scryfall…</p>`);
+    let prints = []; try { prints = await fetchPrintings(e.name); } catch { /* offline */ }
+    const cur = `${e.set}|${e.num}`;
+    show(`<h2>Artwork for ${esc(e.name)}</h2><p>${prints.length} printing${prints.length === 1 ? '' : 's'} on Scryfall. Click one to use it.</p>
+    <div class="artgrid">${prints.map((x, k) => `<button type="button" class="artopt ${`${x.set}|${x.num}` === cur ? 'on' : ''}" data-pr="${k}"><img src="${esc(x.img)}" alt="" loading="lazy"><span><b>${esc(x.setName)}</b><small>${esc(x.set.toUpperCase())} #${esc(x.num)} · ${esc(x.year)}${x.fullArt ? ' · full art' : ''}${x.finishes && !/nonfoil/.test(x.finishes) ? ' · foil only' : ''}</small><em>${esc(x.artist)}</em></span></button>`).join('') || '<p class="muted">Nothing found (offline?).</p>'}</div>
+    <div class="row" style="justify-content:space-between"><label class="chk"><input type="checkbox" id="artFoil" ${e.foil ? 'checked' : ''}> Foil</label><span class="row"><button type="button" class="btn ghost" id="artReset">Default printing</button><button type="button" class="btn" id="artBack">Done</button></span></div>`);
+    pop.querySelector('[data-close2]').onclick = close; $('#artBack').onclick = close;
+    $('#artReset').onclick = () => { setText(applyPrintText(ta.value, e, null, $('#artFoil').checked)); close(); };
+    $('#artFoil').onchange = (ev) => { setText(applyPrintText(ta.value, e, e.set ? { set: e.set, num: e.num } : null, ev.target.checked)); e.foil = ev.target.checked; };
+    $$('[data-pr]').forEach((b) => { b.onclick = () => { const x = prints[+b.dataset.pr]; const foil = $('#artFoil').checked || !!(x.finishes && !/nonfoil/.test(x.finishes)); setText(applyPrintText(ta.value, e, { set: x.set, num: x.num }, foil)); toast(`${e.name}: ${x.setName}`); close(); }; });
   }
   $$('[data-ed]').forEach((t) => { t.onclick = () => { const v = t.dataset.ed; $$('[data-ed]').forEach((x) => x.classList.toggle('on', x === t)); $('#edListWrap').hidden = v !== 'list'; $('#edArt').hidden = v !== 'art'; if (v === 'art') artCards(); }; });
   $('#edArtQ').oninput = artCards;
-  if (openTab === 'art') $('[data-ed=art]').click();
+  if (openTab === 'art' || (openTab === 'auto' && full.list.trim())) $('[data-ed=art]').click();
   $('#edSave').onclick = async () => {
     const p = parseList(ta.value, $('#edCmd').value, typeOf); const st = deckStats(p, typeOf);
     if (!p.count && !p.cmd.length) { toast('Paste a decklist first'); return; }
@@ -118,14 +141,25 @@ async function editor(d, keep = null, openTab = 'list') {
     catch (e) { toast(e.message, 6000); }
   };
 }
-async function importFromUrl() {
-  openModal(`<h2>Import from Archidekt</h2><p>Paste a deck link like <code>https://archidekt.com/decks/1234567/name</code>. Moxfield doesn’t allow this; use its Export → copy and paste into a new deck.</p><label>Link<input id="impUrl" placeholder="https://archidekt.com/decks/…" data-autofocus></label><div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn" id="impGo">Import</button></div>`, 'narrow');
+async function importFromUrl(prefill = '') {
+  openModal(`<h2>Import from a link</h2><p>Paste an Archidekt or Moxfield deck link, like <code>https://archidekt.com/decks/1234567</code> or <code>https://moxfield.com/decks/abc123</code>. Printings and foils marked on the site come along.</p><label>Link<input id="impUrl" value="${esc(prefill)}" placeholder="https://archidekt.com/decks/… or https://moxfield.com/decks/…" data-autofocus></label><div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn" id="impGo">Import</button></div>`, 'narrow');
   $('#impGo').onclick = async () => {
-    const m = $('#impUrl').value.match(/archidekt\.com\/decks\/(\d+)/); if (!m) { toast('That doesn’t look like an Archidekt deck link'); return; }
+    const link = deckLink($('#impUrl').value); if (!link) { toast('That doesn’t look like an Archidekt or Moxfield deck link'); return; }
     $('#impGo').disabled = true; $('#impGo').textContent = 'Importing…';
-    try { const r = await fetch(`/api/deck/${m[1]}`); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.statusText); closeModal(); await editor(null); $('#edName').value = j.name; $('#edList').value = j.text; $('#edList').dispatchEvent(new Event('input')); }
-    catch (e) { toast('Import failed: ' + e.message, 6000); $('#impGo').disabled = false; $('#impGo').textContent = 'Import'; }
+    try { const j = await fetchLinkedDeck(link); closeModal(); await editor(null); $('#edName').value = j.name; $('#edList').value = j.text; $('#edList').dispatchEvent(new Event('input')); toast(`Imported ${j.name} from ${link.site === 'moxfield' ? 'Moxfield' : 'Archidekt'}`); }
+    catch (e) {
+      if (e.fallback === 'paste') { closeModal(); await editor(null); $('#edName').focus(); toast(e.message, 9000); }
+      else { toast('Import failed: ' + e.message, 6000); $('#impGo').disabled = false; $('#impGo').textContent = 'Import'; }
+    }
   };
+}
+// Pasting a deck link straight into the list box imports it too.
+async function linkInTextarea(ta, onDone) {
+  const link = deckLink(ta.value); if (!link) return false;
+  ta.disabled = true; const was = ta.value; ta.value = `Importing from ${link.site === 'moxfield' ? 'Moxfield' : 'Archidekt'}…`;
+  try { const j = await fetchLinkedDeck(link); ta.value = j.text; onDone && onDone(j); }
+  catch (e) { ta.value = e.fallback === 'paste' ? '' : was; toast(e.fallback === 'paste' ? e.message : 'Import failed: ' + e.message, e.fallback ? 9000 : 6000); }
+  ta.disabled = false; ta.dispatchEvent(new Event('input')); return true;
 }
 
 /* ---------- Top 100 ---------- */
@@ -172,7 +206,7 @@ document.addEventListener('click', async (e) => {
 });
 $('#q').oninput = (e) => { filter.q = e.target.value.trim(); renderTop(); };
 $('#sort').onchange = (e) => { filter.sort = e.target.value; renderTop(); };
-$('#newDeck').onclick = () => editor(null); $('#importUrl').onclick = importFromUrl;
+$('#newDeck').onclick = () => editor(null); $('#importUrl').onclick = () => importFromUrl();
 
 (async () => {
   if (online) {

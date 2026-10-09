@@ -10,6 +10,8 @@ def api(route):
     u = route.request.url
     if u.endswith('/api/top-decks'): route.fulfill(status=200, content_type='application/json', body=json.dumps(TOP))
     elif '/api/deck/' in u: route.fulfill(status=200, content_type='application/json', body=json.dumps(DECK))
+    elif '/api/moxfield/blocked' in u: route.fulfill(status=502, content_type='application/json', body=json.dumps({'error': 'Moxfield blocked the request. Open the deck on Moxfield, use Export → Copy, and paste the list here instead.', 'fallback': 'paste'}))
+    elif '/api/moxfield/' in u: route.fulfill(status=200, content_type='application/json', body=json.dumps({**DECK, 'name': 'Mox Goblins', 'source': 'moxfield', 'url': 'https://www.moxfield.com/decks/abcdefgh'}))
     else: route.continue_()
 def deck_mock(route):
     if '/rest/v1/decks' in route.request.url and route.request.method == 'POST':
@@ -50,7 +52,28 @@ with sync_playwright() as p:
     check('Load fills the paste area and deck name', 'Krenko, Mob Boss' in pg.locator('#impList').input_value() and pg.locator('#impDeckName').input_value() == 'Deck 0')
     pg.locator('[data-top-seat]').first.click(); pg.wait_for_timeout(1500); st = state(pg)
     check('Seat shuffles the deck straight into my seat', any(c['name'] == 'Krenko, Mob Boss' and c['isCmdr'] for c in st['cards'].values() if c['owner'] == 0) and len(st['players'][0]['zones']['hand']) == 7 and pg.locator('#modal').is_hidden())
+    # pasting a deck link into the list box imports it
+    pg.click('#importBtn'); pg.wait_for_timeout(300); pg.fill('#impList', 'https://www.moxfield.com/decks/abcdefgh'); pg.wait_for_timeout(900)
+    check('in-game: pasting a Moxfield link fills the list and deck name', 'Krenko, Mob Boss' in pg.locator('#impList').input_value() and pg.locator('#impDeckName').input_value() == 'Mox Goblins')
+    pg.fill('#impList', 'https://archidekt.com/decks/100/goblins'); pg.wait_for_timeout(900)
+    check('in-game: Archidekt links work the same way', 'Goblin Chieftain' in pg.locator('#impList').input_value())
+    pg.fill('#impList', 'https://www.moxfield.com/decks/blocked1'); pg.wait_for_timeout(900)
+    check('in-game: a blocked Moxfield deck explains the Export → paste fallback', 'Export' in pg.locator('#toasts').text_content() and pg.locator('#impList').input_value() == '')
     check('in-game Top 100: no JS errors', not errs, str(errs)[:300])
+    browser.close()
+# ---- decks page: import from a link ----
+with sync_playwright() as p:
+    browser = p.chromium.launch(); ctx = browser.new_context(); pg, errs = setup(ctx); pg.route('**/api/**', api); pg.unroute('https://*.supabase.co/**'); pg.route('https://*.supabase.co/**', deck_mock)
+    pg.goto(BASE + '/'); pg.wait_for_timeout(800); pg.click('[data-go="signin"]'); pg.wait_for_timeout(200); pg.click('.tab:has-text("guest")'); pg.wait_for_timeout(200); pg.click('#guest'); pg.wait_for_timeout(1200)
+    pg.goto(BASE + '/decks.html'); pg.wait_for_timeout(1000); pg.click('#importUrl'); pg.wait_for_timeout(300)
+    check('import modal takes Archidekt or Moxfield links', 'Moxfield' in pg.locator('#modal').text_content())
+    pg.fill('#impUrl', 'https://www.moxfield.com/decks/abcdefgh'); pg.click('#impGo'); pg.wait_for_timeout(1200)
+    check('Moxfield link opens the editor with the deck', pg.locator('#edName').input_value() == 'Mox Goblins' and 'Krenko, Mob Boss' in pg.locator('#edList').input_value())
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(200); pg.click('#newDeck'); pg.wait_for_timeout(300); pg.fill('#edList', 'https://moxfield.com/decks/abcdefgh'); pg.wait_for_timeout(1000)
+    check('pasting a link into the editor list imports it', 'Goblin Chieftain' in pg.locator('#edList').input_value() and pg.locator('#edName').input_value() == 'Mox Goblins')
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(200); pg.click('#importUrl'); pg.wait_for_timeout(300); pg.fill('#impUrl', 'https://www.moxfield.com/decks/blocked1'); pg.click('#impGo'); pg.wait_for_timeout(1000)
+    check('blocked Moxfield deck → editor opens with the paste hint', pg.locator('#edList').count() == 1 and 'Export' in pg.locator('#toasts').text_content())
+    check('link import: no JS errors', not errs, str(errs)[:300])
     browser.close()
 fails = [r for r in results if not r[1]]
 print(f'\n{len(results) - len(fails)}/{len(results)} passed')

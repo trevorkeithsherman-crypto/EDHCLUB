@@ -14,12 +14,14 @@ export function rememberRoom(code, data) { try { sessionStorage.setItem(memKey(c
 export function recallRoom(code) { try { return JSON.parse(sessionStorage.getItem(memKey(code)) || 'null'); } catch { return null; } }
 
 export const net = {
-  code: null, seat: null, name: '', isHost: false, channel: null, peers: {}, ready: false,
+  code: null, seat: null, name: '', isHost: false, spectator: false, channel: null, peers: {}, ready: false,
   handlers: {}, lastSentSeat: '', lastSentShared: '', lastGotShared: '', syncT: 0, hostId: null, seats: 4, botList: [],
   get bots() { return this.botList.length; },
   on(type, fn) { this.handlers[type] = fn; },
   get active() { return Boolean(this.channel); },
-  isMine(seat) { return !this.active || seat === this.seat || (this.isHost && this.botSeats().includes(seat)); },
+  isMine(seat) { if (this.spectator) return false; return !this.active || seat === this.seat || (this.isHost && this.botSeats().includes(seat)); },
+  /** Connected viewers who have no seat. */
+  spectators() { return Object.values(this.peers).filter((p) => p.spectator); },
   botSeats() { return this.botList.filter((k) => k < this.seats); },
   humanSeats() { return Array.from({ length: this.seats }, (_, k) => k).filter((k) => !this.botList.includes(k)); },
   /** Seats occupied by connected humans (other than me). */
@@ -31,9 +33,9 @@ export const net = {
     if (this.channel && this.ready) await this.channel.track({ seat: this.seat, name: this.name, isHost: true, clientId, seats: this.seats, botList: this.botList, ts: Date.now() });
   },
   /** Join a room. Resolves once presence has settled and a seat is chosen. */
-  async join({ code, name, isHost, seats, bots, botList }) {
+  async join({ code, name, isHost, seats, bots, botList, spectate = false }) {
     if (!supa && !window.__edhChannel) throw new Error('Rooms need the online service. Practice against bots works offline.');
-    this.code = code; this.name = name; this.isHost = isHost; this.seats = seats || 4;
+    this.code = code; this.name = name; this.isHost = isHost && !spectate; this.spectator = !!spectate; this.seats = seats || 4;
     this.botList = botList || Array.from({ length: bots || 0 }, (_, k) => this.seats - 1 - k).sort();
     // Tests can swap the transport for an in-browser bus (window.__edhChannel); production uses Supabase.
     const make = window.__edhChannel || ((name, opts) => supa.channel(name, opts));
@@ -58,6 +60,11 @@ export const net = {
     const human = this.humanSeats();
     let seat = null;
     const prior = recallRoom(code);
+    if (spectate) {
+      if (!hostPeer) throw new Error('Nobody is at that table right now');
+      await ch.track({ seat: null, name, isHost: false, spectator: true, clientId, ts: Date.now() });
+      this.ready = true; this.send('hello', { clientId }); return null;
+    }
     if (isHost) seat = 0;
     else if (prior && prior.seat != null && human.includes(prior.seat) && !taken.has(prior.seat)) seat = prior.seat;
     else for (const k of human) if (!taken.has(k)) { seat = k; break; }
@@ -72,7 +79,7 @@ export const net = {
   send(event, payload) { if (this.channel) this.channel.send({ type: 'broadcast', event, payload }); },
   /** Broadcast my seat and the shared state if they changed. Debounced. */
   queueSync(getSeatSnap, getShared) {
-    if (!this.active || !this.ready) return;
+    if (!this.active || !this.ready || this.spectator) return;
     clearTimeout(this.syncT);
     this.syncT = setTimeout(() => {
       for (const s of this.ownedSeats()) {
@@ -83,7 +90,7 @@ export const net = {
       if (hash !== this.lastSentShared && hash !== this.lastGotShared) { this.lastSentShared = hash; this.send('shared', { ...shared, hash }); }
     }, 120);
   },
-  ownedSeats() { return this.isHost ? [this.seat, ...this.botSeats()] : [this.seat]; },
+  ownedSeats() { return this.spectator ? [] : this.isHost ? [this.seat, ...this.botSeats()] : [this.seat]; },
   resendAll() { this.lastSentSeatBy = {}; this.lastSentShared = ''; this.handlers.resend && this.handlers.resend(); },
   leave() { if (this.channel) { if (this.channel.close) this.channel.close(); else supa.removeChannel(this.channel); this.channel = null; } },
 };

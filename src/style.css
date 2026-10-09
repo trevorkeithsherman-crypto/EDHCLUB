@@ -544,3 +544,11 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .pickcard { background: none; border: 2px solid transparent; border-radius: 12px; padding: 0; cursor: pointer; display: block; transition: border-color .15s, transform .15s; }
 .pickcard.on { border-color: var(--gold, #e3c56a); transform: translateY(-3px); box-shadow: 0 0 0 3px rgba(227,197,106,.25), 0 10px 24px rgba(0,0,0,.5); }
 .pickcard .card { pointer-events: none; }
+
+/* Spectators: the board is read-only; hide the controls that only a seated player uses. */
+.spectator .actions, .spectator .lifectl, .spectator #importBtn, .spectator #tableBtn, .spectator #newBtn, .spectator #tapbar, .spectator .hand .card { pointer-events: none; }
+.spectator .actions, .spectator .lifectl { opacity: .35; }
+.spectator #importBtn, .spectator #tableBtn, .spectator #newBtn { display: none; }
+#roomBar .watching { font: 600 11px/1 var(--f-ui, system-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--gold, #e3c56a); border: 1px solid rgba(227,197,106,.45); border-radius: 999px; padding: 5px 9px; }
+#roomBar .eye { font-size: 12px; opacity: .8; margin-left: 4px; }
+.spectator .handbar .btn { display: none; }

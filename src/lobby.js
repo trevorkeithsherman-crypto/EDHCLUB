@@ -129,9 +129,10 @@ function viewCreate() {
 
 function viewJoin(prefill = '') {
   show('Join a table', `${nameField()}<label>Table code<input id="code" maxlength="5" value="${esc(prefill)}" placeholder="ABCDE" style="font-family:var(--f-display);letter-spacing:.18em;font-size:22px;text-transform:uppercase"></label>
-  <p class="muted">${online ? 'Ask the host for the five-letter code.' : 'Joining needs the online service.'}</p><div class="row"><button type="button" class="btn big" id="go">Sit down</button></div>`);
+  <p class="muted">${online ? 'Ask the host for the five-letter code. Watching needs no seat: you see the board and the log, hands stay hidden.' : 'Joining needs the online service.'}</p><div class="row"><button type="button" class="btn big" id="go">Sit down</button><button type="button" class="btn ghost big" id="watch">Watch</button></div>`);
   $('#code').oninput = (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); };
   $('#go').onclick = () => { const n = takeName(); const code = $('#code').value.trim().toUpperCase(); if (code.length !== 5) { toast('Codes are five letters'); return; } location.href = `/table.html?room=${code}&name=${encodeURIComponent(n)}`; };
+  $('#watch').onclick = () => { const n = takeName(); const code = $('#code').value.trim().toUpperCase(); if (code.length !== 5) { toast('Codes are five letters'); return; } location.href = `/table.html?room=${code}&spectate=1&name=${encodeURIComponent(n)}`; };
 }
 
 async function renderClubs() {
@@ -160,8 +161,9 @@ async function renderOpen() {
   const body = $('#openBody');
   if (!online) { body.innerHTML = '<p class="muted">Open tables appear here once the online service is connected.</p>'; return; }
   const rooms = await openRooms();
-  body.innerHTML = rooms.length ? `<ul class="list">${rooms.map((r) => `<li><span><b>${esc(r.host_name || 'A planeswalker')}'s table</b> <small>· ${r.seats} seats · bracket ${r.bracket}${r.bots ? ` · ${r.bots} bot${r.bots > 1 ? 's' : ''}` : ''} · ${timeAgo(r.created_at)}</small></span><button type="button" class="btn sm" data-join="${esc(r.code)}">Join</button></li>`).join('')}</ul>` : '<p class="muted">No open tables right now. Host one and share the code.</p>';
+  body.innerHTML = rooms.length ? `<ul class="list">${rooms.map((r) => `<li><span><b>${esc(r.host_name || 'A planeswalker')}'s table</b> <small>· ${r.seats} seats · bracket ${r.bracket}${r.bots ? ` · ${r.bots} bot${r.bots > 1 ? 's' : ''}` : ''} · ${timeAgo(r.created_at)}</small></span><span class="row"><button type="button" class="btn ghost sm" data-watch="${esc(r.code)}">Watch</button><button type="button" class="btn sm" data-join="${esc(r.code)}">Join</button></span></li>`).join('')}</ul>` : '<p class="muted">No open tables right now. Host one and share the code.</p>';
   body.querySelectorAll('[data-join]').forEach((b) => { b.onclick = () => { go('join'); $('#code').value = b.dataset.join; }; });
+  body.querySelectorAll('[data-watch]').forEach((b) => { b.onclick = () => { const n = takeName(); location.href = `/table.html?room=${b.dataset.watch}&spectate=1&name=${encodeURIComponent(n)}`; }; });
 }
 const timeAgo = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
 
@@ -182,6 +184,7 @@ document.addEventListener('click', (e) => { const b = e.target.closest('[data-go
   renderOpen();
   const q = new URLSearchParams(location.search);
   if (q.get('join')) viewJoin(q.get('join').toUpperCase());
+  if (q.get('watch')) { viewJoin(q.get('watch').toUpperCase()); setTimeout(() => { const b = document.getElementById('watch'); if (b) b.focus(); }, 50); }
   if (q.get('reset')) { setTimeout(async () => { await refreshAccount(); if (user) { viewAccount(); toast('Set your new password below'); } }, 800); }
   if (!user && q.get('signup') != null) viewSignIn('signup');
 })();

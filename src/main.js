@@ -3,6 +3,7 @@ import { DB, buildSample } from './decks.js';
 import { FX, SFX, Ambient, setFxState } from './fx.js';
 import { net, rememberRoom, recallRoom } from './net.js';
 import { makeBot } from './bots.js';
+import * as Rules from './combat.js';
 import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
 
 /* ---------- Mode from the URL ---------- */
@@ -90,7 +91,7 @@ function lookup(name) {
   return { name, cost: '', type: 'Card', pt: '', colors: '', known: false };
 }
 function applyEntry(c, e) {
-  Object.assign(c, { name: e.name, cost: e.cost, type: e.type || c.type, pt: e.pt, colors: e.colors, img: e.img, big: e.big, backImg: e.backImg, backBig: e.backBig, artist: e.artist, art: e.art || '' });
+  Object.assign(c, { name: e.name, cost: e.cost, type: e.type || c.type, pt: e.pt, colors: e.colors, img: e.img, big: e.big, backImg: e.backImg, backBig: e.backBig, artist: e.artist, art: e.art || '', kw: e.kw || c.kw || '', oracle: e.oracle || c.oracle || '' });
 }
 function hydrate() {
   let n = 0;
@@ -145,7 +146,7 @@ function parseDeck(text, cmdOverride) {
 }
 function makeCard(def, owner) {
   const id = `c${net.active ? net.seat : 'l'}_${S.nextId++}`;
-  const c = { id, name: def.name, cost: def.cost || '', type: def.type || 'Card', pt: def.pt || '', colors: def.colors || '', img: def.img || '', big: def.big || '', art: def.art || '', backImg: def.backImg || '', backBig: def.backBig || '', artist: def.artist || '', owner, controller: owner, zone: 'library', tapped: false, faceDown: false, flipped: false, p1: 0, ctr: 0, token: false, x: 0, y: 0, isCmdr: false, casts: 0 };
+  const c = { id, name: def.name, cost: def.cost || '', type: def.type || 'Card', pt: def.pt || '', colors: def.colors || '', kw: def.kw || '', oracle: def.oracle || '', img: def.img || '', big: def.big || '', art: def.art || '', backImg: def.backImg || '', backBig: def.backBig || '', artist: def.artist || '', owner, controller: owner, zone: 'library', tapped: false, faceDown: false, flipped: false, p1: 0, ctr: 0, token: false, x: 0, y: 0, isCmdr: false, casts: 0 };
   S.cards[id] = c; return c;
 }
 function shuffleArr(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -213,7 +214,7 @@ function ptOf(c) {
 function powerOf(c) { const s = ptOf(c); const n = parseInt(s || '0', 10); return isNaN(n) ? 0 : n; }
 function toughnessOf(c) { const s = ptOf(c) || ''; const m = s.split('/')[1]; const n = parseInt(m || '0', 10); return isNaN(n) ? 0 : n; }
 const isPerm = (c) => !/(Instant|Sorcery)/.test(c.type);
-const isCreature = (c) => /Creature/.test(c.type);
+const isCreature = (c) => Rules.isCreature(c);
 const faceSrc = (c, big) => (c.flipped && c.backImg ? (big ? c.backBig : c.backImg) : (big ? c.big : c.img));
 function cardHTML(c, o = {}) {
   const hidden = (c.faceDown && !o.reveal) || o.back;
@@ -223,7 +224,7 @@ function cardHTML(c, o = {}) {
   const idA = o.noid ? '' : `data-id="${c.id}"`;
   if (hidden) return `<div class="${cls} facedown" ${idA} style="${st}"><div class="ci back ${backOk ? 'pic' : ''}"><span>EC</span>${backOk ? `<img src="${CARD_BACK}" alt="" draggable="false" decoding="async">` : ''}</div></div>`;
   const sg = c.p1 > 0 ? '+' : '';
-  const over = `${c.p1 ? `<div class="bp">${sg}${c.p1}/${sg}${c.p1}</div>` : ''}${c.ctr ? `<div class="bc">${c.ctr}</div>` : ''}${c.dmg ? `<div class="dmg" title="Damage marked this turn">${c.dmg}</div>` : ''}${c.token ? '<div class="tk">Token</div>' : ''}`;
+  const over = `${c.p1 ? `<div class="bp">${sg}${c.p1}/${sg}${c.p1}</div>` : ''}${c.ctr ? `<div class="bc">${c.ctr}</div>` : ''}${c.dmg ? `<div class="dmg" title="Damage marked this turn">${c.dmg}</div>` : ''}${c.sick && c.zone === 'battlefield' && isCreature(c) && !Rules.has(c, 'haste') ? '<div class="zz" title="Summoning sick: can\'t attack until your next turn">zz</div>' : ''}${c.token ? '<div class="tk">Token</div>' : ''}`;
   const src = faceSrc(c, o.big);
   if (src) {
     const mod = c.p1 && c.pt ? ptOf(c) : null;
@@ -300,14 +301,14 @@ function moveCard(id, pi, zone, o = {}) {
   const fromZone = c.zone;
   detach(c);
   if (c.token && zone !== 'battlefield' && zone !== 'stack') { delete S.cards[id]; S.attacks = S.attacks.filter((a) => a.id !== id); render(); FX.puff(from, colorHex(c)); SFX.play('pop'); return; }
-  if (fromZone === 'battlefield' && zone !== 'battlefield') { c.tapped = false; c.p1 = 0; c.ctr = 0; c.dmg = 0; c.faceDown = false; c.flipped = false; S.attacks = S.attacks.filter((a) => a.id !== id); S.attacks.forEach((a) => { if (a.blockers && a.blockers.includes(id)) { a.blockers = a.blockers.filter((b) => b !== id); } }); }
+  if (fromZone === 'battlefield' && zone !== 'battlefield') { c.tapped = false; c.p1 = 0; c.ctr = 0; c.dmg = 0; c.sick = false; c.faceDown = false; c.flipped = false; S.attacks = S.attacks.filter((a) => a.id !== id); S.attacks.forEach((a) => { if (a.blockers && a.blockers.includes(id)) { a.blockers = a.blockers.filter((b) => b !== id); } }); }
   if (fromZone === 'command' && c.isCmdr && (zone === 'stack' || zone === 'battlefield')) c.casts = (c.casts || 0) + 1;
   c.controller = (zone === 'battlefield' || zone === 'stack' || zone === 'hand') ? pi : c.owner;
   c.zone = zone;
   if (zone === 'stack') S.stack.push(id);
   else { const list = P(c.controller).zones[zone]; if (zone === 'library') { o.bottom ? list.push(id) : list.unshift(id); } else list.push(id); }
   render();
-  if (zone === 'battlefield') { if (o.x == null) autoPlace(c); else { c.x = o.x; c.y = o.y; } render(); }
+  if (zone === 'battlefield') { if (fromZone !== 'battlefield') c.sick = true; if (o.x == null) autoPlace(c); else { c.x = o.x; c.y = o.y; } render(); }
   arrive(c, from, o.anim || 'fly');
 }
 function bfMetrics(pi) {
@@ -395,7 +396,7 @@ function createTokens(pi, def, count) {
 function attack(c, t) {
   const ex = S.attacks.find((a) => a.id === c.id);
   if (ex) { ex.target = t; ex.t = Date.now(); ex.ok = false; ex.blockers = []; } else S.attacks.push({ id: c.id, target: t, t: Date.now(), ok: false, blockers: [] });
-  if (S.turn.phase !== 2) S.turn.phase = 2; c.tapped = true; render();
+  if (S.turn.phase !== 2) S.turn.phase = 2; if (!Rules.has(c, 'vigilance')) c.tapped = true; render();
   FX.lunge(cardEl(c.id), visRect(lifeEl(t))); SFX.play('charge'); log(`${c.name} attacks ${P(t).name}`);
   botDefend();
 }
@@ -408,16 +409,26 @@ function allowAll(t) { S.attacks.filter((a) => a.target === t && needsAnswer(a))
 let blocking = null;
 function startBlocking(a) { blocking = { attackId: a.id, seat: a.target }; render(); }
 function stopBlocking() { blocking = null; render(); }
+// Tap a legal blocker to add it; tap again to remove. Menace needs two; flying needs flying or reach.
 function setBlock(a, blockerId) {
-  const b = S.cards[blockerId]; if (!b) return;
-  a.blockers = [blockerId]; a.ok = false; blocking = null; render();
-  FX.slam(cardEl(blockerId), 1.1); SFX.play('whoosh');
-  log(`${P(a.target).name} blocks ${S.cards[a.id]?.name || 'an attacker'} with ${b.name}`);
+  const b = S.cards[blockerId]; const atk = S.cards[a.id]; if (!b || !atk) return;
+  if (!Rules.canBlock(b, atk)) { toast(Rules.blockLegal(atk, [b]).why || `${b.name} can't block that`); return; }
+  a.blockers = a.blockers || [];
+  if (a.blockers.includes(blockerId)) a.blockers = a.blockers.filter((x) => x !== blockerId);
+  else { a.blockers = [...a.blockers, blockerId]; FX.slam(cardEl(blockerId), 1.1); SFX.play('whoosh'); }
+  a.ok = false; render();
+}
+function finishBlock(a) {
+  const atk = S.cards[a.id]; const bl = (a.blockers || []).map((id) => S.cards[id]).filter(Boolean);
+  const legal = Rules.blockLegal(atk, bl); if (!legal.ok) { toast(legal.why); return; }
+  blocking = null;
+  if (bl.length) { const r = Rules.simulate(atk, bl); log(`${P(a.target).name} blocks ${atk.name} with ${bl.map((b) => b.name).join(' and ')} (${Rules.describe(atk, bl, r)})`); } else { allowAttack(a); return; }
+  render();
 }
 function unblock(a) { a.blockers = []; a.ok = false; render(); }
-function dmgTo(card, n, src) {
+function dmgTo(card, n, src, lethal = false) {
   if (!card || n <= 0) return;
-  if (net.isMine(card.controller)) REQ.cardDmg(card.controller, card.id, n, src ? src.id : null); else request(card.controller, 'cardDmg', card.id, n, src ? src.id : null);
+  if (net.isMine(card.controller)) REQ.cardDmg(card.controller, card.id, n, src ? src.id : null, lethal); else request(card.controller, 'cardDmg', card.id, n, src ? src.id : null, lethal);
 }
 function combatDamage(c, t) {
   const a = attackOf(c);
@@ -425,18 +436,22 @@ function combatDamage(c, t) {
   if (a && !a.ok && !P(t).bot) { toast(`Waiting for ${P(t).name} to block or take it`); return; }
   const n = powerOf(c); if (n <= 0) { toast(`${c.name} has no power to deal damage`); return; }
   S.attacks = S.attacks.filter((x) => x.id !== c.id);
+  if (Rules.has(c, 'lifelink')) { log(`${P(c.controller).name} gains ${n} (lifelink)`); changeLifeAny(c.controller, n); }
   if (!net.isMine(t)) { render(); request(t, 'combat', c.id); return; }
   REQ.combat(t, c.id);
 }
+function changeLifeAny(i, d) { if (net.isMine(i)) changeLife(i, d); else request(i, 'changeLife', d); }
 function resolveBlock(a) {
   const c = S.cards[a.id]; if (!c) return;
-  const blockers = a.blockers.map((id) => S.cards[id]).filter(Boolean);
+  const blockers = (a.blockers || []).map((id) => S.cards[id]).filter(Boolean);
   S.attacks = S.attacks.filter((x) => x.id !== a.id); render();
   if (!blockers.length) return;
-  let left = powerOf(c);
-  blockers.forEach((b) => { const hit = Math.min(left, Math.max(0, toughnessOf(b) - (b.dmg || 0))) || left; const n = blockers.length === 1 ? left : hit; left -= n; log(`${c.name} deals ${n} to ${b.name}`); dmgTo(b, n, c); });
-  const back = blockers.reduce((s, b) => s + powerOf(b), 0);
-  if (back > 0) { log(`${blockers.map((b) => b.name).join(' and ')} deal${blockers.length > 1 ? '' : 's'} ${back} to ${c.name}`); dmgTo(c, back, blockers[0]); }
+  const r = Rules.simulate(c, blockers);
+  const byId = Object.fromEntries([c, ...blockers].map((x) => [x.id, x]));
+  const dealt = {}; r.events.forEach((e) => { const k = `${e.from}>${e.to}`; dealt[k] = (dealt[k] || 0) + e.n; });
+  Object.entries(dealt).forEach(([k, n]) => { const [from, to] = k.split('>'); const src = byId[from]; if (to === 'player') { log(`${src.name} tramples over for ${n} to ${P(a.target).name}`); if (src.isCmdr && net.isMine(a.target)) P(a.target).cmdDmg[src.id] = (P(a.target).cmdDmg[src.id] || 0) + n; changeLifeAny(a.target, -n); } else { log(`${src.name} deals ${n} to ${byId[to].name}`); dmgTo(byId[to], n, src, r.blockersDie.includes(to) || (to === c.id && r.attackerDies)); } });
+  Object.entries(r.lifelink).forEach(([pi, n]) => { log(`${P(+pi).name} gains ${n} (lifelink)`); changeLifeAny(+pi, n); });
+  log(Rules.describe(c, blockers, r));
   SFX.play('hit');
 }
 // Resolve every attack of mine the defenders have answered.
@@ -454,12 +469,13 @@ function botDefend() {
       delete a._botTimer; if (!S.attacks.includes(a) || !needsAnswer(a)) return;
       const atk = S.cards[a.id]; if (!atk) return;
       const used = new Set(S.attacks.flatMap((x) => x.blockers || []));
-      const cands = P(a.target).zones.battlefield.map((id) => S.cards[id]).filter((b) => isCreature(b) && !b.tapped && !used.has(b.id));
-      const good = cands.filter((b) => toughnessOf(b) > powerOf(atk)).sort((x, y) => powerOf(y) - powerOf(x))[0];
-      if (good && powerOf(atk) >= 3) setBlock(a, good.id); else allowAttack(a);
-    }, 700);
+      const choice = bot ? bot.chooseBlock(a, used) : [];
+      if (choice.length) { a.blockers = choice; a.ok = false; const bl = choice.map((id) => S.cards[id]); log(`${P(a.target).name} blocks ${atk.name} with ${bl.map((b) => b.name).join(' and ')} (${Rules.describe(atk, bl, Rules.simulate(atk, bl))})`); choice.forEach((id) => FX.slam(cardEl(id), 1.1)); SFX.play('whoosh'); render(); }
+      else allowAttack(a);
+    }, 600 + Math.random() * 700);
   });
 }
+function clearSick(active) { Object.values(S.cards).forEach((c) => { if (c.sick && c.controller === active && net.isMine(c.controller)) c.sick = false; }); }
 function clearDamage() { Object.values(S.cards).forEach((c) => { if (c.dmg && net.isMine(c.controller)) c.dmg = 0; }); }
 function changeLife(i, d, o = {}) {
   const p = P(i); if (!d) return; p.life += d;
@@ -508,6 +524,7 @@ function passTurn() {
   if (n <= S.turn.active) S.turn.number++;
   S.turn.active = n; S.turn.phase = 0;
   const p = P(n); const tapped = p.zones.battlefield.filter((id) => S.cards[id].tapped);
+  clearSick(n);
   tapped.forEach((id) => { S.cards[id].tapped = false; cardEl(id)?.classList.remove('tapped'); });
   if (tapped.length) SFX.play('tick');
   log(`${p.name}'s turn`);
@@ -529,7 +546,7 @@ function wipeLocal(kind) {
 }
 
 /* ---------- Room sync ---------- */
-const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'dmg', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts'];
+const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'dmg', 'kw', 'sick', 'anim', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts'];
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
@@ -548,7 +565,7 @@ function applySeat(snap) {
 function applyShared(sn) {
   const turnChanged = S.turn.active !== sn.turn.active || S.turn.number !== sn.turn.number;
   S.turn = sn.turn; S.stack = sn.stack; S.attacks = sn.attacks; S.outOrder = sn.outOrder; S.stats = sn.stats;
-  if (turnChanged) clearDamage();
+  if (turnChanged) { clearDamage(); clearSick(S.turn.active); }
   botDefend();
   const was = S.over; S.over = sn.over;
   if (sn.log && sn.log[0] && (!S.log[0] || S.log[0].t < sn.log[0].t)) S.log = sn.log;
@@ -566,11 +583,13 @@ const REQ = {
   changeLife: (to, d, src) => changeLife(to, d, { src: src ? S.cards[src] : null }),
   poison: (to, d) => { const p = P(to); p.poison = Math.max(0, p.poison + d); render(); if (d > 0) { SFX.play('hit'); FX.shake(seatEl(to)); } checkOut(to); },
   cmdDmg: (to, cardId, d) => { const p = P(to); const cur = p.cmdDmg[cardId] || 0; const nv = Math.max(0, cur + d); if (nv !== cur) { p.cmdDmg[cardId] = nv; changeLife(to, -(nv - cur), { src: S.cards[cardId] }); } },
-  cardDmg: (to, cardId, n, srcId) => {
+  cardTo: (to, cardId, zone) => { const c = S.cards[cardId]; if (c && c.controller === to) moveCard(cardId, c.owner, zone); },
+  cardDmg: (to, cardId, n, srcId, lethal) => {
     const c = S.cards[cardId]; if (!c || c.zone !== 'battlefield') return;
-    c.dmg = (c.dmg || 0) + n; const tough = toughnessOf(c);
+    c.dmg = (c.dmg || 0) + n; const tough = toughnessOf(c); const src = srcId ? S.cards[srcId] : null;
     FX.shake(cardEl(cardId)); SFX.play('hit');
-    if (tough > 0 && c.dmg >= tough) { log(`${c.name} was destroyed`); setTimeout(() => { if (S.cards[cardId] && S.cards[cardId].zone === 'battlefield') { moveCard(cardId, c.owner, 'graveyard'); FX.puff(cardEl(cardId) || seatEl(to), colorHex(c)); } }, 450); }
+    const dies = !Rules.has(c, 'indestructible') && (lethal || (tough > 0 && c.dmg >= tough) || (src && Rules.has(src, 'deathtouch')));
+    if (dies) { log(`${c.name} was destroyed`); setTimeout(() => { if (S.cards[cardId] && S.cards[cardId].zone === 'battlefield') { moveCard(cardId, c.owner, 'graveyard'); FX.puff(cardEl(cardId) || seatEl(to), colorHex(c)); } }, 450); }
     render();
   },
   combat: (to, cardId) => { const c = S.cards[cardId]; if (!c) return; const n = powerOf(c); if (n <= 0) return; const p = P(to); if (c.isCmdr) p.cmdDmg[c.id] = (p.cmdDmg[c.id] || 0) + n; log(`${c.name} dealt ${n} damage to ${p.name}`); changeLife(to, -n, { src: c }); },
@@ -610,7 +629,7 @@ function seatHTML(i, full) {
   const maxCmd = Math.max(0, ...Object.values(p.cmdDmg));
   const warn = maxCmd >= 15 || p.poison >= 7;
   const usedB = new Set(S.attacks.flatMap((a) => a.blockers || []));
-  const bf = p.zones.battlefield.map((id) => { const c = S.cards[id]; const atk = S.attacks.some((a) => a.id === id); const blk = usedB.has(id); const can = blocking && blocking.seat === i && isCreature(c) && !c.tapped && !blk; return cardHTML(c, { cls: `${atk ? 'attacking' : ''} ${blk ? 'blocking' : ''} ${can ? 'canblock' : ''}`, style: `left:${(c.x * 100).toFixed(2)}%;top:${(c.y * 100).toFixed(2)}%` }); }).join('');
+  const bf = p.zones.battlefield.map((id) => { const c = S.cards[id]; const atk = S.attacks.some((a) => a.id === id); const blk = usedB.has(id); const atkCard = blocking ? S.cards[blocking.attackId] : null; const chosen = blocking && S.attacks.find((x) => x.id === blocking.attackId)?.blockers?.includes(id); const can = blocking && blocking.seat === i && atkCard && Rules.canBlock(c, atkCard) && (!blk || chosen); return cardHTML(c, { cls: `${atk ? 'attacking' : ''} ${blk ? 'blocking' : ''} ${can ? 'canblock' : ''}`, style: `left:${(c.x * 100).toFixed(2)}%;top:${(c.y * 100).toFixed(2)}%` }); }).join('');
   const mp = (z, label, n) => `<button type="button" class="mp" data-act="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}" title="${label}">${label} <b>${n}</b></button>`;
   const plate = `<div class="plate">${avatarHTML(i, full)}<div class="pinfo">
     <button type="button" class="pname" data-act="seatmenu" data-p="${i}"><span>${esc(p.name)}</span>${identityPips(i)}${p.out ? '<span class="outtag">Out</span>' : ''}${p.empty ? '<span class="chip">Waiting…</span>' : ''}</button>
@@ -758,19 +777,24 @@ function renderPrompt() {
     const c = S.cards[targeting.id];
     html = `<span>Choose a player for <b>${esc(c ? c.name : 'this creature')}</b> to attack</span><button type="button" class="btn sm" data-act="cancelTarget">Cancel</button>`;
   } else if (blocking) {
-    const c = S.cards[blocking.attackId];
-    html = `<span>Click an untapped creature to block <b>${esc(c ? c.name : 'the attacker')}</b></span><button type="button" class="btn sm" data-act="cancelBlock">Cancel</button>`;
+    const c = S.cards[blocking.attackId]; const a = S.attacks.find((x) => x.id === blocking.attackId);
+    const bl = (a?.blockers || []).map((id) => S.cards[id]).filter(Boolean);
+    const kw = c ? Rules.shownKeywords(c) : [];
+    const preview = c && bl.length ? Rules.describe(c, bl, Rules.simulate(c, bl)) : (Rules.has(c, 'menace') ? 'Menace: pick two blockers' : (Rules.has(c, 'flying') ? 'Flying: only flying or reach creatures can block' : 'Tap a highlighted creature'));
+    cls = 'prompt multi';
+    html = `<div class="phead">Block <b>${esc(c ? c.name : 'the attacker')}</b>${c ? ptTag(c) : ''} ${kw.map((k) => `<em class="kwb">${esc(k)}</em>`).join('')}</div><div class="prow"><span class="pcard">${bl.length ? `With: <b>${esc(bl.map((b) => b.name).join(', '))}</b>` : ''}<small>${esc(preview)}</small></span><button type="button" class="btn ghost sm" data-act="cancelBlock">Cancel</button><button type="button" class="btn sm hot" data-act="doneBlock" ${bl.length ? '' : 'disabled'}>Done</button></div>`;
   } else {
     const fromOther = (a) => S.cards[a.id].controller !== a.target;
     const incoming = S.attacks.filter((a) => S.cards[a.id] && mineHuman(a.target) && needsAnswer(a) && fromOther(a));
     const outgoing = S.attacks.filter((a) => S.cards[a.id] && net.isMine(S.cards[a.id].controller) && !P(S.cards[a.id].controller).bot);
     const held = S.attacks.filter((a) => S.cards[a.id] && mineHuman(a.target) && isBlocked(a) && fromOther(a) && !net.isMine(S.cards[a.id].controller));
-    const blockRow = (a) => { const c = S.cards[a.id]; const b = S.cards[a.blockers[0]]; return `<div class="prow"><span class="pcard">${esc(c.name)}${ptTag(c)}</span><span class="pstate">blocked by <b>${esc(b ? b.name : '?')}</b></span><button type="button" class="btn ghost sm" data-act="unblock" data-id="${a.id}">Change</button></div>`; };
+    const blockRow = (a) => { const c = S.cards[a.id]; const bl = a.blockers.map((id) => S.cards[id]).filter(Boolean); return `<div class="prow"><span class="pcard">${esc(c.name)}${ptTag(c)}<small>${esc(Rules.describe(c, bl, Rules.simulate(c, bl)))}</small></span><span class="pstate">blocked by <b>${esc(bl.map((b) => b.name).join(', ') || '?')}</b></span><button type="button" class="btn ghost sm" data-act="unblock" data-id="${a.id}">Change</button></div>`; };
     if (incoming.length) {
       cls = 'prompt multi incoming';
       const seat = incoming[0].target; const atkName = P(S.cards[incoming[0].id].controller).name;
       const rows = incoming.map((a) => { const c = S.cards[a.id];
-        return `<div class="prow"><span class="pcard">${esc(c.name)}${ptTag(c)}</span><button type="button" class="btn ghost sm" data-act="block" data-id="${a.id}">Block</button><button type="button" class="btn sm" data-act="allow" data-id="${a.id}">Take it</button></div>`; }).join('');
+        const kw = Rules.shownKeywords(c).map((k) => `<em class="kwb">${esc(k)}</em>`).join(''); const legal = P(a.target).zones.battlefield.map((id) => S.cards[id]).filter((b) => Rules.canBlock(b, c)).length;
+        return `<div class="prow"><span class="pcard">${esc(c.name)}${ptTag(c)} ${kw}</span>${legal ? `<button type="button" class="btn ghost sm" data-act="block" data-id="${a.id}">Block</button>` : '<small class="pstate">no legal blockers</small>'}<button type="button" class="btn sm" data-act="allow" data-id="${a.id}">Take it</button></div>`; }).join('');
       html = `<div class="phead"><b>${esc(atkName)}</b> attacks ${MODE === 'hotseat' ? esc(P(seat).name) : 'you'}<button type="button" class="btn ghost sm" data-act="allowAll" data-p="${seat}">Take all</button></div>${rows}`;
     } else if (outgoing.length) {
       cls = 'prompt multi outgoing';
@@ -836,14 +860,19 @@ function cardMenu(c, x, y) {
   if (c.zone === 'battlefield') {
     add(c.tapped ? 'Untap' : 'Tap', () => toggleTap(c));
     if (c.backImg) add(c.flipped ? 'Transform to front' : 'Transform', () => { c.flipped = !c.flipped; render(); FX.slam(cardEl(c.id), 1.08); SFX.play('whoosh'); });
+    if (!/Creature/.test(c.type) && isPerm(c)) {
+      const auto = Rules.stationThreshold(c) > 0 && (c.ctr || 0) >= Rules.stationThreshold(c);
+      if (c.anim) add('It\'s not a creature anymore', () => { c.anim = false; render(); log(`${c.name} stops being a creature`); });
+      else if (!auto) add(/Vehicle/.test(c.type) ? 'Crew it (becomes a creature)' : /Spacecraft/.test(c.type) ? 'It\'s stationed (becomes a creature)' : 'Treat as a creature (animate)', () => { c.anim = true; if (c.sick == null) c.sick = false; render(); log(`${c.name} becomes a creature`); });
+    }
     if (isCreature(c)) {
       const at = S.attacks.find((a) => a.id === c.id);
       if (at && isBlocked(at)) add(`Resolve block: trade blows with ${S.cards[at.blockers[0]]?.name || 'the blocker'}`, () => resolveBlock(at), { hot: true });
       else if (at && (at.ok || P(at.target).bot)) add(`Deal ${powerOf(c)} combat damage to ${P(at.target).name}`, () => combatDamage(c, at.target), { hot: true });
       else if (at) add(`Waiting for ${P(at.target).name} to block or take it`, () => toast(`${P(at.target).name} hasn't answered yet`));
-      else add('Attack…', () => startTargeting(c), { hot: true });
+      else { const ca = Rules.canAttack(c); if (ca.ok) add('Attack…', () => startTargeting(c), { hot: true }); else if (ca.why !== 'Tapped') add(`Attack anyway (${ca.why.toLowerCase()})`, () => startTargeting(c)); }
       if (at) add('Call off the attack', () => { S.attacks = S.attacks.filter((a) => a.id !== c.id); c.tapped = false; render(); log(`${c.name} stops attacking`); });
-      S.players.forEach((p, k) => { if (k !== c.controller && !p.out && k < S.seats) add(`Attack ${p.name}`, () => attack(c, k)); });
+      if (Rules.canAttack(c).ok) S.players.forEach((p, k) => { if (k !== c.controller && !p.out && k < S.seats) add(`Attack ${p.name}`, () => attack(c, k)); });
     }
     sep();
     add('+1/+1 counter', () => counter(c, 'p1', 1)); add('−1/−1 counter', () => counter(c, 'p1', -1));
@@ -1209,13 +1238,18 @@ function onClick(e) {
     if (seat) { const c = S.cards[targeting.id]; const k = +seat.dataset.seat; stopTargeting(); if (c) attack(c, k); return; }
   }
   if (blocking) {
-    const card = e.target.closest('.card.canblock');
-    if (card) { const a = S.attacks.find((x) => x.id === blocking.attackId); if (a) setBlock(a, card.dataset.id); else stopBlocking(); return; }
+    const card = e.target.closest('#table .card[data-id]');
+    if (card) {
+      const a = S.attacks.find((x) => x.id === blocking.attackId); const b = S.cards[card.dataset.id]; const atk = a && S.cards[a.id];
+      if (!a || !atk) { stopBlocking(); return; }
+      if (b && b.controller === blocking.seat && b.zone === 'battlefield') { if (card.classList.contains('canblock') || (a.blockers || []).includes(b.id)) setBlock(a, b.id); else toast(!isCreature(b) ? `${b.name} isn't a creature` : b.tapped ? `${b.name} is tapped` : (Rules.blockLegal(atk, [b]).why || `${b.name} can't block that`)); }
+      return;
+    }
   }
   const pb = e.target.closest('#prompt [data-act]');
   if (pb) {
     const act = pb.dataset.act; const a = S.attacks.find((x) => x.id === pb.dataset.id);
-    if (act === 'cancelTarget') stopTargeting(); else if (act === 'cancelBlock') stopBlocking();
+    if (act === 'cancelTarget') stopTargeting(); else if (act === 'cancelBlock') { if (a) a.blockers = []; stopBlocking(); } else if (act === 'doneBlock') { const b = S.attacks.find((x) => x.id === blocking?.attackId); if (b) finishBlock(b); }
     else if (act === 'allow' && a) allowAttack(a); else if (act === 'block' && a) startBlocking(a); else if (act === 'unblock' && a) unblock(a);
     else if (act === 'allowAll') allowAll(+pb.dataset.p); else if (act === 'resolveCombat') resolveCombat(+pb.dataset.p);
     return;
@@ -1304,7 +1338,7 @@ function bindUI() {
 }
 
 /* ---------- Boot ---------- */
-function botApi() { return { S, P, moveCard, castToStack, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, log }; }
+function botApi() { return { S, P, moveCard, castToStack, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife: changeLifeAny, request, net, toast, isMine: (k) => net.isMine(k), lookup, toGraveyard: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'graveyard'); else request(c.controller, 'cardTo', c.id, 'graveyard'); }, toExile: (c) => { if (net.isMine(c.controller)) moveCard(c.id, c.owner, 'exile'); else request(c.controller, 'cardTo', c.id, 'exile'); } }; }
 function roomBar() {
   if (MODE !== 'room') return;
   const t = $('#roomBar'); if (!t) return;

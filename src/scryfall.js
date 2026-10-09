@@ -44,6 +44,8 @@ function toEntry(card) {
     backImg: backImgs ? backImgs.normal : '',
     backBig: backImgs ? (backImgs.large || backImgs.normal) : '',
     artist: card.artist || front.artist || '',
+    kw: (card.keywords || []).join(',').toLowerCase(),
+    oracle: (card.oracle_text || front.oracle_text || (faces ? faces.map((f) => f.oracle_text || '').join('\n') : '')).slice(0, 600),
     uri: card.scryfall_uri || '',
   };
 }

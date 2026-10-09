@@ -7,8 +7,8 @@ exec(src)
 def put_creature(pg, seat, name, pt):
     """Drop a known creature straight onto a seat's battlefield via the state hook (test-only)."""
     return pg.evaluate("""([seat,name,pt])=>{const S=__edhState(); const id='t'+Math.random().toString(36).slice(2,8);
-      const c={id,name,cost:'',type:'Creature — Test',pt,colors:'',img:'',big:'',art:'',backImg:'',backBig:'',artist:'',owner:seat,controller:seat,zone:'battlefield',tapped:false,faceDown:false,flipped:false,p1:0,ctr:0,token:true,x:Math.random()*.6,y:.3,isCmdr:false,casts:0};
-      __edhMut(st=>{st.cards[id]=c; st.players[seat].zones.battlefield.push(id);}); return id;}""", [seat, name, pt])
+      const c={id,name,cost:'',type:'Creature — Test',pt,colors:'',img:'',big:'',art:'',backImg:'',backBig:'',artist:'',owner:seat,controller:seat,zone:'battlefield',tapped:false,faceDown:false,flipped:false,p1:0,ctr:0,token:true,x:0,y:.25,isCmdr:false,casts:0};
+      __edhMut(st=>{c.x=(st.players[seat].zones.battlefield.length%5)*0.18; st.cards[id]=c; st.players[seat].zones.battlefield.push(id);}); return id;}""", [seat, name, pt])
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
@@ -25,7 +25,7 @@ with sync_playwright() as p:
     # block with the wall
     pg.click('#prompt [data-act=block]'); pg.wait_for_timeout(200)
     check('block mode highlights untapped creatures of the defender', pg.locator('.card.canblock').count() == 2)
-    pg.click(f'.card.canblock[data-id="{wall}"]'); pg.wait_for_timeout(300)
+    pg.click(f'.card.canblock[data-id="{wall}"]'); pg.wait_for_timeout(200); pg.click('#prompt [data-act=doneBlock]'); pg.wait_for_timeout(300)
     st = state(pg); check('blocker recorded on the attack', st['attacks'][0]['blockers'] == [wall])
     check('attacker sees "Resolve combat"', pg.locator('#prompt [data-act=resolveCombat]').count() == 1)
     pg.click('#prompt [data-act=resolveCombat]'); pg.wait_for_timeout(1200); st = state(pg)
@@ -33,7 +33,7 @@ with sync_playwright() as p:
     check('attacker took 0 back from a 0-power wall', not st['cards'][atk].get('dmg'))
     # second attack: block with the bear -> bear dies, ogre takes 2
     pg.evaluate(f"__edhMut(st=>{{st.cards['{atk}'].tapped=false}})"); pg.wait_for_timeout(200)
-    menu(pg, pg.locator(f'.card[data-id="{atk}"]'), 'Attack Mira'); pg.click('#prompt [data-act=block]'); pg.wait_for_timeout(150); pg.click(f'.card.canblock[data-id="{bear}"]'); pg.wait_for_timeout(200)
+    menu(pg, pg.locator(f'.card[data-id="{atk}"]'), 'Attack Mira'); pg.click('#prompt [data-act=block]'); pg.wait_for_timeout(150); pg.click(f'.card.canblock[data-id="{bear}"]'); pg.wait_for_timeout(150); pg.click('#prompt [data-act=doneBlock]'); pg.wait_for_timeout(200)
     menu(pg, pg.locator(f'.card[data-id="{atk}"]'), 'Resolve block'); pg.wait_for_timeout(1200); st = state(pg)
     check('lethal block damage removes the blocker from the battlefield', bear not in st['players'][1]['zones']['battlefield'] and (bear not in st['cards'] or st['cards'][bear]['zone'] == 'graveyard'))
     check('attacker is marked with the blocker\'s power', st['cards'][atk]['dmg'] == 2)
@@ -60,7 +60,7 @@ with sync_playwright() as p:
     check('room: guest is prompted to block or take it', guest.is_visible('#prompt') and guest.locator('#prompt [data-act=block]').count() == 1)
     check('room: host sees the waiting state', 'Waiting for' in host.locator('#prompt').text_content())
     check('room: host cannot push damage through early', not menu(host, host.locator(f'.card[data-id="{a}"]'), 'Deal 4 combat damage') and state(guest)['players'][1]['life'] == 40)
-    guest.click('#prompt [data-act=block]'); guest.wait_for_timeout(150); guest.click(f'.card.canblock[data-id="{b}"]'); host.wait_for_timeout(1500)
+    guest.click('#prompt [data-act=block]'); guest.wait_for_timeout(150); guest.click(f'.card.canblock[data-id="{b}"]'); guest.wait_for_timeout(150); guest.click('#prompt [data-act=doneBlock]'); host.wait_for_timeout(1500)
     check('room: host sees the block and can resolve', host.locator('#prompt [data-act=resolveCombat]').count() == 1 and state(host)['attacks'][0]['blockers'] == [b])
     host.click('#prompt [data-act=resolveCombat]'); host.wait_for_timeout(2000)
     sg, sh = state(guest), state(host)

@@ -4,9 +4,9 @@
 // table uses. The host's client runs them.
 
 export function makeBot(api) {
-  const { S, P, castToStack, cast, activate, rulesFor, castTax, castBlock, castsThisTurn, parseAbilities, spellKind, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife, toGraveyard, toExile, moveCard, toggleTap } = api;
+  const { S, P, castToStack, cast, activate, attach, crew, loyalty, idle, fire, rulesFor, castTax, castBlock, castsThisTurn, parseAbilities, spellKind, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife, toGraveyard, toExile, moveCard, toggleTap } = api;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const speed = () => ({ fast: 0.35, relaxed: 1.7 }[S.botSpeed] || 1.25);
+  const speed = () => ({ fast: 0.35, relaxed: 1.7, instant: 0.04 }[S.botSpeed] || 1.25);
   const jitter = (ms) => ms * (0.75 + Math.random() * 0.5);
   let running = false;
 
@@ -84,7 +84,8 @@ export function makeBot(api) {
     const p = P(i); const rules = rulesFor(i); const ctx = { castsThisTurn: castsThisTurn(i) + 0, lands: bf(i).filter(isLand).length };
     const picks = []; let left = mana - reserve;
     const legal = (c) => !castBlock(rules, c, { ...ctx, castsThisTurn: ctx.castsThisTurn + picks.length });
-    const hand = p.zones.hand.map((id) => S.cards[id]).filter((c) => !isLand(c) && effCost(i, c) <= mana - reserve && legal(c));
+    const reactive = (c) => /Instant/.test(c.type) && /counter target|return target spell|regenerate|prevent all|until end of turn$|this turn\.?$/.test(oracle(c)) && !/draw|destroy|exile|damage/.test(oracle(c));
+    const hand = p.zones.hand.map((id) => S.cards[id]).filter((c) => !isLand(c) && effCost(i, c) <= mana - reserve && legal(c) && !reactive(c));
     const limit = rules.spellLimit ? Math.max(0, rules.spellLimit.n - ctx.castsThisTurn) : Infinity;
     const take = (c) => { if (c && effCost(i, c) <= left && !picks.includes(c) && legal(c) && picks.length < limit) { picks.push(c); left -= effCost(i, c); } };
     const round = S.turn.number;
@@ -97,7 +98,8 @@ export function makeBot(api) {
     const myPower = creatures(i).reduce((s, c) => s + powerOf(c), 0); const theirPower = Math.max(0, ...opponents(i).map(({ k }) => creatures(k).reduce((s, c) => s + powerOf(c), 0)));
     if (theirPower >= myPower + 8 && creatures(i).length <= 2) take(hand.filter(isWipe)[0]);
     // fill the curve: best value per mana, biggest first, then cheap stuff with what's left
-    const rest = hand.filter((c) => !picks.includes(c) && !isWipe(c) && !(isCreatureKill(c) || burn(c)) || (isCreature(c) && !picks.includes(c))).sort((a, b) => cost(b) - cost(a) || value(b) - value(a));
+    const spell = (c) => /Instant|Sorcery/.test(c.type);
+    const rest = hand.filter((c) => !picks.includes(c) && !(spell(c) && (isWipe(c) || isCreatureKill(c) || burn(c))) || (isCreature(c) && !picks.includes(c))).sort((a, b) => cost(b) - cost(a) || value(b) - value(a));
     for (const c of rest) take(c);
     if (limit !== Infinity && picks.length > limit) picks.length = limit;
     return picks;
@@ -134,6 +136,7 @@ export function makeBot(api) {
     const p = P(i); const rules = rulesFor(i); const ready = creatures(i).filter((c) => Rules.canAttack(c).ok && powerOf(c) > 0);
     if (!ready.length) return [];
     const walled = new Set(rules.noAttack.filter((v) => v.kind === 'you').map((v) => v.by));
+    const goaded = ready.filter((c) => c.goad && c.goad.until >= S.turn.number);
     const opps = opponents(i).filter(({ k }) => !walled.has(k)); if (!opps.length) return [];
     const cap = (list) => { // attack taxes (Propaganda, Ghostly Prison, Norn's Annex) and attacker caps (Crawlspace, Silent Arbiter)
       let out = list; const byTarget = {}; out.forEach((x) => { (byTarget[x.k] ||= []).push(x); });
@@ -155,7 +158,8 @@ export function makeBot(api) {
     const keepHome = incoming >= p.life * 0.6 ? Math.min(2, ready.length - 1) : 0;
     const scored = ready.map((c) => ({ c, k: leader, s: attackScore(i, c, leader) })).sort((a, b) => b.s - a.s);
     const go = scored.filter((x) => x.s > 0);
-    return cap(go.slice(0, Math.max(0, go.length - keepHome)));
+    const forced = goaded.filter((c) => !go.some((x) => x.c === c)).map((c) => ({ c, k: (opps.find(({ k }) => k !== c.goad.by) || opps[0]).k, s: 0 }));
+    return cap(go.slice(0, Math.max(0, go.length - keepHome)).concat(forced));
   }
   // Blocks for an incoming attack. Returns blocker ids (possibly two for a gang block), or [] to take it.
   function chooseBlock(a, used = new Set()) {
@@ -184,41 +188,47 @@ export function makeBot(api) {
     try {
       const d = (ms) => wait(jitter(ms) * speed());
       await d(900);
-      const land = pickLand(p); if (land) { castToStack(land.id); if (entersTapped(land)) { land.tapped = true; } await d(650); }
-      await crackFetches(i, d);
-      const mana = manaOf(i);
+      fire('mainBegin', { seat: i });
+      S.botStep = 'land'; const land = pickLand(p); if (land) { castToStack(land.id); if (entersTapped(land)) { land.tapped = true; } await d(650); }
+      S.botStep = 'fetch'; await crackFetches(i, d);
+      S.botStep = 'plan'; const mana = manaOf(i);
       const rules = rulesFor(i);
       // keep mana back for attack taxes when a good swing is on the table
       let reserve = 0; if (rules.attackTax.length) { const want = planAttacks(i, Infinity); const perTarget = {}; want.forEach((x) => { perTarget[x.k] = (perTarget[x.k] || 0) + 1; }); reserve = Math.min(mana, Object.entries(perTarget).reduce((s, [k, n]) => s + Math.min(n, 2) * rules.attackTax.filter((t) => t.by === +k).reduce((a, t) => a + (t.life ? 0 : t.n), 0), 0)); }
       const picks = plan(i, mana, reserve);
       for (const c of picks) {
         if (!S.cards[c.id] || (c.zone !== 'hand' && c.zone !== 'command')) continue;
-        tapMana(i, c); const ok = await cast(c); if (!ok) { await d(500); continue; }
+        S.botStep = 'cast ' + c.name; tapMana(i, c); const ok = await cast(c); if (!ok) { await d(500); continue; }
         await d(900);
       }
-      await activate(i, 'precombat');
+      S.botStep = 'attach'; await attach(i); S.botStep = 'crew'; await crew(i);
+      S.botStep = 'activate1'; await activate(i, 'precombat');
+      fire('combatBegin', { seat: i });
       // combat
+      S.botStep = 'combat';
       nextPhase(); await d(500);
-      const plans = planAttacks(i, manaOf(i));
-      for (const { c, k } of plans) { const taxes = rulesFor(i).attackTax.filter((t) => t.by === k); for (const t of taxes) { if (t.life) { changeLife(i, -t.life); log(`${p.name} pays ${t.life} life to attack (${t.src})`); } else if (t.n) { payMana(i, t.n); log(`${p.name} pays {${t.n}} to attack (${t.src})`); } } attack(c, k); await d(350); }
+      S.botStep = 'plan attacks'; const plans = planAttacks(i, manaOf(i));
+      for (const { c, k } of plans) { S.botStep = 'attack ' + c.name; const taxes = rulesFor(i).attackTax.filter((t) => t.by === k); for (const t of taxes) { if (t.life) { changeLife(i, -t.life); log(`${p.name} pays ${t.life} life to attack (${t.src})`); } else if (t.n) { payMana(i, t.n); log(`${p.name} pays {${t.n}} to attack (${t.src})`); } } attack(c, k); await d(350); }
       if (plans.length) {
-        await d(800);
+        fire('attackersDeclared', { seat: i, count: plans.length });
+        S.botStep = 'await blocks'; await d(800);
         const mine = () => S.attacks.filter((a) => plans.some((x) => x.c.id === a.id));
-        const answered = (a) => a.ok || (a.blockers && a.blockers.length) || P(a.target).bot;
-        for (let w = 0; w < 40 && mine().some((a) => !answered(a)); w++) await d(500);
+        // bots defending get to decide blocks too (botDefend runs on its own timer); out players never answer
+        const answered = (a) => a.ok || (a.blockers && a.blockers.length) || P(a.target).out;
+        for (let w = 0; w < 40 && mine().some((a) => !answered(a)); w++) await wait(Math.min(500, 120 + 500 * speed()));
         mine().filter((a) => !answered(a)).forEach((a) => { a.ok = true; log(`${P(a.target).name} didn't answer; the attack goes through`); });
-        for (const a of mine()) { const c = S.cards[a.id]; if (c) combatDamage(c, a.target); await d(450); }
+        for (const a of mine()) { const c = S.cards[a.id]; S.botStep = 'damage ' + (c ? c.name : a.id); if (c) combatDamage(c, a.target); await d(450); }
       }
       // second main: anything affordable we held back (cheap creatures after combat)
-      const late = plan(i, manaOf(i)).filter((c) => isCreature(c) && S.cards[c.id] && c.zone === 'hand');
+      S.botStep = 'main2'; const late = plan(i, manaOf(i)).filter((c) => isCreature(c) && S.cards[c.id] && c.zone === 'hand');
       for (const c of late.slice(0, 2)) { tapMana(i, c); await cast(c); await d(600); }
-      await activate(i, 'main2'); await d(400);
+      S.botStep = 'activate2'; await activate(i, 'main2'); S.botStep = 'loyalty'; await loyalty(i); await d(400); S.botStep = 'end';
       P(i).floating = 0;
       if (!rulesFor(i).noMaxHand && p.zones.hand.length > 7) { const extra = p.zones.hand.map((id) => S.cards[id]).sort((a, b) => value(a) - value(b)).slice(0, p.zones.hand.length - 7); extra.forEach((c) => moveCard(c.id, i, 'graveyard')); log(`${p.name} discards down to seven: ${extra.map((c) => c.name).join(', ')}`); await d(400); }
       await d(500);
       log(`${p.name} passes`);
       passTurn();
-    } finally { running = false; }
+    } finally { running = false; if (idle) setTimeout(idle, 80); }
   }
   function payMana(k, n) { tapMana(k, { cost: '{' + n + '}', casts: 0, flat: n }); }
   return { takeTurn, chooseBlock, manaAvailable: manaOf, payMana, get busy() { return running; } };

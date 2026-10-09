@@ -16,7 +16,7 @@ export function ptOf(c) {
 }
 export const powerOf = (c) => Math.max(0, ptOf(c)[0]);
 export const toughnessOf = (c) => ptOf(c)[1];
-export const kws = (c) => `${c?.kw || ''},${c?.tkw || ''},${grant(c).kw}`.toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+export const kws = (c) => `${c?.kw || ''},${c?.tkw || ''},${c?.kwc || ''},${grant(c).kw}`.toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
 export const has = (c, k) => kws(c).includes(k);
 // Stationed spacecraft, crewed vehicles, animated lands and the like: a permanent counts as a creature when its
 // type says so, when the player flags it ("It's a creature now"), or when a Station threshold is met by counters.
@@ -30,6 +30,7 @@ export function canAttack(c) {
   if (!isCreature(c)) return { ok: false, why: 'Not a creature' };
   if (c.tapped) return { ok: false, why: 'Tapped' };
   if (has(c, 'defender')) return { ok: false, why: 'Defender' };
+  if (has(c, "can't attack")) return { ok: false, why: "Can't attack" };
   if (c.sick && !has(c, 'haste')) return { ok: false, why: 'Summoning sick' };
   const v = vetoFn.attack && vetoFn.attack(c); if (v) return { ok: false, why: v };
   return { ok: true };
@@ -39,6 +40,7 @@ export function canBlock(b, a) {
   if (!isCreature(b) || b.tapped) return false;
   if (kws(b).some((k) => k === "can't block")) return false;
   if (has(a, 'flying') && !(has(b, 'flying') || has(b, 'reach'))) return false;
+  if (has(a, 'unblockable')) return false;
   if (vetoFn.block && vetoFn.block(b, a)) return false;
   return true;
 }

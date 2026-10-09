@@ -4,3 +4,5 @@ dist
 *.log
 .wrangler
 .dev.vars*
+tests/data/
+tests/__pycache__/

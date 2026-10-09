@@ -590,3 +590,5 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
   body { overscroll-behavior: none; }
   @media (max-width: 760px), (max-height: 520px) { .dock { padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); } }
 }
+
+.card .tether { position: absolute; left: 4%; bottom: 4%; max-width: 92%; background: rgba(10, 12, 20, .85); border: 1px solid rgba(255, 255, 255, .25); border-radius: 4px; padding: 1px 4px; font: 600 calc(var(--cw) * .085) var(--f-ui); color: #e9dcc0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 3; pointer-events: none; }

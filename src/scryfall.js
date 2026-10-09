@@ -50,7 +50,8 @@ function toEntry(card) {
     backBig: backImgs ? (backImgs.large || backImgs.normal) : '',
     artist: card.artist || front.artist || '',
     kw: (card.keywords || []).join(',').toLowerCase(),
-    oracle: (card.oracle_text || front.oracle_text || (faces ? faces.map((f) => f.oracle_text || '').join('\n') : '')).slice(0, 600),
+    loyalty: card.loyalty || front.loyalty || '',
+    oracle: (card.oracle_text || front.oracle_text || (faces ? faces.map((f) => f.oracle_text || '').join('\n') : '')).slice(0, 1400),
     uri: card.scryfall_uri || '',
   };
 }

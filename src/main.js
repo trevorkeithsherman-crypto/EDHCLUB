@@ -1,4 +1,4 @@
-import { fetchCards, fetchToken, cached, CARD_BACK } from './scryfall.js';
+import { fetchCards, fetchToken, fetchPrintings, cached, CARD_BACK } from './scryfall.js';
 import { DB, buildSample } from './decks.js';
 import { FX, SFX, Ambient, setFxState } from './fx.js';
 import { net, rememberRoom, recallRoom } from './net.js';
@@ -84,9 +84,9 @@ function toast(text, ms = 2800) { const t = document.createElement('div'); t.cla
 function queueSave() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* ignore */ } }, 250); }
 
 /* ---------- Card data ---------- */
-function lookup(name) {
+function lookup(name, set, num) {
   const k = name.toLowerCase();
-  const sf = cached(name);
+  const sf = cached(name, set, num);
   if (sf) return { ...sf, known: true };
   const d = DB[k] || DB[k.split(' // ')[0]];
   if (d) return { ...d, known: true };
@@ -99,14 +99,15 @@ function hydrate() {
   let n = 0;
   for (const c of Object.values(S.cards)) {
     if (c.token && !c.copyOf && !c.img && !c._tokenTried) { c._tokenTried = true; fetchToken(c.name, c.pt, c.colors).then((t) => { if (t && S.cards[c.id] && !c.img) { Object.assign(c, { img: t.img, big: t.big, art: t.art, artist: t.artist }); render(); } }); continue; }
-    if (c.img || (c.token && !c.copyOf)) continue;
-    const e = cached(c.copyOf || c.name);
+    if (c.token && !c.copyOf) continue;
+    if (c.img && !(c.set && c.num && !c._printed)) continue;
+    const e = cached(c.copyOf || c.name, c.set, c.num); if (c.set && c.num && e && e.set === c.set && String(e.num) === String(c.num)) c._printed = true; else if (c.img && !e) continue;
     if (e) { applyEntry(c, e); if (c.token) c.type = /Token/.test(e.type) ? e.type : 'Token ' + e.type; n++; }
   }
   return n;
 }
 async function ensureArt(names, { quiet = false } = {}) {
-  const need = [...new Set(names)].filter((n) => !cached(n));
+  const need = names.filter((n) => (typeof n === 'string' ? !cached(n) : !cached(n.name, n.set, n.num) || cached(n.name, n.set, n.num).set !== n.set));
   if (!need.length) { if (hydrate()) render(); return; }
   const t = quiet ? null : toast(`Loading card art for ${need.length} card${need.length > 1 ? 's' : ''}…`, 60000);
   try {
@@ -119,13 +120,13 @@ async function ensureArt(names, { quiet = false } = {}) {
     if (!quiet) toast("Couldn't reach Scryfall. Cards show by name until it's back.", 5000);
   }
 }
-const allNames = () => [...new Set(Object.values(S.cards).filter((c) => !c.token).map((c) => c.name))];
+const allNames = () => { const seen = new Set(); return Object.values(S.cards).filter((c) => !c.token).map((c) => (c.set && c.num ? { name: c.name, set: c.set, num: c.num } : c.name)).filter((x) => { const k = typeof x === 'string' ? x : `${x.set}|${x.num}`; if (seen.has(k)) return false; seen.add(k); return true; }); };
 
 /* ---------- Deck parsing ---------- */
 function parseDeck(text, cmdOverride) { return parseList(text, cmdOverride, (n) => lookup(n).type); }
 function makeCard(def, owner) {
   const id = `c${net.active ? net.seat : 'l'}_${S.nextId++}`;
-  const c = { id, name: def.name, cost: def.cost || '', type: def.type || 'Card', pt: def.pt || '', colors: def.colors || '', kw: def.kw || '', oracle: def.oracle || '', img: def.img || '', big: def.big || '', art: def.art || '', backImg: def.backImg || '', backBig: def.backBig || '', artist: def.artist || '', owner, controller: owner, zone: 'library', tapped: false, faceDown: false, flipped: false, p1: 0, ctr: 0, token: false, x: 0, y: 0, isCmdr: false, casts: 0 };
+  const c = { id, name: def.name, cost: def.cost || '', type: def.type || 'Card', pt: def.pt || '', colors: def.colors || '', kw: def.kw || '', oracle: def.oracle || '', set: def.set || '', num: def.num || '', foil: !!def.foil, img: def.img || '', big: def.big || '', art: def.art || '', backImg: def.backImg || '', backBig: def.backBig || '', artist: def.artist || '', owner, controller: owner, zone: 'library', tapped: false, faceDown: false, flipped: false, p1: 0, ctr: 0, token: false, x: 0, y: 0, isCmdr: false, casts: 0 };
   S.cards[id] = c; return c;
 }
 function shuffleArr(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -139,8 +140,8 @@ function loadDeck(i, text, cmdName) {
   const p = P(i); const d = parseDeck(text, cmdName);
   purgeOwner(i);
   Object.assign(p, { deckText: text, life: 40, poison: 0, cmdDmg: {}, out: false, outAt: 0, mulls: 0, zones: emptyZones() });
-  d.cmd.forEach((n) => { const c = makeCard(lookup(n), i); c.isCmdr = true; c.zone = 'command'; p.zones.command.push(c.id); });
-  d.main.forEach((e) => { const def = lookup(e.name); for (let k = 0; k < e.n; k++) { const c = makeCard(def, i); p.zones.library.push(c.id); } });
+  d.cmd.forEach((n) => { const pr = d.cmdPrints?.[n] || {}; const c = makeCard({ ...lookup(n, pr.set, pr.num), name: n, set: pr.set || '', num: pr.num || '', foil: !!pr.foil }, i); c.isCmdr = true; c.zone = 'command'; p.zones.command.push(c.id); });
+  d.main.forEach((e) => { const def = { ...lookup(e.name, e.set, e.num), name: e.name, set: e.set || '', num: e.num || '', foil: !!e.foil }; for (let k = 0; k < e.n; k++) { const c = makeCard(def, i); p.zones.library.push(c.id); } });
   shuffleArr(p.zones.library);
   const hand = p.zones.library.splice(0, 7); hand.forEach((id) => { S.cards[id].zone = 'hand'; }); p.zones.hand = hand;
   return d;
@@ -198,7 +199,7 @@ const faceSrc = (c, big) => (c.flipped && c.backImg ? (big ? c.backBig : c.backI
 function cardHTML(c, o = {}) {
   const hidden = (c.faceDown && !o.reveal) || o.back;
   const f = frame(c);
-  const cls = ['card', f.cls, c.tapped && !o.flat ? 'tapped' : '', c.token ? 'token' : '', c.isCmdr ? 'cmdr' : '', S.sel === c.id && !o.noid ? 'sel' : '', o.cls || ''].join(' ');
+  const cls = ['card', f.cls, c.tapped && !o.flat ? 'tapped' : '', c.token ? 'token' : '', c.isCmdr ? 'cmdr' : '', c.foil && S.foilFx !== false ? 'foil' : '', S.sel === c.id && !o.noid ? 'sel' : '', o.cls || ''].join(' ');
   const st = (o.style || '') + ';' + f.style;
   const idA = o.noid ? '' : `data-id="${c.id}"`;
   if (hidden) return `<div class="${cls} facedown" ${idA} style="${st}"><div class="ci back ${backOk ? 'pic' : ''}"><span>EC</span>${backOk ? `<img src="${CARD_BACK}" alt="" draggable="false" decoding="async">` : ''}</div></div>`;
@@ -545,7 +546,7 @@ function wipeLocal(kind) {
 }
 
 /* ---------- Room sync ---------- */
-const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'dmg', 'kw', 'sick', 'anim', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts'];
+const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'dmg', 'kw', 'sick', 'anim', 'set', 'num', 'foil', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts'];
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
@@ -853,6 +854,28 @@ function placeZoom() {
   z.style.left = Math.max(8, x) + 'px'; z.style.top = y + 'px';
 }
 function hideZoom() { clearTimeout(zoomT); zoomId = null; zoomPending = null; const z = $('#zoom'); z.hidden = true; z.innerHTML = ''; }
+/* Artwork picker: every printing of the card from Scryfall; applies to this card and every copy in the deck. */
+async function artworkModal(c) {
+  openModal(`<h2>Artwork for ${esc(c.name)}</h2><p>Loading printings from Scryfall…</p>`, { cls: 'wide' });
+  const prints = await fetchPrintings(c.name);
+  if (!prints.length) { openModal(`<h2>Artwork for ${esc(c.name)}</h2><p>Couldn’t load printings right now.</p><div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="close">Close</button></div>`, { cls: 'narrow' }); return; }
+  const cur = `${c.set}|${c.num}`;
+  openModal(`<h2>Artwork for ${esc(c.name)}</h2><p>${prints.length} printing${prints.length > 1 ? 's' : ''}. Pick one; every copy in this deck changes with it, and it’s remembered if you save the deck.</p>
+  <div class="artgrid">${prints.map((e, k) => `<button type="button" class="artopt ${`${e.set}|${e.num}` === cur ? 'on' : ''} ${/foil/.test(e.finishes || '') ? 'has-foil' : ''}" data-pr="${k}" title="${esc(e.setName)} ${esc(e.year)}"><img src="${esc(e.img)}" alt="" loading="lazy"><span><b>${esc(e.setName)}</b><small>${esc(e.set.toUpperCase())} #${esc(e.num)} · ${esc(e.year)}${e.fullArt ? ' · full art' : ''}${e.frame && /showcase|extendedart|etched/.test(e.frame) ? ' · ' + esc(e.frame.replace(/,/g, ', ')) : ''}${e.finishes && !/nonfoil/.test(e.finishes) ? ' · foil only' : ''}</small><em>${esc(e.artist)}</em></span></button>`).join('')}</div>
+  <div class="row" style="justify-content:space-between"><label class="chk"><input type="checkbox" id="artFoil" ${c.foil ? 'checked' : ''}> Foil</label><button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'wide' });
+  $('#artFoil').onchange = (e) => { Object.values(S.cards).forEach((x) => { if (x.owner === c.owner && x.name === c.name && !x.token) x.foil = e.target.checked; }); render(); };
+  $$('[data-pr]').forEach((b) => { b.onclick = () => {
+    const e = prints[+b.dataset.pr]; const foil = $('#artFoil').checked || (e.finishes && !/nonfoil/.test(e.finishes));
+    Object.values(S.cards).forEach((x) => { if (x.owner === c.owner && x.name === c.name && !x.token) { Object.assign(x, { set: e.set, num: e.num, img: e.img, big: e.big, art: e.art, artist: e.artist, foil, _printed: true }); } });
+    $$('[data-pr]').forEach((o) => o.classList.toggle('on', o === b)); $('#artFoil').checked = foil; render(); SFX.play('chime', firstColor(c));
+    P(c.owner).deckText = rewriteDeckText(P(c.owner).deckText, c.name, e.set, e.num, foil);
+  }; });
+}
+// Keep the seat's decklist text in step with artwork choices so "Save to my decks" remembers them.
+function rewriteDeckText(text, name, set, num, foil) {
+  if (!text) return text;
+  return text.split(/\r?\n/).map((line) => { const m = line.match(/^(\d+x?\s+)?(.+?)(\s+\([A-Za-z0-9]{2,6}\)\s+[\w★-]+)?(\s+\*[A-Za-z]\*)?\s*$/); if (!m) return line; const base = m[2].replace(/\s*\*[A-Za-z]+\*\s*/g, '').trim(); if (base.toLowerCase() !== name.toLowerCase()) return line; return `${m[1] || ''}${base} (${set}) ${num}${foil ? ' *F*' : ''}`; }).join('\n');
+}
 function closerModal(c) {
   const src = faceSrc(c, true);
   openModal(`<div class="closer">${src ? `<img src="${esc(src)}" alt="${esc(c.name)}">` : cardHTML(c, { noid: true, flat: true, reveal: true, cls: 'big', style: '--cw:300px' })}</div>${c.artist ? `<p style="text-align:center;margin-top:10px">Illustrated by ${esc(c.artist)}</p>` : ''}<div class="row" style="justify-content:center"><button type="button" class="btn" data-act="close">Close</button></div>`, { cls: 'narrow' });
@@ -877,7 +900,7 @@ function cardMenu(c, x, y) {
     if (canSee(c)) add('Look closer', () => closerModal(c));
     openMenu(items.length ? items : [{ label: 'Not your card', fn: () => {} }], x, y, `${P(c.controller).name}'s card`); return;
   }
-  if (canSee(c)) { add('Look closer', () => closerModal(c)); sep(); }
+  if (canSee(c)) { add('Look closer', () => closerModal(c)); if (!c.token && net.isMine(c.controller)) { add('Choose artwork…', () => artworkModal(c)); add(c.foil ? 'Make it non-foil' : 'Make it foil', () => { c.foil = !c.foil; render(); SFX.play('chime', firstColor(c)); }); } sep(); }
   if (c.zone === 'battlefield') {
     add(c.tapped ? 'Untap' : 'Tap', () => toggleTap(c));
     if (c.backImg) add(c.flipped ? 'Transform to front' : 'Transform', () => { c.flipped = !c.flipped; render(); FX.slam(cardEl(c.id), 1.08); SFX.play('whoosh'); });
@@ -1208,7 +1231,7 @@ async function importModal(pi) {
     if (!d.count && !d.cmd.length) { toast('Paste a decklist first'); return; }
     try {
       const cols = [...new Set(d.cmd.flatMap((n) => (lookup(n).colors || '').split('')))].join('');
-      const list = `Commander\n${d.cmd.map((n) => '1 ' + n).join('\n')}\n\nDeck\n${d.main.map((e) => e.n + ' ' + e.name).join('\n')}`;
+      const list = deckText(d);
       const row = await saveDeck({ id: editingId || undefined, name: nm, commander: d.cmd.join(' + '), colors: cols, cardCount: d.count + d.cmd.length, list, mat: P(pi).mat });
       editingId = row.id; setLastDeckId(row.id); P(pi).deckId = row.id; P(pi).deckName = nm; toast(`Saved ${nm}`); importModal(pi);
     } catch (e) { toast('Could not save: ' + e.message, 5000); }
@@ -1232,7 +1255,7 @@ async function importModal(pi) {
     const k = +$('#impSeat').value; const nm = $('#impName').value.trim(); if (nm) P(k).name = nm;
     const d = parseDeck(ta.value, $('#impCmd').value); if (!d.count && !d.cmd.length) { toast('The decklist is empty'); return; }
     if (!d.cmd.length) { toast('Pick a commander first'); $('#impCmdPick')?.focus(); return; }
-    const text = `Commander\n${d.cmd.map((n) => '1 ' + n).join('\n')}\n\nDeck\n${d.main.map((e) => e.n + ' ' + e.name).join('\n')}`;
+    const text = deckText(d);
     loadDeck(k, text, null); P(k).deckId = editingId || ''; P(k).deckSrc = ''; P(k).deckName = $('#impDeckName').value.trim(); if (editingId) setLastDeckId(editingId); closeModal(); SFX.play('shuffle'); log(`${P(k).name} sat down with ${d.cmd.join(' + ')}`); toast(`${P(k).name} shuffled up and drew 7`); render();
     ensureArt([...d.cmd, ...d.main.map((e) => e.name)]);
   };
@@ -1584,6 +1607,7 @@ function bindUI() {
       { label: `Playmat effects: ${S.fx ? 'on' : 'off'}`, fn: () => $('#fxBtn').click() },
       { label: `Sound: ${S.sound ? 'on' : 'off'}`, fn: () => $('#soundBtn').click() },
       { label: `Bot pace: ${{ relaxed: 'relaxed', normal: 'normal', fast: 'fast' }[S.botSpeed || 'normal']}`, fn: () => { S.botSpeed = { relaxed: 'normal', normal: 'fast', fast: 'relaxed' }[S.botSpeed || 'normal']; render(); toast(`Bots play at a ${S.botSpeed} pace`); } },
+      { label: `Foil effects: ${S.foilFx === false ? 'off' : 'on'}`, fn: () => { S.foilFx = S.foilFx === false; render(); toast(S.foilFx === false ? 'Foil effects off' : 'Foil effects on'); } },
       { label: `Card motion: ${{ full: 'full', reduced: 'reduced', off: 'off' }[S.motion]}`, fn: () => { S.motion = { full: 'reduced', reduced: 'off', off: 'full' }[S.motion]; render(); toast(`Card motion ${S.motion}`); } },
       { sep: true },
       { label: 'Keyboard shortcuts  (?)', fn: shortcutsModal },

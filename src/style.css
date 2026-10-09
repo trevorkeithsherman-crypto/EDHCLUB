@@ -515,3 +515,27 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .prompt .phead small { color: var(--muted); font-weight: 500; }
 @media (max-height: 520px) { .prompt .card.pend { --cw: 60px; } .pend-row .pcard small { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; } }
 .prompt.pending .phead { justify-content: flex-start; gap: 5px; }
+
+/* ---------- Foil shader: a rainbow sheen that slides with the tilt, plus a soft sparkle ---------- */
+.card.foil .ci { isolation: isolate; }
+.card.foil .ci::before { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; border-radius: inherit; mix-blend-mode: color-dodge; opacity: .55;
+  background: linear-gradient(115deg, transparent 0%, rgba(255, 0, 128, .55) 18%, rgba(255, 200, 0, .55) 30%, rgba(0, 255, 170, .55) 42%, rgba(0, 150, 255, .55) 54%, rgba(190, 0, 255, .55) 66%, transparent 84%);
+  background-size: 300% 300%; background-position: calc(100% - var(--gx, 50%)) calc(100% - var(--gy, 50%)); animation: foilDrift 9s ease-in-out infinite; }
+.card.foil .ci::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; border-radius: inherit; mix-blend-mode: screen; opacity: .35;
+  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, .5), transparent 28%), repeating-linear-gradient(135deg, rgba(255, 255, 255, .08) 0 2px, transparent 2px 7px); }
+.card.foil.tilt .ci::before { animation: none; opacity: .8; }
+@keyframes foilDrift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.card.foil .ci .ptm, .card.foil .ci .bp, .card.foil .ci .bc, .card.foil .ci .dmg, .card.foil .ci .zz { z-index: 5; }
+/* commanders keep their gold ring; a foil commander gets the sheen instead of the old shimmer */
+.card.cmdr.foil .ci::after { animation: none; }
+@media (prefers-reduced-motion: reduce) { .card.foil .ci::before { animation: none; } }
+
+/* Artwork picker */
+.artgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; margin: 6px 0 14px; max-height: 60vh; overflow: auto; padding-right: 4px; }
+.artopt { display: grid; gap: 6px; padding: 6px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, .02); text-align: left; color: var(--text); }
+.artopt img { width: 100%; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 6px; display: block; background: #15110d; }
+.artopt span { display: grid; gap: 1px; font: 600 11px/1.3 var(--f-ui); } .artopt small { color: var(--muted); font-weight: 500; } .artopt em { font: 500 10px var(--f-ui); color: var(--dim); font-style: normal; }
+.artopt:hover { border-color: var(--line-2); background: rgba(255, 255, 255, .05); }
+.artopt.on { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(79, 195, 255, .35); }
+.mpanel label.chk, .chk { display: inline-flex; grid-template-columns: none; align-items: center; gap: 8px; font: 600 13px var(--f-ui); text-transform: none; letter-spacing: 0; color: var(--text); margin: 0; }
+.chk input { width: auto; accent-color: var(--blue); }

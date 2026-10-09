@@ -1,6 +1,6 @@
 // Decks page: "My decks" (the account's library, up to 20) and the Top 100 from Archidekt.
 import { online, currentUser, saveDeck, getDeck, listDecks, deleteDeck, updateDeckMeta, setDefaultDeck, defaultDeckId, lastDeckId, setLastDeckId, localAvatar, displayNameFor, DECK_LIMIT } from './supa.js';
-import { fetchCards, cached } from './scryfall.js';
+import { fetchCards, fetchPrintings, cached } from './scryfall.js';
 import { parseList, deckStats, deckText } from './decklist.js';
 
 const $ = (s, r = document) => r.querySelector(s); const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -63,12 +63,14 @@ function deckMenu(d, anchor) {
   }; });
 }
 /* Editor: name, commander (auto), list with live validation. */
-async function editor(d) {
-  const full = d ? await getDeck(d.id) : { name: '', commander: '', list: '', mat: 'auto' };
+async function editor(d, keep = null, openTab = 'list') {
+  const full = keep ? { name: keep.name, commander: '', list: keep.list, mat: d ? (await getDeck(d.id)).mat : 'auto' } : d ? await getDeck(d.id) : { name: '', commander: '', list: '', mat: 'auto' };
   openModal(`<h2>${d ? 'Edit deck' : 'New deck'}</h2>
-  <div class="grid2"><label>Deck name<input id="edName" maxlength="40" value="${esc(full.name)}" placeholder="Krenko goblins" data-autofocus></label><label>Commander (optional)<input id="edCmd" placeholder="Taken from the list if left blank"></label></div>
-  <label>Decklist<textarea id="edList" rows="14" spellcheck="false" placeholder="Paste a Moxfield or Archidekt export, one card per line: 1 Sol Ring">${esc(full.list)}</textarea></label>
-  <div class="summary" id="edSum"></div>
+  <div class="grid2"><label>Deck name<input id="edName" maxlength="40" value="${esc(full.name)}" placeholder="Krenko goblins" data-autofocus></label><label>Commander (optional)<input id="edCmd" value="${esc(keep ? keep.cmd : '')}" placeholder="Taken from the list if left blank"></label></div>
+  <div class="tabs"><button type="button" class="tab on" data-ed="list">List</button><button type="button" class="tab" data-ed="art">Artwork</button></div>
+  <div id="edListWrap"><label>Decklist<textarea id="edList" rows="14" spellcheck="false" placeholder="Paste a Moxfield or Archidekt export, one card per line: 1 Sol Ring">${esc(full.list)}</textarea></label>
+  <div class="summary" id="edSum"></div></div>
+  <div id="edArt" hidden><p class="muted small">Click a card to pick its printing. Choices are written into the list as <code>(set) number</code>, with <code>*F*</code> for foil, so Moxfield and Archidekt understand them too.</p><input type="search" id="edArtQ" class="zsearch" placeholder="Filter cards…" autocomplete="off"><div class="artcards" id="edArtCards"></div></div>
   <div class="row" style="justify-content:space-between"><span class="muted small" id="edHint">${d ? '' : `${mine.length}/${DECK_LIMIT} decks used`}</span><span class="row"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn" id="edSave">${d ? 'Save changes' : 'Save deck'}</button></span></div>`, 'wide');
   const ta = $('#edList'); let names = [];
   const sum = async () => {
@@ -78,6 +80,34 @@ async function editor(d) {
     if (unknown.length && unknown.length <= 150 && JSON.stringify(unknown) !== JSON.stringify(names)) { names = unknown; try { await fetchCards(unknown.slice(0, 150)); sum(); } catch { /* offline */ } }
   };
   ta.oninput = sum; $('#edCmd').oninput = sum; sum();
+  // ---- artwork mode ----
+  const artCards = async () => {
+    const p = parseList(ta.value, $('#edCmd').value, typeOf);
+    const entries = [...p.cmd.map((n) => ({ name: n, n: 1, ...(p.cmdPrints[n] || {}), cmdr: true })), ...p.main];
+    const q = ($('#edArtQ').value || '').toLowerCase();
+    const want = entries.map((e) => (e.set && e.num ? { name: e.name, set: e.set, num: e.num } : e.name));
+    try { await fetchCards(want.slice(0, 150)); } catch { /* offline */ }
+    $('#edArtCards').innerHTML = entries.filter((e) => !q || e.name.toLowerCase().includes(q)).map((e, k) => { const c = cached(e.name, e.set, e.num) || {}; const idx = entries.indexOf(e);
+      return `<button type="button" class="artcard ${e.foil ? 'foil' : ''}" data-ai="${idx}" title="Choose artwork">${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy">` : `<span class="ph">${esc(e.name)}</span>`}<span class="cap">${e.n > 1 ? e.n + '× ' : ''}${esc(e.name)}${e.cmdr ? ' · cmdr' : ''}<small>${e.set ? esc(e.set.toUpperCase()) + ' #' + esc(e.num) : 'default printing'}${e.foil ? ' · foil' : ''}</small></span></button>`; }).join('');
+    $$('[data-ai]').forEach((b) => { b.onclick = () => pickArt(entries[+b.dataset.ai]); });
+  };
+  const applyPrintText = (text, e, pr, foil) => text.split(/\r?\n/).map((line) => { const m = line.match(/^(\d+x?\s+)?(.+?)(\s+\([A-Za-z0-9]{2,6}\)\s+[\w★-]+)?(\s+\*[A-Za-z]\*)?\s*$/); if (!m) return line; const base = m[2].replace(/\s*\*[A-Za-z]+\*\s*/g, '').replace(/\s*\[[^\]]*\]\s*/g, ' ').trim(); if (base.toLowerCase() !== e.name.toLowerCase()) return line; return `${m[1] || ''}${base}${pr ? ` (${pr.set}) ${pr.num}` : ''}${foil ? ' *F*' : ''}`; }).join('\n');
+  async function pickArt(e) {
+    const kept = { list: ta.value, name: $('#edName').value, cmd: $('#edCmd').value };
+    const reopen = () => editor(d, kept, 'art');
+    openModal(`<h2>Artwork for ${esc(e.name)}</h2><p>Loading printings from Scryfall…</p>`, 'wide');
+    const prints = await fetchPrintings(e.name); const cur = `${e.set}|${e.num}`;
+    openModal(`<h2>Artwork for ${esc(e.name)}</h2><p>${prints.length} printing${prints.length === 1 ? '' : 's'} on Scryfall.</p>
+    <div class="artgrid">${prints.map((x, k) => `<button type="button" class="artopt ${`${x.set}|${x.num}` === cur ? 'on' : ''}" data-pr="${k}"><img src="${esc(x.img)}" alt="" loading="lazy"><span><b>${esc(x.setName)}</b><small>${esc(x.set.toUpperCase())} #${esc(x.num)} · ${esc(x.year)}${x.fullArt ? ' · full art' : ''}${x.finishes && !/nonfoil/.test(x.finishes) ? ' · foil only' : ''}</small><em>${esc(x.artist)}</em></span></button>`).join('') || '<p class="muted">Nothing found.</p>'}</div>
+    <div class="row" style="justify-content:space-between"><label class="chk"><input type="checkbox" id="artFoil" ${e.foil ? 'checked' : ''}> Foil</label><span class="row"><button type="button" class="btn ghost" id="artReset">Default printing</button><button type="button" class="btn" id="artBack">Back to deck</button></span></div>`, 'wide');
+    $('#artBack').onclick = reopen;
+    $('#artReset').onclick = () => { kept.list = applyPrintText(kept.list, e, null, $('#artFoil').checked); reopen(); };
+    $('#artFoil').onchange = (ev) => { kept.list = applyPrintText(kept.list, e, e.set ? { set: e.set, num: e.num } : null, ev.target.checked); e.foil = ev.target.checked; };
+    $$('[data-pr]').forEach((b) => { b.onclick = () => { const x = prints[+b.dataset.pr]; const foil = $('#artFoil').checked || (x.finishes && !/nonfoil/.test(x.finishes)); kept.list = applyPrintText(kept.list, e, { set: x.set, num: x.num }, foil); reopen(); }; });
+  }
+  $$('[data-ed]').forEach((t) => { t.onclick = () => { const v = t.dataset.ed; $$('[data-ed]').forEach((x) => x.classList.toggle('on', x === t)); $('#edListWrap').hidden = v !== 'list'; $('#edArt').hidden = v !== 'art'; if (v === 'art') artCards(); }; });
+  $('#edArtQ').oninput = artCards;
+  if (openTab === 'art') $('[data-ed=art]').click();
   $('#edSave').onclick = async () => {
     const p = parseList(ta.value, $('#edCmd').value, typeOf); const st = deckStats(p, typeOf);
     if (!p.count && !p.cmd.length) { toast('Paste a decklist first'); return; }

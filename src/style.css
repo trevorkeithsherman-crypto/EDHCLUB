@@ -561,9 +561,12 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .tax .taxbtn { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.45); color: var(--text); font: 700 11px/1 var(--f-ui); margin: 0 3px; padding: 0; cursor: pointer; vertical-align: middle; }
 .tax .taxbtn:hover { background: rgba(255,255,255,.12); } .tax .taxbtn:disabled { opacity: .35; cursor: default; }
 /* Scry / surveil */
-.peekrow { display: flex; gap: 12px; overflow-x: auto; padding: 6px 2px 10px; }
+.peekrow { display: flex; gap: 12px; overflow-x: auto; padding: 6px 2px 10px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.peek { scroll-snap-align: center; }
+
 .peek { flex: 0 0 auto; width: 132px; display: grid; gap: 6px; justify-items: center; transition: opacity .15s, transform .15s; }
 .peek .card { --cw: 124px; cursor: default; }
+@media (max-width: 560px) { .peekrow { flex-wrap: wrap; justify-content: center; overflow: visible; gap: 10px 8px; } .peek { width: 92px; } .peek .card { --cw: 92px; } }
 .peek.away { opacity: .55; transform: translateY(6px); }
 .peekacts { display: grid; gap: 4px; justify-items: center; } .peekpos { font: 600 10px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--gold, #e3c56a); }
 .row.tight { gap: 4px; }
@@ -654,3 +657,6 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 @media (max-height: 560px) and (min-width: 641px) { .op-fan { --w: min(13vw, 36vh); padding: 10px; } .op-sub { display: none; } }
 @media (prefers-reduced-motion: reduce) { .opening, .oc.deal .oc-face, .opening-back { animation: none; } .oc-face { transition: none; } }
 .lite .opening { backdrop-filter: none; } .lite .oc.deal .oc-face { animation: none; } .lite .oc-face { will-change: auto; }
+
+/* Touch: menu rows and pile labels are finger-sized */
+@media (hover: none) and (pointer: coarse) { .mi { padding: 11px 12px; font-size: 14px; } .mh { padding: 9px 12px 8px; } .handbar .btn.sm { padding: 6px 10px; font-size: 11px; } }

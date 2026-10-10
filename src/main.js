@@ -63,7 +63,7 @@ function readMatFile(file) {
 
 /* ---------- State ---------- */
 let S = null;
-let modalClose = null, drag = null, lpTimer = 0, ignoreClick = 0, saveT = 0, lastClick = null;
+let modalClose = null, drag = null, lpTimer = 0, ignoreClick = 0, saveT = 0, lastClick = null, pilePress = null;
 let zoomT = 0, zoomId = null, zoomPending = null;
 const mouse = { x: 0, y: 0 };
 let backOk = true; // falls back to the EDH Club back if Scryfall's card back can't load
@@ -871,7 +871,7 @@ function seatHTML(i, full) {
     <div class="pstat">${(maxCmd || p.poison || warn) ? `<button type="button" class="chip ${warn ? 'warn' : ''}" data-act="dmg" data-p="${i}">Cmdr ${maxCmd} · Poison ${p.poison}</button>` : ''}<span class="lifectl"><button type="button" data-act="life" data-p="${i}" data-d="-1" title="−1 (shift: −5)">−</button><button type="button" data-act="life" data-p="${i}" data-d="1" title="+1 (shift: +5)">+</button></span></div>
   </div></div>`;
   const crack = p.out ? `<svg class="crack ${Date.now() - p.outAt < 1200 ? 'fresh' : ''}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M52 0 L47 22 L58 35 L44 55 L55 72 L49 100"/><path d="M47 22 L30 30 L18 26"/><path d="M58 35 L76 40 L90 33"/><path d="M44 55 L26 62 L12 74"/><path d="M55 72 L72 80 L86 92"/></svg>` : '';
-  const empty = p.zones.battlefield.length ? '' : `<div class="bf-empty">${full ? 'Drag cards here. Click to tap, right-click for more.' : ''}</div>`;
+  const empty = p.zones.battlefield.length ? '' : `<div class="bf-empty">${full ? (matchMedia('(hover: none)').matches ? 'Drag cards here. Tap a card for actions; press and hold a pile for more.' : 'Drag cards here. Click to tap, right-click for more.') : ''}</div>`;
   let dock = '';
   if (full) {
     const slot = (z, label) => {
@@ -885,7 +885,7 @@ function seatHTML(i, full) {
     const hand = p.zones.hand.map((id) => cardHTML(S.cards[id], SPECTATE ? { back: true } : {})).join('') || `<span class="hand-empty">${SPECTATE ? 'Empty hand' : 'Your hand is empty'}</span>`;
     const mine = net.isMine(S.turn.active) && S.turn.active === i;
     dock = `<div class="dock"><div class="piles">${slot('command', 'Command')}${slot('library', 'Library')}${slot('graveyard', 'Graveyard')}${slot('exile', 'Exile')}</div>
-      <div class="handwrap"><div class="handbar"><span>Hand · ${p.zones.hand.length}</span><span class="sp"></span><button type="button" class="btn ghost sm" data-act="draw" data-p="${i}">Draw</button></div>
+      <div class="handwrap"><div class="handbar"><span>Hand · ${p.zones.hand.length}</span><span class="sp"></span><button type="button" class="btn ghost sm" data-act="draw" data-p="${i}">Draw</button><button type="button" class="btn ghost sm" data-act="libmenu" data-p="${i}" title="Scry, surveil, mill, search, shuffle…">Library ▾</button></div>
       <div class="hand" data-zone="p${i}-hand" data-pile="p${i}-hand">${hand}</div></div>
       <div class="actions"><button type="button" class="endturn ${mine ? 'mine' : ''}" data-act="pass">${mine ? 'End turn' : 'Pass turn'}</button><button type="button" class="btn sm" data-act="next">Next phase</button></div></div>`;
   }
@@ -1755,6 +1755,14 @@ function seatMenu(pi, x, y) {
     { label: p.out ? 'Rejoin the game' : 'Concede', fn: () => { if (p.out) { p.out = false; S.outOrder = S.outOrder.filter((o) => o.i !== pi); log(`${p.name} rejoined`); render(); } else eliminate(pi, 'conceded'); } },
   ], x, y, p.name);
 }
+// The full menu for a pile (what right-click gives on desktop): library actions, zone views, commander menu.
+function pileMenu(zs, x, y) {
+  const [pi, z] = parseZone(zs); if (pi < 0) return;
+  if (!net.isMine(pi)) { if (z === 'graveyard' || z === 'exile') openZone(pi, z); return; }
+  if (z === 'library') libraryMenu(pi, x, y);
+  else if (z === 'command') commandMenu(pi, x, y);
+  else if (z === 'graveyard' || z === 'exile') openZone(pi, z);
+}
 function pileClick(zs, anchor) {
   const [pi, z] = parseZone(zs); if (pi < 0) return; const r = anchor.getBoundingClientRect();
   if (!net.isMine(pi)) { if (z === 'graveyard' || z === 'exile') openZone(pi, z); else toast(`That's ${P(pi).name}'s ${ZLABEL[z].toLowerCase()}.`); return; }
@@ -1768,8 +1776,9 @@ function pileClick(zs, anchor) {
 function openModal(html, o = {}) {
   closeMenu(); hideZoom(); const m = $('#modal');
   m.innerHTML = `<div class="scrim" data-close="1"></div><div class="mpanel ${o.cls || ''}" role="dialog" aria-modal="true">${html}</div>`;
-  m.hidden = false; modalClose = o.onClose || null;
-  m.onclick = (e) => { if (e.target.dataset.close || e.target.closest('[data-act="close"]')) closeModal(); };
+  m.hidden = false; modalClose = o.onClose || null; const openedAt = performance.now();
+  // Touch synthesizes a click at the finger's position after the tap that opened us: don't let it land on the scrim.
+  m.onclick = (e) => { if (e.target.dataset.close && performance.now() - openedAt < 450) return; if (e.target.dataset.close || e.target.closest('[data-act="close"]')) closeModal(); };
   (m.querySelector('[data-autofocus]') || m.querySelector('input,textarea,.btn:not(.ghost),button'))?.focus({ preventScroll: true });
 }
 function closeModal() { const m = $('#modal'); if (m.hidden) return; m.hidden = true; m.innerHTML = ''; const cb = modalClose; modalClose = null; cb && cb(); }
@@ -1989,7 +1998,13 @@ function onDown(e) {
   if (!e.target.closest('#tapbar')) hideTapbar();
   if (e.button > 0) return;
   if (!e.target.closest('#menu')) closeMenu();
-  const el = e.target.closest('#table .card[data-id]'); if (!el) return;
+  const el = e.target.closest('#table .card[data-id]');
+  if (!el) {
+    // Touch: press and hold a pile (library, graveyard, exile, command) for its full menu, like right-click on desktop.
+    const pileEl = e.pointerType !== 'mouse' && e.target.closest('#table .slot[data-zone], #table .mp[data-zone]');
+    if (pileEl) { clearTimeout(lpTimer); const sx = e.clientX, sy = e.clientY; pilePress = { zs: pileEl.dataset.zone, sx, sy, fired: false }; lpTimer = setTimeout(() => { if (pilePress && pilePress.zs === pileEl.dataset.zone) { pilePress.fired = true; ignoreClick = performance.now() + 600; if (navigator.vibrate) navigator.vibrate(10); pileMenu(pileEl.dataset.zone, sx, sy); } }, 480); }
+    return;
+  }
   const c = S.cards[el.dataset.id]; if (!c) return;
   if (!net.isMine(c.controller)) return;
   drag = { c, el, sx: e.clientX, sy: e.clientY, moved: false, ghost: null, lp: false, off: { x: 0, y: 0 } };
@@ -2024,6 +2039,7 @@ function hoverZoom(e) {
   zoomT = setTimeout(() => { if (zoomPending === id) showZoom(id); }, zoomId ? 0 : 280);
 }
 function onMove(e) {
+  if (pilePress && !pilePress.fired && Math.hypot(e.clientX - pilePress.sx, e.clientY - pilePress.sy) > 10) { clearTimeout(lpTimer); pilePress = null; }
   if (!drag) { hoverZoom(e); return; }
   if (!drag.moved) {
     if (drag.lp || Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 7) return;
@@ -2040,7 +2056,8 @@ function onMove(e) {
   if (!z || !z.classList.contains('hot')) { clearHot(); if (z) z.classList.add('hot'); }
 }
 function onUp(e) {
-  clearTimeout(lpTimer); if (!drag) return; const d = drag; drag = null;
+  clearTimeout(lpTimer); if (pilePress) { pilePress = null; }
+  if (!drag) return; const d = drag; drag = null;
   document.body.classList.remove('is-drag'); clearHot();
   ignoreClick = performance.now() + 350;
   if (d.lp) return;
@@ -2112,7 +2129,7 @@ function onClick(e) {
   const tab = e.target.closest('.side-tabs .tab');
   if (tab) { sideTab = tab.dataset.tab; $$('.side-tabs .tab').forEach((t) => t.classList.toggle('on', t === tab)); $('#sideLog').hidden = sideTab !== 'log'; $('#sideChat').hidden = sideTab !== 'chat'; if (sideTab === 'chat') { chatUnread = 0; renderChat(); setTimeout(() => $('#chatInput')?.focus(), 30); } return; }
   const a = e.target.closest('[data-act]'); if (!a || (a.closest('#modal') && a.dataset.act === 'close')) return;
-  if (performance.now() < ignoreClick && e.target.closest('.card[data-id]')) return;
+  if (performance.now() < ignoreClick && (e.target.closest('.card[data-id]') || a.dataset.act === 'pile' || a.dataset.act === 'pileclick')) return;
   if (a.dataset.act === 'pileclick' && e.target.closest('.card[data-id]') && !/-(graveyard|exile)$/.test(a.dataset.zone || '')) return;
   const act = a.dataset.act, p = +a.dataset.p; const r = a.getBoundingClientRect();
   if (SPECTATE && !['pile', 'pileclick', 'seatmenu', 'expand', 'close'].includes(act)) { toast('You\'re watching this table'); return; }
@@ -2123,6 +2140,7 @@ function onClick(e) {
     case 'seatmenu': seatMenu(p, r.left, r.bottom + 4); break;
     case 'dmg': dmgModal(p); break;
     case 'draw': if (net.isMine(p)) draw(p, 1); break;
+    case 'libmenu': if (net.isMine(p)) libraryMenu(p, r.left, r.top); break;
     case 'mull': if (net.isMine(p)) mulligan(p); break;
     case 'expand': { const k = +a.dataset.p; expandedSeats.has(k) ? expandedSeats.delete(k) : (expandedSeats.clear(), expandedSeats.add(k)); render(); break; }
     case 'phase': { const k = +a.dataset.k; if (S.turn.phase === 2 && k !== 2) { S.attacks = []; blocking = null; } S.turn.phase = k; render(); break; }

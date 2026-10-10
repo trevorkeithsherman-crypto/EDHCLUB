@@ -592,3 +592,18 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 }
 
 .card .tether { position: absolute; left: 4%; bottom: 4%; max-width: 92%; background: rgba(10, 12, 20, .85); border: 1px solid rgba(255, 255, 255, .25); border-radius: 4px; padding: 1px 4px; font: 600 calc(var(--cw) * .085) var(--f-ui); color: #e9dcc0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 3; pointer-events: none; }
+
+/* Table chat */
+.side-body.chat { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; padding: 8px 10px 10px; }
+.chatlist { overflow: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
+.chatmsg { max-width: 92%; align-self: flex-start; background: rgba(255, 255, 255, .04); border: 1px solid var(--line); border-radius: 12px 12px 12px 4px; padding: 6px 10px; }
+.chatmsg.mine { align-self: flex-end; background: rgba(79, 195, 255, .10); border-color: rgba(79, 195, 255, .35); border-radius: 12px 12px 4px 12px; }
+.chatmsg.spec .chatwho { color: var(--gold, #e3c56a); }
+.chatwho { display: flex; gap: 8px; align-items: baseline; font: 700 11px var(--f-ui); color: var(--muted); } .chatwho time { font-weight: 500; opacity: .7; }
+.chattext { font: 500 13px/1.4 var(--f-ui); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.chatform { display: flex; gap: 6px; }
+.chatform input { flex: 1; min-width: 0; background: rgba(0, 0, 0, .35); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 11px; color: var(--text); font: 500 13px var(--f-ui); }
+.chatform input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79, 195, 255, .2); }
+.badge { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; margin-left: 6px; border-radius: 999px; background: var(--red, #d14a2d); color: #fff; font: 700 10px/1 var(--f-ui); vertical-align: middle; }
+#sideBtn { position: relative; } #sideBtn .badge { position: absolute; top: 4px; right: 6px; margin: 0; }
+.spectator .chatform { display: flex; }

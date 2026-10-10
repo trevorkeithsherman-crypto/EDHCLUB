@@ -1,1435 +1,64 @@
 {
  "games": [
   {
-   "turns": 13,
-   "casts": 31,
-   "attacks": 53,
-   "lives": [
-    23,
-    -8,
-    -16,
-    -3
-   ],
-   "over": true,
-   "stalled": false,
-   "problems": 0,
-   "errors": 0,
-   "commanders": [
-    "Old Stickfingers",
-    "Baldin, Century Herdmaster",
-    "Shao Jun",
-    "Sakashima of a Thousand Faces"
-   ],
-   "n": 1,
-   "winner": "Old Stickfingers"
-  },
-  {
-   "turns": 13,
-   "casts": 47,
-   "attacks": 43,
-   "lives": [
-    -4,
-    16,
-    -7,
-    0
-   ],
-   "over": true,
-   "stalled": false,
-   "problems": 0,
-   "errors": 0,
-   "commanders": [
-    "Nymris, Oona's Trickster",
-    "Skithiryx, the Blight Dragon",
-    "Long Feng, Grand Secretariat",
-    "Thassa, God of the Sea"
-   ],
-   "n": 2,
-   "winner": "Skithiryx, the Blight Dragon"
-  },
-  {
-   "turns": 15,
-   "casts": 32,
-   "attacks": 49,
-   "lives": [
-    -1,
-    38,
-    -11,
-    16
-   ],
-   "over": true,
-   "stalled": false,
-   "problems": 0,
-   "errors": 0,
+   "n": 3,
    "commanders": [
     "Shalai, Voice of Plenty",
     "Fortune, Loyal Steed",
     "Wernog, Rider's Chaplain",
     "Inquisitor Eisenhorn"
    ],
-   "n": 3,
-   "winner": null
-  },
-  {
    "turns": 15,
-   "casts": 28,
-   "attacks": 35,
-   "lives": [
-    -21,
-    -9,
-    -11,
-    32
-   ],
+   "winner": "Lich Bot",
+   "problems": [],
    "over": true,
    "stalled": false,
-   "problems": 0,
-   "errors": 0,
+   "lives": [
+    -9,
+    -26,
+    1,
+    -20
+   ],
+   "casts": 29,
+   "attacks": 58,
+   "errors": []
+  },
+  {
+   "n": 4,
    "commanders": [
     "Erinis, Gloom Stalker",
     "Rosnakht, Heir of Rohgahh",
     "Seshiro the Anointed",
     "Kellogg, Dangerous Mind"
    ],
-   "n": 4,
-   "winner": "Kellogg, Dangerous Mind"
-  },
-  {
    "turns": 15,
-   "casts": 13,
-   "attacks": 69,
-   "lives": [
-    3,
-    -3,
-    -3,
-    -6
-   ],
+   "winner": "Druid Bot",
+   "problems": [],
    "over": true,
    "stalled": false,
-   "problems": 0,
-   "errors": 0,
-   "commanders": [
-    "Momo, Friendly Flier",
-    "Rhonas the Indomitable",
-    "Mowu, Loyal Companion",
-    "Ara\u00f1a, Heart of the Spider"
-   ],
-   "n": 5,
-   "winner": "Momo, Friendly Flier"
-  },
-  {
-   "turns": 14,
-   "casts": 35,
-   "attacks": 55,
    "lives": [
-    15,
-    -11,
-    0,
-    -13
+    -19,
+    -15,
+    -14,
+    34
    ],
-   "over": true,
-   "stalled": false,
-   "problems": 0,
-   "errors": 0,
-   "commanders": [
-    "Raff Capashen, Ship's Mage",
-    "Sigarda, Heron's Grace",
-    "Dragonlord Silumgar",
-    "Rograkh, Son of Rohgahh"
-   ],
-   "n": 6,
-   "winner": "Raff Capashen, Ship's Mage"
-  },
-  {
-   "turns": 18,
-   "casts": 39,
-   "attacks": 41,
-   "lives": [
-    12,
-    0,
-    -12,
-    -1
-   ],
-   "over": true,
-   "stalled": false,
-   "problems": 0,
-   "errors": 0,
-   "commanders": [
-    "Alphinaud Leveilleur",
-    "Gor Muldrak, Amphinologist",
-    "Razaketh, the Foulblooded",
-    "Amarant Coral"
-   ],
-   "n": 7,
-   "winner": "Alphinaud Leveilleur"
-  },
-  {
-   "turns": 8,
-   "casts": 21,
-   "attacks": 28,
-   "lives": [
-    -16,
-    -9,
-    37,
-    -15
-   ],
-   "over": true,
-   "stalled": false,
-   "problems": 0,
-   "errors": 0,
-   "commanders": [
-    "The Boulder, Ready to Rumble",
-    "The Howling Abomination",
-    "Azula, Cunning Usurper",
-    "Zimone, Mystery Unraveler"
-   ],
-   "n": 8,
-   "winner": "Azula, Cunning Usurper"
-  },
-  {
-   "turns": 17,
    "casts": 27,
-   "attacks": 43,
-   "lives": [
-    -24,
-    -4,
-    39,
-    -18
-   ],
-   "over": true,
-   "stalled": false,
-   "problems": 0,
-   "errors": 0,
-   "commanders": [
-    "Mog, Moogle Warrior",
-    "Urabrask, Heretic Praetor",
-    "Ardenn, Intrepid Archaeologist",
-    "Uyo, Silent Prophet"
-   ],
-   "n": 9,
-   "winner": "Ardenn, Intrepid Archaeologist"
-  },
-  {
-   "turns": 15,
-   "casts": 59,
-   "attacks": 34,
-   "lives": [
-    -35,
-    20,
-    -26,
-    -9
-   ],
-   "over": true,
-   "stalled": false,
-   "problems": 0,
-   "errors": 0,
-   "commanders": [
-    "Nissa, Resurgent Animist",
-    "Brothers Yamazaki",
-    "Curie, Emergent Intelligence",
-    "Wort, Boggart Auntie"
-   ],
-   "n": 10,
-   "winner": "Brothers Yamazaki"
+   "attacks": 52,
+   "errors": []
   }
  ],
+ "invariants": [],
  "manual_triggers": [
   [
    "Relic Axe: When this Equipment enters, attach it to target creature you control.",
-   5
-  ],
-  [
-   "Nalfeshnee: Whenever you cast a spell from exile, copy it. You may choose new targets for the copy. If",
-   4
-  ],
-  [
-   "Geometric Nexus: Whenever a player casts an instant or sorcery spell, put a number of charge counters on th",
-   4
-  ],
-  [
-   "Hostility: When ~ is put into a graveyard from anywhere, shuffle it into its owner's library.",
-   4
-  ],
-  [
-   "Eldritch Immunity (spell): no effect understood",
-   4
-  ],
-  [
-   "Ascend from Avernus (spell): no effect understood",
-   3
-  ],
-  [
-   "Bane of Bala Ged: Whenever this creature attacks, defending player exiles two permanents they control.",
-   3
-  ],
-  [
-   "Dawnglade Regent: When this creature enters, you become the monarch.",
-   3
-  ],
-  [
-   "Emeria Shepherd: Whenever a land you control enters, you may return target nonland permanent card from your",
-   3
-  ],
-  [
-   "Fey Steed: Whenever this creature attacks, another target attacking creature you control gains indest",
-   3
-  ],
-  [
-   "Fortune, Loyal Steed: Whenever ~ attacks while saddled, at end of combat, exile it and up to one creature that s",
-   3
-  ],
-  [
-   "From the Rubble: At the beginning of your end step, return target creature card of the chosen type from you",
-   3
-  ],
-  [
-   "Ironwill Forger: At the beginning of combat on your turn, if you control your commander, target nonlegendar",
-   3
-  ],
-  [
-   "Junk Diver: When this creature dies, return another target artifact card from your graveyard to your h",
-   3
-  ],
-  [
-   "Meltstrider's Gear: When this Equipment enters, attach it to target creature you control.",
-   3
-  ],
-  [
-   "Past in Flames (spell): no effect understood",
-   3
-  ],
-  [
-   "Staunch Throneguard: When this creature enters, you become the monarch.",
-   3
-  ],
-  [
-   "Pinnacle Kill-Ship: When this Spacecraft enters, it deals 10 damage to up to one target creature.",
-   3
-  ],
-  [
-   "Skyclave Relic: When this artifact enters, if it was kicked, create two tapped tokens that are copies of t",
-   3
-  ],
-  [
-   "Trailblazer's Torch: When this Equipment enters, you take the initiative.",
-   3
-  ],
-  [
-   "Sudden Substitution (spell): no effect understood",
-   3
-  ],
-  [
-   "Getaway Car: Whenever this Vehicle attacks or blocks, return up to one target creature that crewed it t",
-   3
-  ],
-  [
-   "Spider-Bot: When this creature enters, you may search your library for a basic land card, reveal it, t",
-   3
-  ],
-  [
-   "Angel of Salvation: When this creature enters, prevent the next 5 damage that would be dealt this turn to any ",
-   2
-  ],
-  [
-   "Appa, Steadfast Guardian: When ~ enters, airbend any number of other target nonland permanents you control.",
-   2
-  ],
-  [
-   "Ara\u00f1a, Heart of the Spider: Whenever you attack, put a +1/+1 counter on target attacking creature.",
-   2
-  ],
-  [
-   "Backdraft Hellkite: Whenever this creature attacks, each instant and sorcery card in your graveyard gains flas",
-   2
-  ],
-  [
-   "Balance (spell): no effect understood",
-   2
-  ],
-  [
-   "Beckoning Will-o'-Wisp: At the beginning of combat on your turn, choose an opponent.",
-   2
-  ],
-  [
-   "Campsite Cuisine: Whenever you attack, you may sacrifice X Foods. When you do, up to X target attacking crea",
-   2
-  ],
-  [
-   "Cavalry Pegasus: Whenever this creature attacks, each attacking Human gains flying until end of turn.",
-   2
-  ],
-  [
-   "Collective Voyage (spell): no effect understood",
-   2
-  ],
-  [
-   "Geode Golem: Whenever this creature deals combat damage to a player, you may cast your commander from t",
-   2
-  ],
-  [
-   "Guildless Commons: When this land enters, return a land you control to its owner's hand.",
-   2
-  ],
-  [
-   "Killer Service: When this enchantment enters, create a number of Food tokens equal to the number of oppone",
-   2
-  ],
-  [
-   "Maester Seymour: At the beginning of combat on your turn, put a number of +1/+1 counters equal to ~'s power",
-   2
-  ],
-  [
-   "Morningtide's Light (spell): no effect understood",
-   2
-  ],
-  [
-   "Quick-Draw Dagger: When this Equipment enters, attach it to target creature you control. That creature gains ",
-   2
-  ],
-  [
-   "Roving Actuator: When this creature enters, if a nonland permanent left the battlefield this turn or a spel",
-   2
-  ],
-  [
-   "Rug of Smothering: Whenever a player casts a spell, they lose 1 life for each spell they've cast this turn.",
-   2
-  ],
-  [
-   "Ruxa, Patient Professor: Whenever ~ enters or attacks, return target creature card with no abilities from your grav",
-   2
-  ],
-  [
-   "Satyr Wayfinder: When this creature enters, reveal the top four cards of your library. You may put a land c",
-   2
-  ],
-  [
-   "Seeds of Renewal (spell): no effect understood",
-   2
-  ],
-  [
-   "Selfless Police Captain: When this creature leaves the battlefield, put its +1/+1 counters on target creature you c",
-   2
-  ],
-  [
-   "Skyfire Phoenix: When you cast your commander, return this card from your graveyard to the battlefield.",
-   2
-  ],
-  [
-   "Spatial Contortion (spell): no effect understood",
-   2
-  ],
-  [
-   "Starling, Aerial Ally: When ~ enters, another target creature you control gains flying until end of turn.",
-   2
-  ],
-  [
-   "S\u00e9ance Board: At the beginning of each end step, if a creature died this turn, put a soul counter on thi",
-   2
-  ],
-  [
-   "Tail Swipe (spell): no effect understood",
-   2
-  ],
-  [
-   "The Endstone: At the beginning of your end step, your life total becomes half your starting life total, ",
-   2
-  ],
-  [
-   "The Mana Rig: Whenever you cast a multicolored spell, create a tapped Powerstone token.",
-   2
-  ],
-  [
-   "Thurid, Mare of Destiny: Whenever you cast a Pegasus, Unicorn, or Horse creature spell, copy it.",
-   2
-  ],
-  [
-   "Titan of Industry: When this creature enters, choose two \u2014",
-   2
-  ],
-  [
-   "Undercellar Sweep: When this enchantment enters, you take the initiative.",
-   2
-  ],
-  [
-   "Wake the Past (spell): no effect understood",
-   2
-  ],
-  [
-   "Wall of Reverence: At the beginning of your end step, you may gain life equal to the power of target creature",
-   2
-  ],
-  [
-   "Wedding Ring: When this artifact enters, if it was cast, target opponent creates a token that's a copy o",
-   2
-  ],
-  [
-   "White Plume Adventurer: When this creature enters, you take the initiative.",
-   2
-  ],
-  [
-   "Wild Beastmaster: Whenever this creature attacks, each other creature you control gets +X/+X until end of tu",
-   2
-  ],
-  [
-   "Worldspine Wurm: When ~ is put into a graveyard from anywhere, shuffle it into its owner's library.",
-   2
-  ],
-  [
-   "Badgermole: When this creature enters, earthbend 2.",
-   2
-  ],
-  [
-   "Crippling Fear (spell): no effect understood",
-   2
-  ],
-  [
-   "Duskmantle Seer: At the beginning of your upkeep, each player reveals the top card of their library, loses ",
-   2
-  ],
-  [
-   "Filigree Vector: When this creature enters, put a +1/+1 counter on each of any number of target creatures a",
-   2
-  ],
-  [
-   "Gonti, Lord of Luxury: When ~ enters, look at the top four cards of target opponent's library, exile one of them ",
-   2
-  ],
-  [
-   "Shard of the Nightbringer: When this creature enters, if you cast it, target opponent loses half their life, rounded ",
-   2
-  ],
-  [
-   "Ainok Guide: When this creature enters, choose one \u2014",
-   2
-  ],
-  [
-   "Close Encounter (spell): no effect understood",
-   2
-  ],
-  [
-   "Omarthis, Ghostfire Initiate: When ~ dies, manifest a number of cards from the top of your library equal to the number o",
-   2
-  ],
-  [
-   "Ring of Valkas: At the beginning of your upkeep, put a +1/+1 counter on equipped creature if it's red.",
-   2
-  ],
-  [
-   "Thought-Knot Seer: When this creature enters, target opponent reveals their hand. You choose a nonland card f",
-   2
-  ],
-  [
-   "Vessel of Endless Rest: When this artifact enters, put target card from a graveyard on the bottom of its owner's l",
-   2
-  ],
-  [
-   "Voracious Greatshark: When this creature enters, counter target artifact or creature spell.",
-   2
-  ],
-  [
-   "Aarakocra Sneak: When this creature enters, you take the initiative.",
-   2
-  ],
-  [
-   "Lux Artillery: Whenever you cast an artifact creature spell, it gains sunburst.",
-   2
-  ],
-  [
-   "Rocket-Powered Goblin Glider: When this Equipment enters, if it was cast from your graveyard, attach it to target creatu",
-   2
-  ],
-  [
-   "Scrounging Bandar: At the beginning of your upkeep, you may move any number of +1/+1 counters from this creat",
-   2
-  ],
-  [
-   "World Shaper: When this creature dies, return all land cards from your graveyard to the battlefield tapp",
-   2
-  ],
-  [
-   "Mob Rule (spell): no effect understood",
-   2
-  ],
-  [
-   "Twins of Discord: Whenever you attack, choose odd or even. Creatures with mana value of that quality can't b",
    2
   ],
   [
    "Anafenza, Kin-Tree Spirit: Whenever another nontoken creature you control enters, bolster 1.",
-   2
+   1
   ],
   [
    "Ardenn, Intrepid Archaeologist: At the beginning of combat on your turn, you may attach any number of Auras and Equipment ",
-   2
-  ],
-  [
-   "Behemoth of Vault 0: When this creature dies, you may pay an amount of {E} equal to target nonland permanent's ",
-   2
-  ],
-  [
-   "Replicating Ring: At the beginning of your upkeep, put a night counter on this artifact. Then if it has eigh",
-   2
-  ],
-  [
-   "Astral Dragon: When this creature enters, create two tokens that are copies of target noncreature permane",
-   2
-  ],
-  [
-   "Brooding Saurian: At the beginning of each end step, each player gains control of all nontoken permanents th",
-   2
-  ],
-  [
-   "Chalice of the Void: Whenever a player casts a spell with mana value equal to the number of charge counters on ",
-   2
-  ],
-  [
-   "Enchanter's Bane: At the beginning of your end step, target enchantment deals damage equal to its mana value",
-   2
-  ],
-  [
-   "Epochrasite: When this creature dies, exile it with three time counters on it and it gains suspend.",
-   2
-  ],
-  [
-   "Trench Behemoth: Whenever a land you control enters, target creature an opponent controls attacks during it",
-   2
-  ],
-  [
-   "Glider Staff: When this Equipment enters, airbend up to one target creature.",
-   2
-  ],
-  [
-   "Strata Scythe: When this Equipment enters, search your library for a land card, exile it, then shuffle.",
-   2
-  ],
-  [
-   "Trove Warden: When this creature dies, put each permanent card exiled with it onto the battlefield under",
-   2
-  ],
-  [
-   "Currency Converter: Whenever you discard a card, you may exile that card from your graveyard.",
-   2
-  ],
-  [
-   "Cyberdrive Awakener: When this creature enters, each noncreature artifact you control becomes a 4/4 artifact cr",
-   2
-  ],
-  [
-   "Victimize (spell): no effect understood",
-   2
-  ],
-  [
-   "Bribery (spell): no effect understood",
-   1
-  ],
-  [
-   "Cavalier of Thorns: When this creature enters, reveal the top five cards of your library. Put a land card from",
-   1
-  ],
-  [
-   "Cavalier of Thorns: When this creature dies, you may exile it. If you do, put another target card from your gr",
-   1
-  ],
-  [
-   "Chain Devil: When this creature enters, each player sacrifices a nontoken creature of their choice.",
-   1
-  ],
-  [
-   "Chiss-Goria, Forge Tyrant: Whenever ~ attacks, exile the top five cards of your library. You may cast an artifact spe",
-   1
-  ],
-  [
-   "Court of Bounty: When this enchantment enters, you become the monarch.",
-   1
-  ],
-  [
-   "Crash the Party (spell): no effect understood",
-   1
-  ],
-  [
-   "Crescendo of War: At the beginning of each upkeep, put a strife counter on this enchantment.",
-   1
-  ],
-  [
-   "Destined Confrontation (spell): no effect understood",
-   1
-  ],
-  [
-   "Disciple of Caelus Nin: When this creature enters, starting with you, each player chooses up to five permanents th",
-   1
-  ],
-  [
-   "Dredge the Mire (spell): no effect understood",
-   1
-  ],
-  [
-   "Fiend Hunter: When this creature leaves the battlefield, return the exiled card to the battlefield under",
-   1
-  ],
-  [
-   "Forge Anew: When this enchantment enters, return target Equipment card from your graveyard to the batt",
-   1
-  ],
-  [
-   "Gathering Stone: When this artifact enters and at the beginning of your upkeep, look at the top card of you",
-   1
-  ],
-  [
-   "Inferno Titan: Whenever this creature enters or attacks, it deals 3 damage divided as you choose among on",
-   1
-  ],
-  [
-   "Kezzerdrix: At the beginning of your upkeep, if your opponents control no creatures, this creature dea",
-   1
-  ],
-  [
-   "Leveler: When this creature enters, exile all cards from your library.",
-   1
-  ],
-  [
-   "Leyline Tyrant: When this creature dies, you may pay any amount of {R}. When you do, it deals that much da",
-   1
-  ],
-  [
-   "Majestic Heliopterus: Whenever this creature attacks, another target Dinosaur you control gains flying until end",
-   1
-  ],
-  [
-   "Merchant Scroll (spell): no effect understood",
-   1
-  ],
-  [
-   "Motivated Pony: Whenever this creature attacks, attacking creatures get +1/+1 until end of turn. If a Food",
-   1
-  ],
-  [
-   "Oni of Wild Places: At the beginning of your upkeep, return a red creature you control to its owner's hand.",
-   1
-  ],
-  [
-   "Perfect Intimidation (spell): no effect understood",
-   1
-  ],
-  [
-   "Prosperous Bandit: Whenever this creature deals combat damage to a player, create that many tapped Treasure t",
-   1
-  ],
-  [
-   "Radiate (spell): no effect understood",
-   1
-  ],
-  [
-   "Rescuer Chwinga: When this creature enters, you may return another permanent you control to its owner's han",
-   1
-  ],
-  [
-   "Scholar of Combustion: When this creature enters, exile up to one target instant or sorcery card from your gravey",
-   1
-  ],
-  [
-   "Silence (spell): no effect understood",
-   1
-  ],
-  [
-   "Stonecloaker: When this creature enters, return a creature you control to its owner's hand.",
-   1
-  ],
-  [
-   "Stonecloaker: When this creature enters, exile target card from a graveyard.",
-   1
-  ],
-  [
-   "Swashbuckler Extraordinaire: Whenever you attack, you may sacrifice one or more Treasures. When you do, up to that many",
-   1
-  ],
-  [
-   "Toph, the Blind Bandit: When ~ enters, earthbend 2.",
-   1
-  ],
-  [
-   "Turn to Frog (spell): no effect understood",
-   1
-  ],
-  [
-   "Viconia, Drow Apostate: At the beginning of your upkeep, if there are four or more creature cards in your graveyar",
-   1
-  ],
-  [
-   "Vinebred Brawler: Whenever this creature attacks, another target Elf you control gets +2/+1 until end of tur",
-   1
-  ],
-  [
-   "Wakening Sun's Avatar: When this creature enters, if you cast it from your hand, destroy all non-Dinosaur creatur",
-   1
-  ],
-  [
-   "Aether Gale (spell): no effect understood",
-   1
-  ],
-  [
-   "Alpharael, Stonechosen: Whenever ~ attacks, if a nonland permanent left the battlefield this turn or a spell was w",
-   1
-  ],
-  [
-   "Amarant Coral: Whenever ~ deals combat damage to an opponent, it deals that much damage to each other opp",
-   1
-  ],
-  [
-   "Atsushi, the Blazing Sky: When ~ dies, choose one \u2014",
-   1
-  ],
-  [
-   "Behold the Sinister Six! (spell): no effect understood",
-   1
-  ],
-  [
-   "Chaos Warp (spell): no effect understood",
-   1
-  ],
-  [
-   "Charred Graverobber: When this creature enters, return target outlaw card from your graveyard to your hand.",
-   1
-  ],
-  [
-   "Cold-Eyed Selkie: Whenever this creature deals combat damage to a player, you may draw that many cards.",
-   1
-  ],
-  [
-   "Cultivator of Blades: Whenever this creature attacks, you may have other attacking creatures get +X/+X until end",
-   1
-  ],
-  [
-   "Death by Dragons (spell): no effect understood",
-   1
-  ],
-  [
-   "Eye of Doom: When this artifact enters, each player chooses a nonland permanent and puts a doom counter",
-   1
-  ],
-  [
-   "Gale, Waterdeep Prodigy: Whenever you cast an instant or sorcery spell from your hand, you may cast up to one targe",
-   1
-  ],
-  [
-   "Gor Muldrak, Amphinologist: At the beginning of your end step, each player who controls the fewest creatures creates a",
-   1
-  ],
-  [
-   "Hoarding Dragon: When this creature enters, you may search your library for an artifact card, exile it, the",
-   1
-  ],
-  [
-   "Hoarding Dragon: When this creature dies, you may put the exiled card into its owner's hand.",
-   1
-  ],
-  [
-   "Hullbreaker Horror: Whenever you cast a spell, choose up to one \u2014",
-   1
-  ],
-  [
-   "Infinite Reflection: When this Aura enters attached to a creature, each other nontoken creature you control bec",
-   1
-  ],
-  [
-   "Lazotep Sliver: Whenever a nontoken Sliver you control dies, amass Slivers 2.",
-   1
-  ],
-  [
-   "Luminollusk: When this creature enters, you gain life equal to the number of colors among permanents yo",
-   1
-  ],
-  [
-   "Mai, Scornful Striker: Whenever a player casts a noncreature spell, they lose 2 life.",
-   1
-  ],
-  [
-   "Mezzio Mugger: Whenever this creature attacks, exile the top card of each player's library. You may play ",
-   1
-  ],
-  [
-   "Naru Meha, Master Wizard: When ~ enters, copy target instant or sorcery spell you control. You may choose new target",
-   1
-  ],
-  [
-   "Nashi, Moon Sage's Scion: Whenever ~ deals combat damage to a player, exile the top card of each player's library. U",
-   1
-  ],
-  [
-   "Netherese Puzzle-Ward: At the beginning of your upkeep, roll a d4. Scry X, where X is the result.",
-   1
-  ],
-  [
-   "Runic Repetition (spell): no effect understood",
-   1
-  ],
-  [
-   "Scrap Trawler: Whenever this creature dies or another artifact you control is put into a graveyard from t",
-   1
-  ],
-  [
-   "Summary Dismissal (spell): no effect understood",
-   1
-  ],
-  [
-   "Trench Gorger: When this creature enters, you may search your library for any number of land cards, exile",
-   1
-  ],
-  [
-   "Umaro, Raging Yeti: At the beginning of combat on your turn, choose one at random \u2014",
-   1
-  ],
-  [
-   "Vito, Thorn of the Dusk Rose: Whenever you gain life, target opponent loses that much life.",
-   1
-  ],
-  [
-   "Winds of Change (spell): no effect understood",
-   1
-  ],
-  [
-   "Witch's Cottage: When this land enters untapped, you may put target creature card from your graveyard on to",
-   1
-  ],
-  [
-   "Wurmquake (spell): no effect understood",
-   1
-  ],
-  [
-   "Aerial Guide: Whenever this creature attacks, another target attacking creature gains flying until end o",
-   1
-  ],
-  [
-   "Author of Shadows: When this creature enters, exile all opponents' graveyards. Choose a nonland card exiled t",
-   1
-  ],
-  [
-   "Azula, Cunning Usurper: When ~ enters, target opponent exiles a nontoken creature they control, then they exile a ",
-   1
-  ],
-  [
-   "Clifftop Lookout: When this creature enters, reveal cards from the top of your library until you reveal a la",
-   1
-  ],
-  [
-   "Draconic Muralists: When this creature dies, you may search your library for a Dragon card, reveal it, put it ",
-   1
-  ],
-  [
-   "Dragon's Hoard: Whenever a Dragon you control enters, put a gold counter on this artifact.",
-   1
-  ],
-  [
-   "Embodiment of Insight: Whenever a land you control enters, you may have target land you control become a 3/3 Elem",
-   1
-  ],
-  [
-   "Entourage of Trest: When this creature enters, you become the monarch.",
-   1
-  ],
-  [
-   "Gala Greeters: Whenever another creature you control enters, choose one that hasn't been chosen this turn",
-   1
-  ],
-  [
-   "Grenzo, Havoc Raiser: Whenever a creature you control deals combat damage to a player, choose one \u2014",
-   1
-  ],
-  [
-   "Harold and Bob, First Numens: When ~ dies, if it was a creature, return it to the battlefield. It's an Aura enchantment ",
-   1
-  ],
-  [
-   "Haru, Hidden Talent: Whenever another Ally you control enters, earthbend 1.",
-   1
-  ],
-  [
-   "Hindervines (spell): no effect understood",
-   1
-  ],
-  [
-   "Horizon Explorer: Whenever you attack a player, create a Lander token.",
-   1
-  ],
-  [
-   "Leaf-Crowned Elder: At the beginning of your upkeep, you may look at the top card of your library. If it share",
-   1
-  ],
-  [
-   "Mana Vault: At the beginning of your draw step, if this artifact is tapped, it deals 1 damage to you.",
-   1
-  ],
-  [
-   "Mirrorwing Dragon: Whenever a player casts an instant or sorcery spell that targets only this creature, that ",
-   1
-  ],
-  [
-   "Misdirection (spell): no effect understood",
-   1
-  ],
-  [
-   "Murmurs from Beyond (spell): no effect understood",
-   1
-  ],
-  [
-   "Pain for All: When this Aura enters, enchanted creature deals damage equal to its power to any other tar",
-   1
-  ],
-  [
-   "Primaris Eliminator: When this creature enters, choose one \u2014",
-   1
-  ],
-  [
-   "Protean Hulk: When this creature dies, search your library for any number of creature cards with total m",
-   1
-  ],
-  [
-   "Skyclave Pick-Axe: When this Equipment enters, attach it to target creature you control.",
-   1
-  ],
-  [
-   "Skyclave Pick-Axe: Whenever a land you control enters, equipped creature gets +2/+2 until end of turn.",
-   1
-  ],
-  [
-   "Sothera, the Supervoid: Whenever a creature you control dies, each opponent chooses a creature they control and ex",
-   1
-  ],
-  [
-   "Soulfire Eruption (spell): no effect understood",
-   1
-  ],
-  [
-   "The Boulder, Ready to Rumble: Whenever ~ attacks, earthbend X, where X is the number of creatures you control with power",
-   1
-  ],
-  [
-   "Treefolk Harbinger: When this creature enters, you may search your library for a Treefolk or Forest card, reve",
-   1
-  ],
-  [
-   "Varchild, Betrayer of Kjeldor: Whenever ~ deals combat damage to a player, that player creates that many 1/1 red Survivor",
-   1
-  ],
-  [
-   "Varchild, Betrayer of Kjeldor: When ~ leaves the battlefield, gain control of all Survivors.",
-   1
-  ],
-  [
-   "Volley Veteran: When this creature enters, it deals damage to target creature an opponent controls equal t",
-   1
-  ],
-  [
-   "Zimone, Mystery Unraveler: Whenever a land you control enters, manifest dread if this is the first time this ability ",
-   1
-  ],
-  [
-   "Appeal to Eirdu (spell): no effect understood",
-   1
-  ],
-  [
-   "Coordinated Assault (spell): no effect understood",
-   1
-  ],
-  [
-   "Day of the Dragons: When this enchantment leaves the battlefield, sacrifice all Dragons you control. Then retu",
-   1
-  ],
-  [
-   "Fact or Fiction (spell): no effect understood",
-   1
-  ],
-  [
-   "Feywild Caretaker: When this creature enters, you take the initiative.",
-   1
-  ],
-  [
-   "Firebender Ascension: Whenever a creature you control attacking causes a triggered ability of that creature to t",
-   1
-  ],
-  [
-   "Flash Thompson, Spider-Fan: When ~ enters, choose one or both \u2014",
-   1
-  ],
-  [
-   "Hidden Footblade: When this Equipment enters, attach it to target creature you control. That creature gains ",
-   1
-  ],
-  [
-   "Icewind Stalwart: When this creature enters, exile up to one target non-Warrior creature you control, then r",
-   1
-  ],
-  [
-   "Inversion Behemoth: At the beginning of combat on your turn, switch the power and toughness of each of any num",
-   1
-  ],
-  [
-   "Open the Vaults (spell): no effect understood",
-   1
-  ],
-  [
-   "Plasma Jockey: Whenever this creature attacks, target creature an opponent controls can't block this turn",
-   1
-  ],
-  [
-   "Retether (spell): no effect understood",
-   1
-  ],
-  [
-   "Reveillark: When this creature leaves the battlefield, return up to two target creature cards with pow",
-   1
-  ],
-  [
-   "Rimekin Recluse: When this creature enters, return up to one other target creature to its owner's hand.",
-   1
-  ],
-  [
-   "Seasoned Dungeoneer: When this creature enters, you take the initiative.",
-   1
-  ],
-  [
-   "Semester's End (spell): no effect understood",
-   1
-  ],
-  [
-   "Sister of Silence: When this creature enters, counter target instant spell, sorcery spell, activated ability,",
-   1
-  ],
-  [
-   "Spellbinding Soprano: Whenever this creature attacks, instant and sorcery spells you cast this turn cost {1} les",
-   1
-  ],
-  [
-   "Sway of the Stars (spell): no effect understood",
-   1
-  ],
-  [
-   "Tataru Taru: Whenever an opponent draws a card, if it isn't that player's turn, create a tapped Treasur",
-   1
-  ],
-  [
-   "Time Stretch (spell): no effect understood",
-   1
-  ],
-  [
-   "Unstoppable Ogre: When this creature enters, target creature can't block this turn.",
-   1
-  ],
-  [
-   "Ashcloud Phoenix: When this creature dies, return it to the battlefield face down under your control.",
-   1
-  ],
-  [
-   "Ayula, Queen Among Bears: Whenever another Bear you control enters, choose one \u2014",
-   1
-  ],
-  [
-   "Boggart Prankster: Whenever you attack, target attacking Goblin you control gets +1/+0 until end of turn.",
-   1
-  ],
-  [
-   "Broodguard Elite: When this creature leaves the battlefield, put its counters on target creature you control",
-   1
-  ],
-  [
-   "Chainer, Nightmare Adept: Whenever a nontoken creature you control enters, if you didn't cast it from your hand, it ",
-   1
-  ],
-  [
-   "Champion of the Path: When this creature leaves the battlefield, return the exiled card to its owner's hand.",
-   1
-  ],
-  [
-   "Court of Vantress: When this enchantment enters, you become the monarch.",
-   1
-  ],
-  [
-   "Demonic Tutor (spell): no effect understood",
-   1
-  ],
-  [
-   "Evercoat Ursine: Whenever this creature deals combat damage to a player, if there are cards exiled with it,",
-   1
-  ],
-  [
-   "Full Flowering (spell): no effect understood",
-   1
-  ],
-  [
-   "Goma Fada Vanguard: Whenever this creature attacks, target creature an opponent controls with power less than ",
-   1
-  ],
-  [
-   "Jaya's Phoenix: Whenever this creature deals combat damage to a player or planeswalker, copy the next loya",
-   1
-  ],
-  [
-   "Jaya's Phoenix: Whenever you cast a planeswalker spell, you may return this card from your graveyard to th",
-   1
-  ],
-  [
-   "Karlach, Fury of Avernus: Whenever you attack, if it's the first combat phase of the turn, untap all attacking creat",
-   1
-  ],
-  [
-   "Kitesail Skirmisher: Whenever this creature attacks, another target creature attacking the same player or plane",
-   1
-  ],
-  [
-   "Kodama of the East Tree: Whenever another permanent you control enters, if it wasn't put onto the battlefield with ",
-   1
-  ],
-  [
-   "Lobelia, Defender of Bag End: When ~ enters, look at the top card of each opponent's library and exile those cards face ",
-   1
-  ],
-  [
-   "Predators' Hour (spell): no effect understood",
-   1
-  ],
-  [
-   "Return the Favor (spell): no effect understood",
-   1
-  ],
-  [
-   "Smirking Spelljacker: When this creature enters, exile target spell an opponent controls.",
-   1
-  ],
-  [
-   "Splendid Reclamation (spell): no effect understood",
-   1
-  ],
-  [
-   "Territorial Bruntar: Whenever a land you control enters, exile cards from the top of your library until you exi",
-   1
-  ],
-  [
-   "Trash for Treasure (spell): no effect understood",
-   1
-  ],
-  [
-   "Wort, Boggart Auntie: At the beginning of your upkeep, you may return target Goblin card from your graveyard to ",
-   1
-  ],
-  [
-   "Zimone's Hypothesis (spell): no effect understood",
-   1
-  ],
-  [
-   "Zndrsplt's Judgment (spell): no effect understood",
-   1
-  ],
-  [
-   "Aether Gust (spell): no effect understood",
-   1
-  ],
-  [
-   "Angel of Serenity: When this creature leaves the battlefield, return the exiled cards to their owners' hands.",
-   1
-  ],
-  [
-   "Arcane Heist (spell): no effect understood",
-   1
-  ],
-  [
-   "Baldin, Century Herdmaster: Whenever ~ attacks, up to one hundred target creatures each get +0/+X until end of turn, w",
-   1
-  ],
-  [
-   "Burning Curiosity (spell): no effect understood",
-   1
-  ],
-  [
-   "Cacophony Unleashed: Whenever this enchantment or another enchantment you control enters, until end of turn, th",
-   1
-  ],
-  [
-   "Crystalline Giant: At the beginning of combat on your turn, choose a kind of counter at random that this crea",
-   1
-  ],
-  [
-   "Descendants' Fury: Whenever one or more creatures you control deal combat damage to a player, you may sacrifi",
-   1
-  ],
-  [
-   "Empty the Laboratory (spell): no effect understood",
-   1
-  ],
-  [
-   "Fblthp, the Lost: When ~ becomes the target of a spell, shuffle ~ into its owner's library.",
-   1
-  ],
-  [
-   "Fraying Line: When this artifact enters, put a rope counter on target creature you control.",
-   1
-  ],
-  [
-   "Genestealer Patriarch: Whenever this creature attacks, put an infection counter on target creature defending play",
-   1
-  ],
-  [
-   "Hellkite Courser: When this creature enters, you may put a commander you own from the command zone onto the ",
-   1
-  ],
-  [
-   "Iron Mastiff: Whenever this creature attacks, roll a d20 for each player being attacked and ignore all b",
-   1
-  ],
-  [
-   "Kazandu Stomper: When this creature enters, return up to two lands you control to their owner's hand.",
-   1
-  ],
-  [
-   "Reincarnation (spell): no effect understood",
-   1
-  ],
-  [
-   "Rod of Absorption: Whenever a player casts an instant or sorcery spell, exile it instead of putting it into a",
-   1
-  ],
-  [
-   "Sakashima's Will (spell): no effect understood",
-   1
-  ],
-  [
-   "Shield Broker: When this creature enters, put a shield counter on target noncommander creature you don't ",
-   1
-  ],
-  [
-   "Soul Foundry: When this artifact enters, you may exile a creature card from your hand.",
-   1
-  ],
-  [
-   "Tethmos High Priest: Whenever you cast a spell that targets this creature, return target creature card with man",
-   1
-  ],
-  [
-   "Toshiro Umezawa: Whenever a creature an opponent controls dies, you may cast target instant card from your ",
-   1
-  ],
-  [
-   "Unlucky Witness: When this creature dies, exile the top two cards of your library. Until your next end step",
-   1
-  ],
-  [
-   "Urdnan, Dromoka Warrior: Whenever you attack, target attacking creature with a +1/+1 counter on it gains first stri",
-   1
-  ],
-  [
-   "Windshaper Planetar: When this creature enters during the declare attackers step, for each attacking creature, ",
-   1
-  ],
-  [
-   "Wreck Hunter: When this creature enters, choose target player. You create a tapped Powerstone token for ",
-   1
-  ],
-  [
-   "Artificer Class: When this Class becomes level 2, reveal cards from the top of your library until you revea",
-   1
-  ],
-  [
-   "Barrowgoyf: Whenever this creature deals combat damage to a player, you may mill that many cards. If y",
-   1
-  ],
-  [
-   "Call to the Netherworld (spell): no effect understood",
-   1
-  ],
-  [
-   "Capture Sphere: When this Aura enters, tap enchanted creature.",
-   1
-  ],
-  [
-   "Custodi Lich: When this creature enters, you become the monarch.",
-   1
-  ],
-  [
-   "Darkness (spell): no effect understood",
-   1
-  ],
-  [
-   "Eldrazi Monument: At the beginning of your upkeep, sacrifice a creature. If you can't, sacrifice this artifa",
-   1
-  ],
-  [
-   "Expropriate (spell): no effect understood",
-   1
-  ],
-  [
-   "Gate Colossus: Whenever a Gate you control enters, you may put this card from your graveyard on top of yo",
-   1
-  ],
-  [
-   "Hunted Horror: When this creature enters, target opponent creates two 3/3 green Centaur creature tokens w",
-   1
-  ],
-  [
-   "Olivia's Wrath (spell): no effect understood",
-   1
-  ],
-  [
-   "Persist (spell): no effect understood",
-   1
-  ],
-  [
-   "Pirate's Cutlass: When this Equipment enters, attach it to target Pirate you control.",
-   1
-  ],
-  [
-   "Rapacious Guest: When this creature leaves the battlefield, target opponent loses life equal to its power.",
-   1
-  ],
-  [
-   "Ravenloft Adventurer: When this creature enters, you take the initiative.",
-   1
-  ],
-  [
-   "Ravenloft Adventurer: Whenever this creature attacks, if you've completed a dungeon, defending player loses 1 li",
-   1
-  ],
-  [
-   "Reaper's Scythe: At the beginning of your end step, put a soul counter on this Equipment for each player wh",
-   1
-  ],
-  [
-   "Regal Behemoth: When this creature enters, you become the monarch.",
-   1
-  ],
-  [
-   "Regrowth (spell): no effect understood",
-   1
-  ],
-  [
-   "Reiver Demon: When this creature enters, if you cast it from your hand, destroy all nonartifact, nonblac",
-   1
-  ],
-  [
-   "Rise of the Dark Realms (spell): no effect understood",
-   1
-  ],
-  [
-   "Run Away Together (spell): no effect understood",
-   1
-  ],
-  [
-   "Skyclave Shade: Whenever a land you control enters, if this card is in your graveyard and it's your turn, ",
-   1
-  ],
-  [
-   "Spoils of Blood (spell): no effect understood",
-   1
-  ],
-  [
-   "Thorn of the Black Rose: When this creature enters, you become the monarch.",
-   1
-  ],
-  [
-   "Vastwood Hydra: When this creature dies, you may distribute a number of +1/+1 counters equal to the number",
-   1
-  ],
-  [
-   "Within Range: Whenever you attack, each opponent loses life equal to the number of creatures attacking t",
-   1
-  ],
-  [
-   "Yedora, Grave Gardener: Whenever another nontoken creature you control dies, you may return it to the battlefield ",
    1
   ],
   [
@@ -1437,7 +66,15 @@
    1
   ],
   [
+   "Ascend from Avernus (spell): no effect understood",
+   1
+  ],
+  [
    "Avatar's Wrath (spell): no effect understood",
+   1
+  ],
+  [
+   "Chalice of the Void: Whenever a player casts a spell with mana value equal to the number of charge counters on ",
    1
   ],
   [
@@ -1449,11 +86,23 @@
    1
   ],
   [
+   "Currency Converter: Whenever you discard a card, you may exile that card from your graveyard.",
+   1
+  ],
+  [
+   "Cyberdrive Awakener: When this creature enters, each noncreature artifact you control becomes a 4/4 artifact cr",
+   1
+  ],
+  [
    "Davriel, Rogue Shadowmage: At the beginning of each opponent's upkeep, if that player has one or fewer cards in hand,",
    1
   ],
   [
    "Divine Reckoning (spell): no effect understood",
+   1
+  ],
+  [
+   "Eldritch Immunity (spell): no effect understood",
    1
   ],
   [
@@ -1465,7 +114,31 @@
    1
   ],
   [
+   "Fey Steed: Whenever this creature attacks, another target attacking creature you control gains indest",
+   1
+  ],
+  [
    "Foreboding Steamboat: When this Vehicle enters, each player chooses two nontoken, non-Vehicle creatures they con",
+   1
+  ],
+  [
+   "Fortune, Loyal Steed: Whenever ~ attacks while saddled, at end of combat, exile it and up to one creature that s",
+   1
+  ],
+  [
+   "From the Rubble: At the beginning of your end step, return target creature card of the chosen type from you",
+   1
+  ],
+  [
+   "Geometric Nexus: Whenever a player casts an instant or sorcery spell, put a number of charge counters on th",
+   1
+  ],
+  [
+   "Getaway Car: Whenever this Vehicle attacks or blocks, return up to one target creature that crewed it t",
+   1
+  ],
+  [
+   "Glider Staff: When this Equipment enters, airbend up to one target creature.",
    1
   ],
   [
@@ -1473,7 +146,15 @@
    1
   ],
   [
+   "Ironwill Forger: At the beginning of combat on your turn, if you control your commander, target nonlegendar",
+   1
+  ],
+  [
    "Jar of Eyeballs: Whenever a creature you control dies, put two eyeball counters on this artifact.",
+   1
+  ],
+  [
+   "Junk Diver: When this creature dies, return another target artifact card from your graveyard to your h",
    1
   ],
   [
@@ -1537,6 +218,14 @@
    1
   ],
   [
+   "Strata Scythe: When this Equipment enters, search your library for a land card, exile it, then shuffle.",
+   1
+  ],
+  [
+   "Sudden Substitution (spell): no effect understood",
+   1
+  ],
+  [
    "Sunstar Expansionist: When this creature enters, if an opponent controls more lands than you, create a Lander to",
    1
   ],
@@ -1546,6 +235,10 @@
   ],
   [
    "Tomb of Horrors Adventurer: Whenever you cast your second spell each turn, copy it. If you've completed a dungeon, cop",
+   1
+  ],
+  [
+   "Trove Warden: When this creature dies, put each permanent card exiled with it onto the battlefield under",
    1
   ],
   [
@@ -1565,6 +258,10 @@
    1
   ],
   [
+   "Bane of Bala Ged: Whenever this creature attacks, defending player exiles two permanents they control.",
+   1
+  ],
+  [
    "Berserker's Frenzy (spell): no effect understood",
    1
   ],
@@ -1578,6 +275,10 @@
   ],
   [
    "Bribe Taker: When this creature enters, for each kind of counter on permanents you control, you may put",
+   1
+  ],
+  [
+   "Brooding Saurian: At the beginning of each end step, each player gains control of all nontoken permanents th",
    1
   ],
   [
@@ -1598,6 +299,10 @@
   ],
   [
    "Earth Tremor (spell): no effect understood",
+   1
+  ],
+  [
+   "Enchanter's Bane: At the beginning of your end step, target enchantment deals damage equal to its mana value",
    1
   ],
   [
@@ -1625,6 +330,10 @@
    1
   ],
   [
+   "Nalfeshnee: Whenever you cast a spell from exile, copy it. You may choose new targets for the copy. If",
+   1
+  ],
+  [
    "Oath of Druids: At the beginning of each player's upkeep, that player chooses target player who controls m",
    1
   ],
@@ -1633,7 +342,19 @@
    1
   ],
   [
+   "Past in Flames (spell): no effect understood",
+   1
+  ],
+  [
    "Pull Through the Weft (spell): no effect understood",
+   1
+  ],
+  [
+   "Replicating Ring: At the beginning of your upkeep, put a night counter on this artifact. Then if it has eigh",
+   1
+  ],
+  [
+   "Scrounging Bandar: At the beginning of your upkeep, you may move any number of +1/+1 counters from this creat",
    1
   ],
   [
@@ -1642,6 +363,10 @@
   ],
   [
    "Sizzling Soloist: Whenever another creature you control enters, target creature an opponent controls can't b",
+   1
+  ],
+  [
+   "Skyclave Relic: When this artifact enters, if it was kicked, create two tapped tokens that are copies of t",
    1
   ],
   [
@@ -1665,6 +390,10 @@
    1
   ],
   [
+   "Victimize (spell): no effect understood",
+   1
+  ],
+  [
    "Vigor: When ~ is put into a graveyard from anywhere, shuffle it into its owner's library.",
    1
   ],
@@ -1674,426 +403,6 @@
   ]
  ],
  "unparsed_activated": [
-  [
-   "Spectral Searchlight: {T}: Choose a player. That player adds one mana of any color they choose.",
-   4
-  ],
-  [
-   "Hostile Desert: {2}, Exile a land card from your graveyard: This land becomes a 3/4 Elemental creature unt",
-   4
-  ],
-  [
-   "Sword of the Paruns: {3}: You may tap or untap equipped creature.",
-   3
-  ],
-  [
-   "Perpetual Timepiece: {2}, Exile this artifact: Shuffle any number of target cards from your graveyard into your",
-   3
-  ],
-  [
-   "The Warring Triad: {T}, Mill a card: Target player adds one mana of any color.",
-   3
-  ],
-  [
-   "Peter Parker's Camera: {2}, {T}, Remove a film counter from this artifact: Copy target activated or triggered abi",
-   3
-  ],
-  [
-   "Throne of the High City: {4}, {T}, Sacrifice this land: You become the monarch.",
-   3
-  ],
-  [
-   "Sanctum of Eternity: {2}, {T}: Return target commander you own from the battlefield to your hand. Activate only",
-   3
-  ],
-  [
-   "Abstergo Entertainment: {3}, {T}, Exile ~: Return up to one target historic card from your graveyard to your hand,",
-   2
-  ],
-  [
-   "Clay Golem: {6}, Roll a d8: Monstrosity X, where X is the result.",
-   2
-  ],
-  [
-   "Decoction Module: {4}, {T}: Return target creature you control to its owner's hand.",
-   2
-  ],
-  [
-   "Homeward Path: {T}: Each player gains control of all creatures they own.",
-   2
-  ],
-  [
-   "Ingenuity Engine: {1}, {T}, Sacrifice an artifact: Return target artifact you control to its owner's hand.",
-   2
-  ],
-  [
-   "Iron Spider, Stark Upgrade: {T}: Put a +1/+1 counter on each artifact creature and/or Vehicle you control.",
-   2
-  ],
-  [
-   "Kayla's Music Box: {W}, {T}: Look at the top card of your library, then exile it face down.",
-   2
-  ],
-  [
-   "Kayla's Music Box: {T}: Until end of turn, you may play cards you own exiled with ~.",
-   2
-  ],
-  [
-   "Moggcatcher: {3}, {T}: Search your library for a Goblin permanent card, put it onto the battlefield, th",
-   2
-  ],
-  [
-   "Staff of Domination: {1}: Untap this artifact.",
-   2
-  ],
-  [
-   "S\u00e9ance Board: {T}: Add X mana of any one color, where X is the number of soul counters on this artifact.",
-   2
-  ],
-  [
-   "The Animus: {T}: Until your next turn, target legendary creature you control becomes a copy of target ",
-   2
-  ],
-  [
-   "Bant Panorama: {1}, {T}, Sacrifice this land: Search your library for a basic Forest, Plains, or Island c",
-   2
-  ],
-  [
-   "Shinka, the Bloodsoaked Keep: {R}, {T}: Target legendary creature gains first strike until end of turn.",
-   2
-  ],
-  [
-   "Surveyor's Scope: {T}, Exile this artifact: Search your library for up to X basic land cards, where X is the",
-   2
-  ],
-  [
-   "Baxter Building: {4}, {T}: Add four mana in any combination of colors.",
-   2
-  ],
-  [
-   "Gate to the Afterlife: {2}, {T}, Sacrifice this artifact: Search your graveyard, hand, and/or library for a card ",
-   2
-  ],
-  [
-   "Razaketh, the Foulblooded: Pay 2 life, Sacrifice another creature: Search your library for a card, put that card into",
-   2
-  ],
-  [
-   "Access Tunnel: {3}, {T}: Target creature with power 3 or less can't be blocked this turn.",
-   2
-  ],
-  [
-   "Crucible of the Spirit Dragon: {1}, {T}: Put a storage counter on this land.",
-   2
-  ],
-  [
-   "Crucible of the Spirit Dragon: {T}, Remove X storage counters from this land: Add X mana in any combination of colors. Sp",
-   2
-  ],
-  [
-   "Lantern of Revealing: {4}, {T}: Look at the top card of your library. If it's a land card, you may put it onto t",
-   2
-  ],
-  [
-   "Nesting Grounds: {1}, {T}: Move a counter from target permanent you control onto a second target permanent.",
-   2
-  ],
-  [
-   "Desert: {T}: This land deals 1 damage to target attacking creature. Activate only during the end o",
-   2
-  ],
-  [
-   "Panoptic Projektor: {T}: The next face-down creature spell you cast this turn costs {3} less to cast.",
-   2
-  ],
-  [
-   "Zhao, the Moon Slayer: {7}: Put a conqueror counter on ~.",
-   2
-  ],
-  [
-   "Hua Tuo, Honored Physician: {T}: Put target creature card from your graveyard on top of your library. Activate only du",
-   2
-  ],
-  [
-   "Metalwork Colossus: Sacrifice two artifacts: Return this card from your graveyard to your hand.",
-   2
-  ],
-  [
-   "Maze's End: {3}, {T}, Return this land to its owner's hand: Search your library for a Gate card, put i",
-   2
-  ],
-  [
-   "Vhal, Candlekeep Researcher: {T}: Add an amount of {C} equal to ~'s toughness. This mana can't be spent to cast spells ",
-   2
-  ],
-  [
-   "Capenna Express: Sacrifice a Treasure: This Vehicle becomes an artifact creature until end of turn.",
-   1
-  ],
-  [
-   "Evolutionary Leap: {G}, Sacrifice a creature: Reveal cards from the top of your library until you reveal a cr",
-   1
-  ],
-  [
-   "Labyrinth of Skophos: {4}, {T}: Remove target attacking or blocking creature from combat.",
-   1
-  ],
-  [
-   "Prismatic Geoscope: {T}: Add X mana in any combination of colors, where X is the number of basic land types am",
-   1
-  ],
-  [
-   "Scavenged Brawler: {5}, Exile this card from your graveyard: Choose target creature. Put four +1/+1 counters,",
-   1
-  ],
-  [
-   "Thespian's Stage: {2}, {T}: This land becomes a copy of target land, except it has this ability.",
-   1
-  ],
-  [
-   "Tree of Perdition: {T}: Exchange target opponent's life total with this creature's toughness.",
-   1
-  ],
-  [
-   "War Balloon: {1}: Put a fire counter on this Vehicle.",
-   1
-  ],
-  [
-   "Agility Bobblehead: {3}, {T}: Up to X target creatures you control each gain haste until end of turn and can't",
-   1
-  ],
-  [
-   "Brass Squire: {T}: Attach target Equipment you control to target creature you control.",
-   1
-  ],
-  [
-   "Cactus Preserve: {3}: Until end of turn, this land becomes an X/X green Plant creature with reach, where X ",
-   1
-  ],
-  [
-   "Grim Poppet: Remove a -1/-1 counter from this creature: Put a -1/-1 counter on another target creature.",
-   1
-  ],
-  [
-   "Miren, the Moaning Well: {3}, {T}, Sacrifice a creature: You gain life equal to the sacrificed creature's toughness",
-   1
-  ],
-  [
-   "Tam, Mindful First-Year: {T}: Target creature you control becomes all colors until end of turn.",
-   1
-  ],
-  [
-   "Terrain Generator: {2}, {T}: You may put a basic land card from your hand onto the battlefield tapped.",
-   1
-  ],
-  [
-   "Arbor Elf: {T}: Untap target Forest.",
-   1
-  ],
-  [
-   "Soul of New Phyrexia: {5}: Permanents you control gain indestructible until end of turn.",
-   1
-  ],
-  [
-   "Soul of New Phyrexia: {5}, Exile this card from your graveyard: Permanents you control gain indestructible until",
-   1
-  ],
-  [
-   "The Deck of Many Things: {2}, {T}: Roll a d20 and subtract the number of cards in your hand. If the result is 0 or ",
-   1
-  ],
-  [
-   "Throne of Eldraine: {T}: Add four mana of the chosen color. Spend this mana only to cast monocolored spells of",
-   1
-  ],
-  [
-   "Bane's Invoker: {8}: Up to two target creatures each get +2/+2 and gain flying until end of turn.",
-   1
-  ],
-  [
-   "Brallin, Skyshark Rider: {R}: Target Shark gains trample until end of turn.",
-   1
-  ],
-  [
-   "Campfire: {2}, {T}, Exile this artifact: Put all commanders you own from the command zone and from y",
-   1
-  ],
-  [
-   "Codex Shredder: {5}, {T}, Sacrifice this artifact: Return target card from your graveyard to your hand.",
-   1
-  ],
-  [
-   "Dark Apostle: {3}, {T}: The next noncreature spell you cast this turn has cascade.",
-   1
-  ],
-  [
-   "Eight-and-a-Half-Tails: {1}: Target spell or permanent becomes white until end of turn.",
-   1
-  ],
-  [
-   "Endbringer: {C}, {T}: Target creature can't attack or block this turn.",
-   1
-  ],
-  [
-   "Guardian Idol: {2}: This artifact becomes a 2/2 Golem artifact creature until end of turn.",
-   1
-  ],
-  [
-   "Lady Octopus, Inspired Inventor: {T}: You may cast an artifact spell from your hand with mana value less than or equal to t",
-   1
-  ],
-  [
-   "Slobad, Goblin Tinkerer: Sacrifice an artifact: Target artifact gains indestructible until end of turn.",
-   1
-  ],
-  [
-   "Uyo, Silent Prophet: {2}, Return two lands you control to their owner's hand: Copy target instant or sorcery sp",
-   1
-  ],
-  [
-   "Abstruse Archaic: {1}, {T}: Copy target activated or triggered ability you control from a colorless source. ",
-   1
-  ],
-  [
-   "Arcane Lighthouse: {1}, {T}: Until end of turn, creatures your opponents control lose hexproof and shroud and",
-   1
-  ],
-  [
-   "Chainer, Nightmare Adept: Discard a card: You may cast a creature spell from your graveyard this turn. Activate only",
-   1
-  ],
-  [
-   "Crystal Chimes: {3}, {T}, Sacrifice this artifact: Return all enchantment cards from your graveyard to you",
-   1
-  ],
-  [
-   "Daily Bugle Building: {1}, {T}: Target legendary creature gains menace until end of turn. Activate only as a sor",
-   1
-  ],
-  [
-   "Dire Mimic: {3}: This artifact becomes a Shapeshifter artifact creature with base power and toughness ",
-   1
-  ],
-  [
-   "Goblin Smuggler: {T}: Another target creature with power 2 or less can't be blocked this turn.",
-   1
-  ],
-  [
-   "Golem Artisan: {2}: Target artifact creature gets +1/+1 until end of turn.",
-   1
-  ],
-  [
-   "Golem Artisan: {2}: Target artifact creature gains your choice of flying, trample, or haste until end of ",
-   1
-  ],
-  [
-   "Kargan Intimidator: {1}: Choose one that hasn't been chosen this turn \u2014",
-   1
-  ],
-  [
-   "Lobelia, Defender of Bag End: {T}, Sacrifice an artifact: Choose one \u2014",
-   1
-  ],
-  [
-   "Mobilized District: {4}: This land becomes a 3/3 Citizen creature with vigilance until end of turn. It's still",
-   1
-  ],
-  [
-   "Mystic Forge: {T}, Pay 1 life: Exile the top card of your library.",
-   1
-  ],
-  [
-   "Necropolis Fiend: {X}, {T}, Exile X cards from your graveyard: Target creature gets -X/-X until end of turn.",
-   1
-  ],
-  [
-   "Ruins of Oran-Rief: {T}: Put a +1/+1 counter on target colorless creature that entered this turn.",
-   1
-  ],
-  [
-   "Spellskite: {U/P}: Change a target of target spell or ability to this creature.",
-   1
-  ],
-  [
-   "Staff of Compleation: {5}: Untap this artifact.",
-   1
-  ],
-  [
-   "Stuffy Doll: {T}: This creature deals 1 damage to itself.",
-   1
-  ],
-  [
-   "The Peregrine Dynamo: {1}, {T}: Copy target activated or triggered ability you control from another legendary so",
-   1
-  ],
-  [
-   "Aetheric Amplifier: {4}, {T}: Choose one. Activate only as a sorcery.",
-   1
-  ],
-  [
-   "Inkmoth Nexus: {1}: This land becomes a 1/1 Phyrexian Blinkmoth artifact creature with flying and infect ",
-   1
-  ],
-  [
-   "Leonin Bladetrap: {2}, Sacrifice this artifact: It deals 2 damage to each attacking creature without flying.",
-   1
-  ],
-  [
-   "Leyline Dowser: Tap an untapped legendary creature you control: Untap this artifact.",
-   1
-  ],
-  [
-   "Mutavault: {1}: This land becomes a 2/2 creature with all creature types until end of turn. It's stil",
-   1
-  ],
-  [
-   "Rod of Absorption: {X}, {T}, Sacrifice this artifact: You may cast any number of spells from among cards exil",
-   1
-  ],
-  [
-   "Survivor's Med Kit: {1}, {T}: Choose one that hasn't been chosen \u2014",
-   1
-  ],
-  [
-   "The Mycosynth Gardens: {X}, {T}: This land becomes a copy of target nontoken artifact you control with mana value",
-   1
-  ],
-  [
-   "Cleaver Skaab: {3}, {T}, Sacrifice another Zombie: Create two tokens that are copies of the sacrificed cr",
-   1
-  ],
-  [
-   "Dawnhand Dissident: {T}, Blight 2: Exile target card from a graveyard.",
-   1
-  ],
-  [
-   "Doubling Cube: {3}, {T}: Double the amount of each type of unspent mana you have.",
-   1
-  ],
-  [
-   "Fatestitcher: {T}: You may tap or untap another target permanent.",
-   1
-  ],
-  [
-   "Firdoch Core: {4}: This artifact becomes a 4/4 artifact creature until end of turn.",
-   1
-  ],
-  [
-   "Jund Panorama: {1}, {T}, Sacrifice this land: Search your library for a basic Swamp, Mountain, or Forest ",
-   1
-  ],
-  [
-   "Shelldock Isle: {U}, {T}: You may play the exiled card without paying its mana cost if a library has twent",
-   1
-  ],
-  [
-   "The Grim Captain's Locker: {T}: Until end of turn, each creature card in your graveyard gains \"Escape\u2014{3}{B}, Exile f",
-   1
-  ],
-  [
-   "Witch's Clinic: {2}, {T}: Target commander gains lifelink until end of turn.",
-   1
-  ],
   [
    "Adaptive Training Post: Remove three charge counters from this artifact: When you next cast an instant or sorcery ",
    1
@@ -2119,7 +428,15 @@
    1
   ],
   [
+   "Hostile Desert: {2}, Exile a land card from your graveyard: This land becomes a 3/4 Elemental creature unt",
+   1
+  ],
+  [
    "Karakas: {T}: Return target legendary creature to its owner's hand.",
+   1
+  ],
+  [
+   "Lantern of Revealing: {4}, {T}: Look at the top card of your library. If it's a land card, you may put it onto t",
    1
   ],
   [
@@ -2128,6 +445,10 @@
   ],
   [
    "Maraleaf Rider: Sacrifice a Food: Target creature blocks this creature this turn if able.",
+   1
+  ],
+  [
+   "Razaketh, the Foulblooded: Pay 2 life, Sacrifice another creature: Search your library for a card, put that card into",
    1
   ],
   [
@@ -2147,11 +468,23 @@
    1
   ],
   [
+   "Surveyor's Scope: {T}, Exile this artifact: Search your library for up to X basic land cards, where X is the",
+   1
+  ],
+  [
    "Underdark Rift: {5}, {T}, Exile this land: Roll a d10. Put target artifact, creature, or planeswalker into",
    1
   ],
   [
    "Unlicensed Hearse: {T}: Exile up to two target cards from a single graveyard.",
+   1
+  ],
+  [
+   "Vhal, Candlekeep Researcher: {T}: Add an amount of {C} equal to ~'s toughness. This mana can't be spent to cast spells ",
+   1
+  ],
+  [
+   "Access Tunnel: {3}, {T}: Target creature with power 3 or less can't be blocked this turn.",
    1
   ],
   [
@@ -2175,11 +508,19 @@
    1
   ],
   [
+   "Gate to the Afterlife: {2}, {T}, Sacrifice this artifact: Search your graveyard, hand, and/or library for a card ",
+   1
+  ],
+  [
    "Heartless Hidetsugu: {T}: ~ deals damage to each player equal to half that player's life total, rounded down.",
    1
   ],
   [
    "Izzet Chemister: {R}, {T}: Exile target instant or sorcery card from your graveyard.",
+   1
+  ],
+  [
+   "Maze's End: {3}, {T}, Return this land to its owner's hand: Search your library for a Gate card, put i",
    1
   ],
   [
@@ -2209,535 +550,131 @@
   [
    "The Chain Veil: {4}, {T}: For each planeswalker you control, you may activate one of its loyalty abilities",
    1
+  ],
+  [
+   "Zhao, the Moon Slayer: {7}: Put a conqueror counter on ~.",
+   1
   ]
  ],
  "unknown_keywords": [
   [
    "equip",
-   139
-  ],
-  [
-   "enchant",
-   67
+   25
   ],
   [
    "mill",
-   60
-  ],
-  [
-   "treasure",
-   55
-  ],
-  [
-   "scry",
-   49
-  ],
-  [
-   "crew",
-   45
-  ],
-  [
-   "landfall",
-   32
-  ],
-  [
-   "partner",
-   23
-  ],
-  [
-   "food",
-   23
-  ],
-  [
-   "kicker",
-   19
-  ],
-  [
-   "cycling",
    16
   ],
   [
-   "fight",
-   15
+   "treasure",
+   10
   ],
   [
-   "proliferate",
-   15
+   "crew",
+   10
   ],
   [
-   "choose a background",
-   14
+   "scry",
+   9
   ],
   [
-   "warp",
-   13
+   "landfall",
+   6
   ],
   [
    "investigate",
-   13
+   6
   ],
   [
-   "connive",
-   12
+   "partner",
+   5
   ],
   [
-   "landwalk",
-   12
+   "enchant",
+   5
   ],
   [
    "flashback",
-   12
+   5
   ],
   [
-   "convoke",
-   11
+   "choose a background",
+   4
   ],
   [
-   "ward",
-   11
-  ],
-  [
-   "station",
-   10
-  ],
-  [
-   "landcycling",
-   10
-  ],
-  [
-   "typecycling",
-   10
-  ],
-  [
-   "double",
-   10
-  ],
-  [
-   "changeling",
-   10
-  ],
-  [
-   "surveil",
-   10
-  ],
-  [
-   "affinity",
-   9
-  ],
-  [
-   "islandwalk",
-   9
-  ],
-  [
-   "morph",
-   9
-  ],
-  [
-   "monstrosity",
-   8
-  ],
-  [
-   "basic landcycling",
-   8
-  ],
-  [
-   "waterbend",
-   8
-  ],
-  [
-   "regenerate",
-   8
-  ],
-  [
-   "megamorph",
-   7
-  ],
-  [
-   "encore",
-   7
+   "cycling",
+   3
   ],
   [
    "split second",
-   7
+   3
   ],
   [
-   "imprint",
-   7
+   "kicker",
+   3
   ],
   [
-   "ascend",
-   6
+   "regenerate",
+   3
   ],
   [
-   "madness",
-   6
+   "food",
+   3
   ],
   [
-   "infect",
-   6
+   "basic landcycling",
+   2
   ],
   [
-   "earthbend",
-   6
+   "landcycling",
+   2
   ],
   [
-   "myriad",
-   6
-  ],
-  [
-   "prowess",
-   6
-  ],
-  [
-   "overload",
-   6
-  ],
-  [
-   "goad",
-   6
-  ],
-  [
-   "explore",
-   6
-  ],
-  [
-   "ravenous",
-   5
-  ],
-  [
-   "prowl",
-   5
-  ],
-  [
-   "protection",
-   5
+   "typecycling",
+   2
   ],
   [
    "airbend",
-   5
-  ],
-  [
-   "fortify",
-   5
-  ],
-  [
-   "lieutenant",
-   5
-  ],
-  [
-   "cascade",
-   4
-  ],
-  [
-   "outlast",
-   4
-  ],
-  [
-   "metalcraft",
-   4
-  ],
-  [
-   "afterlife",
-   4
-  ],
-  [
-   "casualty",
-   4
-  ],
-  [
-   "manifest",
-   4
-  ],
-  [
-   "mayhem",
-   4
-  ],
-  [
-   "squad",
-   4
-  ],
-  [
-   "blight",
-   4
-  ],
-  [
-   "blitz",
-   4
-  ],
-  [
-   "vivid",
-   4
-  ],
-  [
-   "alliance",
-   4
-  ],
-  [
-   "will of the council",
-   4
-  ],
-  [
-   "heroic",
-   4
-  ],
-  [
-   "behold",
-   4
-  ],
-  [
-   "hideaway",
-   4
-  ],
-  [
-   "transdimensional scout",
-   3
-  ],
-  [
-   "wraith form",
-   3
-  ],
-  [
-   "full party",
-   3
-  ],
-  [
-   "light party",
-   3
-  ],
-  [
-   "join forces",
-   3
-  ],
-  [
-   "foretell",
-   3
-  ],
-  [
-   "constellation",
-   3
-  ],
-  [
-   "bio-plasmic barrage",
-   3
-  ],
-  [
-   "saddle",
-   3
-  ],
-  [
-   "forestwalk",
-   3
-  ],
-  [
-   "threshold",
-   3
-  ],
-  [
-   "void",
-   3
-  ],
-  [
-   "morbid",
-   3
-  ],
-  [
-   "mentor",
-   3
-  ],
-  [
-   "rebound",
-   3
-  ],
-  [
-   "partner with",
-   3
-  ],
-  [
-   "living weapon",
-   3
-  ],
-  [
-   "ninjutsu",
-   3
-  ],
-  [
-   "exert",
-   3
-  ],
-  [
-   "heal",
-   3
-  ],
-  [
-   "undying",
-   3
-  ],
-  [
-   "converge",
-   3
-  ],
-  [
-   "delve",
-   3
-  ],
-  [
-   "firebending",
-   3
-  ],
-  [
-   "eternity gate",
-   3
-  ],
-  [
-   "freerunning",
-   3
-  ],
-  [
-   "improvise",
-   3
-  ],
-  [
-   "evoke",
-   3
-  ],
-  [
-   "storm",
-   3
-  ],
-  [
-   "populate",
-   3
-  ],
-  [
-   "enrage",
    2
   ],
   [
-   "lure the unwary",
+   "morph",
    2
   ],
   [
-   "multikicker",
+   "warp",
    2
   ],
   [
-   "undaunted",
-   2
-  ],
-  [
-   "riot",
-   2
-  ],
-  [
-   "islandcycling",
-   2
-  ],
-  [
-   "corrupted",
-   2
-  ],
-  [
-   "annihilator",
-   2
-  ],
-  [
-   "cumulative upkeep",
-   2
-  ],
-  [
-   "drain life",
-   2
-  ],
-  [
-   "backup",
-   2
-  ],
-  [
-   "fabricate",
-   2
-  ],
-  [
-   "distract the horde",
-   2
-  ],
-  [
-   "channel",
-   2
-  ],
-  [
-   "magecraft",
-   2
-  ],
-  [
-   "strive",
-   2
-  ],
-  [
-   "persist",
-   2
-  ],
-  [
-   "soulbond",
-   2
-  ],
-  [
-   "bolster",
-   2
-  ],
-  [
-   "fateful hour",
-   2
-  ],
-  [
-   "project image",
-   2
-  ],
-  [
-   "bushido",
-   2
-  ],
-  [
-   "spell mastery",
-   2
-  ],
-  [
-   "gift",
-   2
-  ],
-  [
-   "fear",
-   2
-  ],
-  [
-   "cloak",
-   2
-  ],
-  [
-   "ed-e my love",
-   2
-  ],
-  [
-   "come fly with me",
-   2
-  ],
-  [
-   "demonstrate",
-   2
-  ],
-  [
-   "prismatic gallery",
-   2
-  ],
-  [
-   "suspend",
-   2
-  ],
-  [
-   "miracle",
+   "imprint",
    2
   ],
   [
    "battle cry",
+   2
+  ],
+  [
+   "ascend",
+   2
+  ],
+  [
+   "lieutenant",
+   2
+  ],
+  [
+   "infect",
+   2
+  ],
+  [
+   "station",
+   2
+  ],
+  [
+   "ward",
+   2
+  ],
+  [
+   "fight",
    2
   ],
   [
@@ -2749,319 +686,19 @@
    2
   ],
   [
-   "scavenge",
-   1
-  ],
-  [
-   "animate chains",
-   1
-  ],
-  [
-   "protector",
-   1
-  ],
-  [
-   "celebration",
-   1
-  ],
-  [
-   "rapid-fire battle cannon",
-   1
-  ],
-  [
-   "domain",
-   1
-  ],
-  [
-   "offspring",
-   1
-  ],
-  [
-   "natural shelter",
-   1
-  ],
-  [
-   "benediction of the omnissiah",
-   1
-  ],
-  [
-   "spore chimney",
-   1
-  ],
-  [
-   "the seven-fold chant",
-   1
-  ],
-  [
-   "eukrasia",
-   1
-  ],
-  [
-   "no mercy",
-   1
-  ],
-  [
-   "escape",
-   1
-  ],
-  [
-   "radiance",
-   1
-  ],
-  [
-   "amass",
-   1
-  ],
-  [
-   "bring down",
-   1
-  ],
-  [
-   "look around",
-   1
-  ],
-  [
-   "dynastic command node",
-   1
-  ],
-  [
-   "translocation protocols",
-   1
-  ],
-  [
-   "devour",
-   1
-  ],
-  [
-   "mutate",
-   1
-  ],
-  [
-   "shiva's aid",
-   1
-  ],
-  [
-   "parley",
-   1
-  ],
-  [
-   "kinship",
-   1
-  ],
-  [
-   "executioner round",
-   1
-  ],
-  [
-   "hyperfrag round",
-   1
-  ],
-  [
-   "animal may-ham",
-   1
-  ],
-  [
-   "ferocious",
-   1
-  ],
-  [
-   "manifest dread",
-   1
-  ],
-  [
-   "flurry",
-   1
-  ],
-  [
-   "wind walk",
-   1
-  ],
-  [
-   "triple",
-   1
-  ],
-  [
-   "gift of chaos",
-   1
-  ],
-  [
-   "heckle",
-   1
-  ],
-  [
-   "hero worship",
-   1
-  ],
-  [
-   "rage",
-   1
-  ],
-  [
-   "protection fighting style",
-   1
-  ],
-  [
-   "dance",
-   1
-  ],
-  [
-   "psychic abomination",
-   1
-  ],
-  [
-   "scions' secretary",
-   1
-  ],
-  [
-   "descend",
-   1
-  ],
-  [
-   "smear campaign",
-   1
-  ],
-  [
-   "locus of slaanesh",
-   1
-  ],
-  [
-   "inquisition agents",
-   1
-  ],
-  [
-   "bloodthirst",
-   1
-  ],
-  [
-   "synaptic disintegrator",
-   1
-  ],
-  [
-   "delirium",
-   1
-  ],
-  [
-   "spree",
-   1
-  ],
-  [
-   "cipher",
-   1
-  ],
-  [
-   "modular",
-   1
-  ],
-  [
-   "emerge",
-   1
-  ],
-  [
-   "flesh flayer",
-   1
-  ],
-  [
-   "neurotraumal rod",
-   1
-  ],
-  [
-   "children of the cult",
-   1
-  ],
-  [
-   "genestealer's kiss",
-   1
-  ],
-  [
-   "shroud",
-   1
-  ],
-  [
-   "shadow",
-   1
-  ],
-  [
-   "do homework",
-   1
-  ],
-  [
-   "fight crime",
-   1
-  ],
-  [
-   "leap strike",
-   1
-  ],
-  [
-   "rope dart",
-   1
-  ],
-  [
-   "coven",
-   1
-  ],
-  [
-   "fancy lads snack cakes",
-   1
-  ],
-  [
-   "radaway",
-   1
-  ],
-  [
-   "stimpak",
-   1
-  ],
-  [
-   "those who came before",
-   1
-  ],
-  [
-   "leap of faith",
-   1
-  ],
-  [
-   "sleight of hand",
-   1
-  ],
-  [
-   "council's dilemma",
-   1
-  ],
-  [
-   "unearth",
-   1
-  ],
-  [
-   "reverberating summons",
-   1
-  ],
-  [
-   "harbinger of despair",
-   1
-  ],
-  [
-   "death sickle",
-   1
-  ],
-  [
-   "job select",
-   1
+   "explore",
+   2
   ],
   [
-   "fallen warrior",
-   1
-  ],
-  [
-   "plasma incinerator",
-   1
+   "alliance",
+   2
   ],
   [
-   "awaken",
+   "outlast",
    1
   ],
   [
-   "blood drain",
+   "bolster",
    1
   ],
   [
@@ -3077,6 +714,18 @@
    1
   ],
   [
+   "behold",
+   1
+  ],
+  [
+   "full party",
+   1
+  ],
+  [
+   "light party",
+   1
+  ],
+  [
    "mold earth",
    1
   ],
@@ -3085,7 +734,39 @@
    1
   ],
   [
+   "overload",
+   1
+  ],
+  [
+   "miracle",
+   1
+  ],
+  [
+   "demonstrate",
+   1
+  ],
+  [
+   "saddle",
+   1
+  ],
+  [
    "stowage",
+   1
+  ],
+  [
+   "proliferate",
+   1
+  ],
+  [
+   "storm",
+   1
+  ],
+  [
+   "protection",
+   1
+  ],
+  [
+   "connive",
    1
   ],
   [
@@ -3093,7 +774,15 @@
    1
   ],
   [
+   "affinity",
+   1
+  ],
+  [
    "psychic blades",
+   1
+  ],
+  [
+   "rebound",
    1
   ],
   [
@@ -3105,11 +794,63 @@
    1
   ],
   [
+   "populate",
+   1
+  ],
+  [
+   "prowl",
+   1
+  ],
+  [
+   "foretell",
+   1
+  ],
+  [
+   "mentor",
+   1
+  ],
+  [
+   "fateful hour",
+   1
+  ],
+  [
+   "afterlife",
+   1
+  ],
+  [
+   "persist",
+   1
+  ],
+  [
+   "cloak",
+   1
+  ],
+  [
+   "changeling",
+   1
+  ],
+  [
    "spiked retribution",
    1
   ],
   [
+   "casualty",
+   1
+  ],
+  [
+   "heal",
+   1
+  ],
+  [
    "venture into the dungeon",
+   1
+  ],
+  [
+   "spell mastery",
+   1
+  ],
+  [
+   "annihilator",
    1
   ],
   [
@@ -3121,7 +862,15 @@
    1
   ],
   [
+   "vivid",
+   1
+  ],
+  [
    "bestow",
+   1
+  ],
+  [
+   "improvise",
    1
   ],
   [
@@ -3133,11 +882,63 @@
    1
   ],
   [
+   "ed-e my love",
+   1
+  ],
+  [
+   "mayhem",
+   1
+  ],
+  [
+   "firebending",
+   1
+  ],
+  [
+   "prowess",
+   1
+  ],
+  [
+   "myriad",
+   1
+  ],
+  [
+   "channel",
+   1
+  ],
+  [
+   "encore",
+   1
+  ],
+  [
    "survival",
    1
   ],
   [
+   "eternity gate",
+   1
+  ],
+  [
    "will of the planeswalkers",
+   1
+  ],
+  [
+   "goad",
+   1
+  ],
+  [
+   "squad",
+   1
+  ],
+  [
+   "heroic",
+   1
+  ],
+  [
+   "double",
+   1
+  ],
+  [
+   "gift",
    1
   ],
   [
@@ -3149,477 +950,90 @@
    1
   ],
   [
+   "cascade",
+   1
+  ],
+  [
    "retrace",
+   1
+  ],
+  [
+   "forestwalk",
+   1
+  ],
+  [
+   "landwalk",
    1
   ]
  ],
+ "errors": [],
  "log_counts": [
   [
-   "manual: Crescendo of War",
-   17
-  ],
-  [
-   "auto: Urabrask, Heretic Praetor",
-   17
-  ],
-  [
-   "manual: Ring of Valkas",
-   13
-  ],
-  [
-   "manual: Firebender Ascension",
+   "auto: Deep Gnome Terramancer",
    13
   ],
   [
    "auto: Rosnakht, Heir of Rohgahh",
-   13
-  ],
-  [
-   "manual: Ara\u00f1a, Heart of the Spider",
-   11
-  ],
-  [
-   "auto: Revenge of Ravens",
-   11
-  ],
-  [
-   "auto: Paradise Plume",
-   10
-  ],
-  [
-   "manual: Within Range",
-   9
-  ],
-  [
-   "auto: Thassa, God of the Sea",
-   8
-  ],
-  [
-   "auto: Kellogg, Dangerous Mind",
-   8
-  ],
-  [
-   "manual: Beckoning Will-o'-Wisp",
    7
-  ],
-  [
-   "auto: Helm of the Host",
-   7
-  ],
-  [
-   "auto: Syr Konrad, the Grim",
-   7
-  ],
-  [
-   "manual: Ardenn, Intrepid Archaeologist",
-   7
-  ],
-  [
-   "auto: Overseer of Vault 76",
-   7
-  ],
-  [
-   "auto: Bloodgift Demon",
-   7
-  ],
-  [
-   "auto: Swarm of Bloodflies",
-   6
-  ],
-  [
-   "auto: Asylum Visitor",
-   6
-  ],
-  [
-   "auto: Tireless Provisioner",
-   5
-  ],
-  [
-   "auto: Ezuri, Claw of Progress",
-   5
-  ],
-  [
-   "manual: Replicating Ring",
-   5
-  ],
-  [
-   "auto: Mana-Charged Dragon",
-   5
-  ],
-  [
-   "manual: Chalice of the Void",
-   5
-  ],
-  [
-   "auto: Curie, Emergent Intelligence",
-   5
-  ],
-  [
-   "auto: Serene Sleuth",
-   5
   ],
   [
    "manual: Fortune, Loyal Steed",
    5
   ],
   [
+   "auto: Crawling Infestation",
+   5
+  ],
+  [
+   "auto: Aether Vial",
+   5
+  ],
+  [
+   "auto: Chronicle of Victory",
+   5
+  ],
+  [
+   "manual: Erinis, Gloom Stalker",
+   5
+  ],
+  [
+   "auto: Kellogg, Dangerous Mind",
+   4
+  ],
+  [
    "auto: Monument",
    4
   ],
   [
-   "auto: Squad Commander",
+   "manual: Bane of Bala Ged",
    4
   ],
   [
-   "manual: Inversion Behemoth",
-   4
-  ],
-  [
-   "manual: Wort, Boggart Auntie",
-   4
-  ],
-  [
-   "manual: Crystalline Giant",
-   4
-  ],
-  [
-   "auto: Iguana Parrot",
-   4
-  ],
-  [
-   "manual: Skyclave Shade",
-   4
-  ],
-  [
-   "manual: Varchild, Betrayer of Kjeldor",
+   "auto: Gate to the Afterlife",
    3
-  ],
-  [
-   "auto: Galepowder Mage",
-   3
-  ],
-  [
-   "manual: Lux Artillery",
-   3
-  ],
-  [
-   "auto: Phyrexian Arena",
-   3
-  ],
-  [
-   "auto: Reaver",
-   3
-  ],
-  [
-   "auto: Trickster",
-   3
-  ],
-  [
-   "auto: Palette",
-   2
-  ],
-  [
-   "manual: Amarant Coral",
-   2
-  ],
-  [
-   "auto: Niblis of Frost",
-   2
-  ],
-  [
-   "manual: Azula, Cunning Usurper",
-   2
-  ],
-  [
-   "manual: Karlach, Fury of Avernus",
-   2
-  ],
-  [
-   "auto: Redoubled Stormsinger",
-   2
-  ],
-  [
-   "auto: Markov Enforcer",
-   2
   ],
   [
    "auto: Fortune, Loyal Steed",
    2
   ],
   [
-   "auto: Cruel Administrator",
-   2
-  ],
-  [
-   "manual: Erinis, Gloom Stalker",
-   2
-  ],
-  [
-   "auto: Undercellar Sweep",
-   2
-  ],
-  [
-   "auto: Phyrexian Swarmlord",
-   2
-  ],
-  [
-   "auto: Sanctuary Warden",
-   1
-  ],
-  [
-   "auto: Chains of Custody",
-   1
-  ],
-  [
-   "auto: Viridian Emissary",
-   1
-  ],
-  [
-   "auto: Pristine Angel",
-   1
-  ],
-  [
-   "manual: Shard of the Nightbringer",
-   1
-  ],
-  [
-   "manual: Filigree Vector",
-   1
-  ],
-  [
-   "auto: Sacred Mesa",
-   1
-  ],
-  [
-   "auto: Sicarian Infiltrator",
-   1
-  ],
-  [
-   "auto: Grace",
-   1
-  ],
-  [
-   "manual: Disciple of Caelus Nin",
-   1
-  ],
-  [
-   "manual: Trailblazer's Torch",
-   1
-  ],
-  [
-   "manual: Chain Devil",
-   1
-  ],
-  [
-   "manual: Gathering Stone",
-   1
-  ],
-  [
-   "auto: Prognostic Sphinx",
-   1
-  ],
-  [
-   "auto: Assassin Gauntlet",
-   1
-  ],
-  [
-   "auto: Ivora, Insatiable Heir",
-   1
-  ],
-  [
-   "manual: Naru Meha, Master Wizard",
-   1
-  ],
-  [
-   "manual: Hoarding Dragon",
-   1
-  ],
-  [
-   "auto: Shinestriker",
-   1
-  ],
-  [
-   "manual: Alpha Bot activates Karn, Scion of Urza (+1, loyalty 6) \u2014 [+1]: Reveal the top two cards of your library. An opponent chooses on, resolve by hand",
-   1
-  ],
-  [
-   "manual: The Boulder, Ready to Rumble",
-   1
-  ],
-  [
-   "auto: Omen of the Hunt",
-   1
-  ],
-  [
-   "manual: Lich Bot activates Serra the Benevolent (+2, loyalty 30) \u2014 [+2]: Creatures you control with flying get +1/+1 until end of turn., resolve by hand",
-   1
-  ],
-  [
-   "manual: Lich Bot activates Serra the Benevolent (+2, loyalty 28) \u2014 [+2]: Creatures you control with flying get +1/+1 until end of turn., resolve by hand",
-   1
-  ],
-  [
-   "manual: Lich Bot activates Serra the Benevolent (+2, loyalty 26) \u2014 [+2]: Creatures you control with flying get +1/+1 until end of turn., resolve by hand",
-   1
-  ],
-  [
-   "manual: Hostility",
-   1
-  ],
-  [
-   "auto: Mangara, the Diplomat",
-   1
-  ],
-  [
-   "manual: Lich Bot activates Serra the Benevolent (+2, loyalty 24) \u2014 [+2]: Creatures you control with flying get +1/+1 until end of turn., resolve by hand",
-   1
-  ],
-  [
-   "auto: Demanding Dragon",
-   1
-  ],
-  [
-   "manual: Lich Bot activates Serra the Benevolent (+2, loyalty 22) \u2014 [+2]: Creatures you control with flying get +1/+1 until end of turn., resolve by hand",
-   1
-  ],
-  [
-   "manual: Icewind Stalwart",
-   1
-  ],
-  [
-   "manual: Lich Bot activates Serra the Benevolent (+2, loyalty 20) \u2014 [+2]: Creatures you control with flying get +1/+1 until end of turn., resolve by hand",
-   1
-  ],
-  [
-   "auto: Smoke Bomb",
-   1
-  ],
-  [
-   "manual: Lich Bot activates Serra the Benevolent (+2, loyalty 18) \u2014 [+2]: Creatures you control with flying get +1/+1 until end of turn., resolve by hand",
-   1
-  ],
-  [
-   "manual: Sphinx Bot's The Brothers' War chapter II: II \u2014 Choose two target players. Until your next turn, each creature they control \u2014 resolve by hand",
-   1
-  ],
-  [
-   "manual: Spider-Bot",
-   1
-  ],
-  [
-   "manual: Sphinx Bot's The Brothers' War chapter I: I \u2014 Create two tapped Powerstone tokens. \u2014 resolve by hand",
-   1
-  ],
-  [
-   "manual: Geometric Nexus",
-   1
-  ],
-  [
-   "auto: Amber Gristle O'Maul",
-   1
-  ],
-  [
-   "auto: Captain Ripley Vance",
-   1
-  ],
-  [
-   "auto: Coercive Portal",
-   1
-  ],
-  [
-   "auto: Fissure Wizard",
-   1
-  ],
-  [
-   "manual: Lich Bot activates Vronos, Masked Inquisitor (+1, loyalty 8) \u2014 [+1]: Up to two other target planeswalkers you control phase out at th, resolve by hand",
-   1
-  ],
-  [
-   "manual: Lich Bot activates Vronos, Masked Inquisitor (+1, loyalty 7) \u2014 [+1]: Up to two other target planeswalkers you control phase out at th, resolve by hand",
-   1
-  ],
-  [
-   "auto: Necron Deathmark",
-   1
-  ],
-  [
-   "manual: Lich Bot activates Vronos, Masked Inquisitor (+1, loyalty 6) \u2014 [+1]: Up to two other target planeswalkers you control phase out at th, resolve by hand",
-   1
-  ],
-  [
-   "manual: Baldin, Century Herdmaster",
-   1
-  ],
-  [
-   "auto: Divine Favor",
-   1
-  ],
-  [
-   "auto: Search Party Captain",
-   1
-  ],
-  [
-   "auto: Stalactite Dagger",
-   1
-  ],
-  [
-   "auto: Jacked Rabbit",
-   1
-  ],
-  [
-   "auto: Earth Kingdom Jailer",
-   1
-  ],
-  [
-   "auto: Golgari Findbroker",
-   1
-  ],
-  [
-   "auto: Stalwart Pathlighter",
-   1
-  ],
-  [
-   "manual: Omarthis, Ghostfire Initiate",
-   1
-  ],
-  [
-   "manual: Vessel of Endless Rest",
-   1
-  ],
-  [
-   "manual: Regal Behemoth",
-   1
-  ],
-  [
-   "manual: Trench Behemoth",
-   1
-  ],
-  [
-   "manual: Capture Sphere",
-   1
-  ],
-  [
-   "auto: Archangel of Thune",
-   1
-  ],
-  [
-   "manual: Specimen Freighter",
-   1
-  ],
-  [
-   "manual: Nekrataal",
-   1
-  ],
-  [
    "manual: Fey Steed",
    1
   ],
   [
-   "auto: Cloudgoat Ranger",
+   "auto: Extraplanar Lens",
    1
   ],
   [
-   "auto: Angelic Gift",
+   "manual: Foreboding Steamboat",
+   1
+  ],
+  [
+   "manual: Star Pupil",
+   1
+  ],
+  [
+   "manual: Malakir Bloodwitch",
    1
   ],
   [
@@ -3627,56 +1041,37 @@
    1
   ],
   [
+   "auto: Overseer of Vault 76",
+   1
+  ],
+  [
+   "manual: Champion of the Clachan",
+   1
+  ],
+  [
+   "manual: Druid Bot's The Revelations of Ezio chapter III: III \u2014 Return target Assassin creature card from your graveyard to the battlefiel \u2014 resolve by hand",
+   1
+  ],
+  [
+   "manual: Druid Bot's Summon: Kujata chapter II: II \u2014 Ice \u2014 Up to three target creatures can't block this turn. \u2014 resolve by hand",
+   1
+  ],
+  [
    "auto: Powder Ganger",
    1
   ],
   [
-   "manual: Goblin Ringleader",
+   "auto: graveyard (3), 1 Insect token",
    1
   ],
   [
-   "auto: Deathbringer Regent",
+   "manual: Sphinx Bot's Summon: Kujata chapter I: I \u2014 Lightning \u2014 This creature deals 3 damage to each of up to two target creatur \u2014 resolve by hand",
    1
   ],
   [
-   "auto: Pain Distributor",
-   1
-  ],
-  [
-   "auto: graveyard (7), 1 Insect token",
-   1
-  ],
-  [
-   "auto: Channeler Initiate",
-   1
-  ],
-  [
-   "manual: Skyclave Relic",
-   1
-  ],
-  [
-   "manual: Oran-Rief Ooze",
-   1
-  ],
-  [
-   "manual: Quick-Draw Dagger",
-   1
-  ],
-  [
-   "auto: Mechanical Mobster",
-   1
-  ],
-  [
-   "manual: Undercellar Sweep",
-   1
-  ],
-  [
-   "manual: Roving Actuator",
-   1
-  ],
-  [
-   "manual: Wild Beastmaster",
+   "auto: Seraph Sanctuary",
    1
   ]
- ]
+ ],
+ "parsed_cards": 226
 }

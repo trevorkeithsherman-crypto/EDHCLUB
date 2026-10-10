@@ -97,7 +97,7 @@ with sync_playwright() as p:
     check('next turn she uses a +1 (loyalty 2) and pings each opponent for 2 if the exiled card is not cast', ch['ctr'] == 2, f"{ch['ctr']} {logs(pg)[-6:]}")
 
     # ---- Cascade: Bloodbraid Elf ----
-    fresh(pg); lands(pg, 1, 4); real(pg, 1, 'Bloodbraid Elf', 'hand'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Bloodbraid Elf'); st.players[0].life=40; })")
+    fresh(pg); lands(pg, 1, 2); lands(pg, 1, 2, 'Forest'); real(pg, 1, 'Bloodbraid Elf', 'hand'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Bloodbraid Elf'); st.players[0].life=40; })")
     bolt = real(pg, 1, 'Lightning Bolt', 'library'); pg.evaluate(f"__edhMut(st=>{{ const l=st.players[1].zones.library; l.splice(l.indexOf('{bolt}'),1); l.unshift('{bolt}'); }})")
     bot_turn(pg); st = state(pg)
     check('Bloodbraid Elf cascades into Lightning Bolt for free; it hits me for 3', any('casts Lightning Bolt for free (Bloodbraid Elf)' in t for t in logs(pg)) and st['players'][0]['life'] <= 37, f"{st['players'][0]['life']} {logs(pg)[-6:]}")
@@ -108,10 +108,10 @@ with sync_playwright() as p:
     check('Act of Treason: the bot took my Angel, attacked me with it, and gave it back at end of turn', st['cards'][ang]['controller'] == 0 and ang in st['players'][0]['zones']['battlefield'] and any('Serra Angel attacks Planeswalker' in t for t in logs(pg)) and any('Serra Angel returns to Planeswalker' in t for t in logs(pg)), str(logs(pg)[-8:]))
 
     # ---- Explore ----
-    fresh(pg); lands(pg, 1, 2); real(pg, 1, 'Merfolk Branchwalker', 'hand'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Merfolk Branchwalker'); st.players[1].zones.library=[]; })")
+    fresh(pg); lands(pg, 1, 2, 'Forest'); real(pg, 1, 'Merfolk Branchwalker', 'hand'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Merfolk Branchwalker'); st.players[1].zones.library=[]; })")
     put(pg, 1, 'Serra Angel', 'Creature — Angel', '{3}{W}{W}', '4/4', '', 'library'); bot_turn(pg); mb = card(pg, 1, 'Merfolk Branchwalker')
     check('Explore with a nonland on top: +1/+1 counter, card stays', mb['p1'] == 1 and zone_names(pg, 1, 'library') == ['Serra Angel'], str(logs(pg)[-4:]))
-    fresh(pg); lands(pg, 1, 2); real(pg, 1, 'Merfolk Branchwalker', 'hand'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Merfolk Branchwalker'); st.players[1].zones.library=[]; })")
+    fresh(pg); lands(pg, 1, 2, 'Forest'); real(pg, 1, 'Merfolk Branchwalker', 'hand'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Merfolk Branchwalker'); st.players[1].zones.library=[]; })")
     put(pg, 1, 'Forest', 'Basic Land — Forest', '', '', '', 'library'); bot_turn(pg); mb = card(pg, 1, 'Merfolk Branchwalker')
     check('Explore with a land on top: the land goes to hand, no counter', not mb['p1'] and 'Forest' in zone_names(pg, 1, 'hand'))
 
@@ -164,7 +164,7 @@ with sync_playwright() as p:
     check('Bojuka Bog: enters tapped and exiles my graveyard', card(pg, 1, 'Bojuka Bog')['tapped'] and len(st['players'][0]['zones']['graveyard']) == 0 and len(st['players'][0]['zones']['exile']) == 2, str(logs(pg)[-4:]))
 
     # ---- Lifegain trigger (Ajani's Pridemate + Gift of Paradise) ----
-    fresh(pg); lands(pg, 1, 3, 'Plains'); pm = real(pg, 1, "Ajani's Pridemate"); real(pg, 1, 'Gift of Paradise', 'hand'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Gift of Paradise'); st.players[1].life=40; })")
+    fresh(pg); lands(pg, 1, 3, 'Forest'); pm = real(pg, 1, "Ajani's Pridemate"); real(pg, 1, 'Gift of Paradise', 'hand'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Gift of Paradise'); st.players[1].life=40; })")
     bot_turn(pg); st = state(pg)
     check("Gift of Paradise gains 3; Ajani's Pridemate grows", st['players'][1]['life'] == 43 and st['cards'][pm]['p1'] == 1, f"{st['players'][1]['life']} {st['cards'][pm]['p1']} {logs(pg)[-5:]}")
 

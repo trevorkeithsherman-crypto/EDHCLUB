@@ -3,6 +3,8 @@
 // kill when it's there. No rules engine; they reason over the same card data and combat simulator the
 // table uses. The host's client runs them.
 
+import { parseCost, unitsOf, solve } from './mana.js';
+
 export function makeBot(api) {
   const { S, P, castToStack, cast, activate, attach, crew, loyalty, idle, fire, rulesFor, castTax, castBlock, castsThisTurn, parseAbilities, spellKind, resolveTop, attack, combatDamage, nextPhase, passTurn, isCreature, powerOf, toughnessOf, log, Rules, draw, changeLife, toGraveyard, toExile, moveCard, toggleTap } = api;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -35,24 +37,33 @@ export function makeBot(api) {
   const creatures = (k) => bf(k).filter(isCreature);
   const opponents = (i) => S.players.map((q, k) => ({ q, k })).filter(({ q, k }) => k !== i && k < (S.seats || 4) && !q.out && !q.empty);
   const rocksDead = (k) => { const r = rulesFor(k); return r.noAbilities.has('artifact') || r.noAbilities.has('permanent'); };
-  const manaOf = (k) => bf(k).reduce((n, c) => n + (c.tapped ? 0 : isLand(c) ? landMana(c) : isRock(c) && !rocksDead(k) ? rockMana(c) : 0), 0) + (P(k).floating || 0);
+  // Colored mana, properly: every untapped source becomes units of the colors it can make (see mana.js).
+  const identity = (k) => [...new Set(Object.values(S.cards).filter((c) => c.owner === k && c.isCmdr).flatMap((c) => (c.colors || '').split('')))].filter(Boolean);
+  const units = (k) => { const idn = identity(k); const dead = rocksDead(k); return bf(k).flatMap((c) => (dead && /Artifact/.test(c.type) && !isLand(c) ? [] : unitsOf(c, { identity: idn }))); };
+  const manaOf = (k) => units(k).length + (P(k).floating || 0);
+  // Extra generic a spell costs this seat beyond its printed cost.
+  const extraFor = (k, c) => (c.isCmdr && c.zone === 'command' ? 2 * (c.casts || 0) : 0) + castTax(rulesFor(k), c) + payTaxes(k, c);
+  const payPlan = (k, c, pool, floating, extra = null) => solve(parseCost(c.cost), pool, { extraGeneric: extra == null ? extraFor(k, c) : extra, floating, life: P(k).life });
   // What a spell really costs this seat: mana cost + board taxes + the cheap "pay {1} or they draw" taxes it intends to pay.
   const payTaxes = (k, c) => S.players.flatMap((q, j) => (j !== k && j < (S.seats || 4) && !q.out && !q.empty ? bf(j) : [])).reduce((n, src) => n + parseAbilities(src).filter((a) => a.kind === 'trigger' && a.event === 'opponentCasts' && !a.nth && (!a.spell || a.spell === 'all' || spellKind(c, a.spell))).reduce((m, a) => { const t = a.effects.find((x) => x.k === 'tax'); const v = t ? (t.n === 'x' ? powerOf(src) : t.n) : 0; return m + (v > 0 && v <= 2 ? v : 0); }, 0), 0);
   const effCost = (k, c) => cost(c) + (c.isCmdr && c.zone === 'command' ? 2 * (c.casts || 0) : 0) + castTax(rulesFor(k), c) + payTaxes(k, c);
   // Pay for a spell by tapping lands (colored pips first) and mana rocks, like a person would.
-  const pips = (c) => (String(c.cost || '').match(/\{[WUBRG]\}/g) || []).map((t) => t[1]);
   const landColors = (l) => { const o = oracle(l); const t = l.type.toLowerCase(); return ['W', 'U', 'B', 'R', 'G'].filter((k) => (o.includes(`{${k.toLowerCase()}}`) && /add/.test(o)) || t.includes({ W: 'plains', U: 'island', B: 'swamp', R: 'mountain', G: 'forest' }[k]) || (/add (?:one mana of )?any color/.test(o))); };
+  // Pay for a spell: tap exactly the sources the solver picked (colored pips first, colorless/utility for generic),
+  // sacrifice Treasures it used, pay life for Phyrexian pips. Returns false (and taps nothing) when it can't be paid.
   function tapMana(k, c) {
-    let need = c.flat != null ? c.flat : cost(c) + (c.isCmdr && c.zone !== 'battlefield' ? 2 * (c.casts || 0) : 0) + castTax(rulesFor(k), c); if (need <= 0) return;
-    if (P(k).floating) { const use = Math.min(P(k).floating, need); P(k).floating -= use; need -= use; if (need <= 0) return; }
-    const avail = bf(k).filter((x) => !x.tapped && ((isLand(x) && tapsForMana(x)) || (isRock(x) && !rocksDead(k))));
-    const want = pips(c);
-    const tap = (x) => { if (need <= 0 || x.tapped) return; toggleTap(x); need -= isLand(x) ? landMana(x) : rockMana(x); };
-    for (const col of want) { const l = avail.find((x) => !x.tapped && isLand(x) && landColors(x).includes(col)); if (l) tap(l); }
-    avail.filter((x) => isRock(x) && rockMana(x) >= 2).forEach(tap);
-    avail.filter((x) => isLand(x) && landColors(x).length === 0).forEach(tap); // colorless/utility lands first
-    avail.filter((x) => isLand(x)).forEach(tap);
-    avail.filter((x) => isRock(x)).forEach(tap);
+    // taxes like Rhystic Study are paid when they trigger, not up front; the plan already kept mana aside for them
+    const extra = c.flat != null ? c.flat : extraFor(k, c) - payTaxes(k, c);
+    const costStr = c.flat != null ? '' : (c.cost || '');
+    const pc = parseCost(costStr); if (!pc.pips.length && !pc.generic && !extra) return true;
+    const r = solve(pc, units(k), { extraGeneric: extra, floating: P(k).floating || 0, life: P(k).life });
+    if (!r) { S.manaSkips = (S.manaSkips || 0) + 1; log(`${P(k).name} holds ${c.name || 'that'}: not the right mana for it`); return false; }
+    if (c.id) S.paidFor = c.id;
+    if (r.floatingUsed) P(k).floating -= r.floatingUsed;
+    const tapped = new Set();
+    for (const u of r.used) { const src = u.src; if (tapped.has(src.id)) continue; tapped.add(src.id); if (u.sac) { log(`${P(k).name} sacrifices ${src.name} for mana`); moveCard(src.id, src.owner, 'graveyard'); } else toggleTap(src); }
+    if (r.life) { changeLife(k, -r.life); log(`${P(k).name} pays ${r.life} life (Phyrexian mana)`); }
+    return true;
   }
   const blockersOf = (k, atk) => creatures(k).filter((b) => Rules.canBlock(b, atk));
   const biggestThreat = (i) => opponents(i).flatMap(({ k }) => creatures(k)).sort((a, b) => value(b) - value(a))[0];
@@ -83,17 +94,20 @@ export function makeBot(api) {
   function plan(i, mana, reserve = 0) {
     const p = P(i); const rules = rulesFor(i); const ctx = { castsThisTurn: castsThisTurn(i) + 0, lands: bf(i).filter(isLand).length };
     const picks = []; let left = mana - reserve;
+    let pool = units(i); let floating = P(i).floating || 0;
+    if (reserve > 0) pool = pool.slice().sort((a, b) => b.colors.length - a.colors.length).slice(0, Math.max(0, pool.length - reserve)); // hold the least useful sources back
     const legal = (c) => !castBlock(rules, c, { ...ctx, castsThisTurn: ctx.castsThisTurn + picks.length });
     const reactive = (c) => /Instant/.test(c.type) && /counter target|return target spell|regenerate|prevent all|until end of turn$|this turn\.?$/.test(oracle(c)) && !/draw|destroy|exile|damage/.test(oracle(c));
-    const hand = p.zones.hand.map((id) => S.cards[id]).filter((c) => !isLand(c) && effCost(i, c) <= mana - reserve && legal(c) && !reactive(c));
+    const affordable = (c) => !!payPlan(i, c, pool, floating);
+    const hand = p.zones.hand.map((id) => S.cards[id]).filter((c) => !isLand(c) && affordable(c) && legal(c) && !reactive(c));
     const limit = rules.spellLimit ? Math.max(0, rules.spellLimit.n - ctx.castsThisTurn) : Infinity;
-    const take = (c) => { if (c && effCost(i, c) <= left && !picks.includes(c) && legal(c) && picks.length < limit) { picks.push(c); left -= effCost(i, c); } };
+    const take = (c) => { if (!c || picks.includes(c) || !legal(c) || picks.length >= limit) return; const r = payPlan(i, c, pool, floating); if (!r) return; picks.push(c); left -= effCost(i, c); pool = pool.filter((u) => !r.used.includes(u)); floating -= r.floatingUsed; };
     const round = S.turn.number;
     const threat = biggestThreat(i);
     if (threat && value(threat) >= 7) { take(hand.filter((c) => isCreatureKill(c) || (burn(c) && burn(c).creature && burn(c).n >= toughnessOf(threat))).sort((a, b) => cost(a) - cost(b))[0]); }
     if (round <= 4) { take(hand.filter(isRamp).sort((a, b) => cost(a) - cost(b))[0]); take(hand.filter(isRock).sort((a, b) => cost(a) - cost(b))[0]); }
     const cmdr = p.zones.command.map((id) => S.cards[id]).find((c) => c.isCmdr);
-    if (cmdr && effCost(i, cmdr) <= left && round >= 2 && legal(cmdr) && picks.length < limit) picks.push(cmdr), left -= effCost(i, cmdr);
+    if (cmdr && round >= 2) take(cmdr);
     if (p.zones.hand.length <= 3) take(hand.filter(isDraw).sort((a, b) => isDraw(b) - isDraw(a))[0]);
     const myPower = creatures(i).reduce((s, c) => s + powerOf(c), 0); const theirPower = Math.max(0, ...opponents(i).map(({ k }) => creatures(k).reduce((s, c) => s + powerOf(c), 0)));
     if (theirPower >= myPower + 8 && creatures(i).length <= 2) take(hand.filter(isWipe)[0]);
@@ -198,7 +212,7 @@ export function makeBot(api) {
       const picks = plan(i, mana, reserve);
       for (const c of picks) {
         if (!S.cards[c.id] || (c.zone !== 'hand' && c.zone !== 'command')) continue;
-        S.botStep = 'cast ' + c.name; tapMana(i, c); const ok = await cast(c); if (!ok) { await d(500); continue; }
+        S.botStep = 'cast ' + c.name; if (!tapMana(i, c)) { await d(200); continue; } const ok = await cast(c); if (!ok) { await d(500); continue; }
         await d(900);
       }
       S.botStep = 'attach'; await attach(i); S.botStep = 'crew'; await crew(i);
@@ -221,7 +235,7 @@ export function makeBot(api) {
       }
       // second main: anything affordable we held back (cheap creatures after combat)
       S.botStep = 'main2'; const late = plan(i, manaOf(i)).filter((c) => isCreature(c) && S.cards[c.id] && c.zone === 'hand');
-      for (const c of late.slice(0, 2)) { tapMana(i, c); await cast(c); await d(600); }
+      for (const c of late.slice(0, 2)) { if (!tapMana(i, c)) continue; await cast(c); await d(600); }
       S.botStep = 'activate2'; await activate(i, 'main2'); S.botStep = 'loyalty'; await loyalty(i); await d(400); S.botStep = 'end';
       P(i).floating = 0;
       if (!rulesFor(i).noMaxHand && p.zones.hand.length > 7) { const extra = p.zones.hand.map((id) => S.cards[id]).sort((a, b) => value(a) - value(b)).slice(0, p.zones.hand.length - 7); extra.forEach((c) => moveCard(c.id, i, 'graveyard')); log(`${p.name} discards down to seven: ${extra.map((c) => c.name).join(', ')}`); await d(400); }

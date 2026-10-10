@@ -43,7 +43,7 @@
     <aside class="side" id="side" aria-label="Game log and card preview">
       <div class="side-tabs"><button type="button" class="tab on" data-tab="log">Game log</button><button type="button" class="tab" data-tab="chat">Chat</button><div id="roomBar"></div></div>
       <div class="side-body" id="sideLog"></div>
-      <div class="side-body" id="sideChat" hidden><p class="side-empty">Table chat is coming next. For now, talk in your pod's Discord.</p></div>
+      <div class="side-body chat" id="sideChat" hidden><div class="chatlist" id="chatList"></div><form class="chatform" id="chatForm" autocomplete="off"><input id="chatInput" maxlength="300" placeholder="Say something to the table…" aria-label="Chat message"><button type="submit" class="btn sm" id="chatSend">Send</button></form></div>
       <div class="side-card" id="sideCard"><div class="side-empty">Point at a card to see it here.</div></div>
       <footer class="fan">EDH Club is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC. Card images and data from <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a>.</footer>
     </aside>

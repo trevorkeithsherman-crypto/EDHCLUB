@@ -38,13 +38,13 @@ with sync_playwright() as p:
     check('Thalia: creature spells are not taxed, both 1-drops get cast', casts == 2, f"{casts} {logs(pg)[-5:]}")
 
     # ---- Kismet: bot permanents enter tapped ----
-    fresh(pg); lands(pg, 1, 3)
+    fresh(pg); lands(pg, 1, 3, 'Forest')
     put(pg, 0, 'Kismet', 'Enchantment', '{3}{W}', '', 'Permanents your opponents control enter tapped.')
     put(pg, 1, 'Grizzly Bears', 'Creature — Bear', '{1}{G}', '2/2', '', 'hand'); put(pg, 1, 'Mountain', 'Basic Land — Mountain', '', '', '', 'hand')
     bot_turn(pg); st = state(pg)
     bears = card(pg, 1, 'Grizzly Bears'); newland = [c for c in st['cards'].values() if c['owner'] == 1 and c['name'] == 'Mountain' and c['zone'] == 'battlefield']
     check('Kismet: the Bears entered tapped and it was logged', bears and bears['zone'] == 'battlefield' and bears['tapped'] and any('enters tapped (Kismet)' in t for t in logs(pg)), str(logs(pg)[-6:]))
-    check('Kismet: the land played also came in tapped', len(newland) == 4 and sum(1 for l in newland if l['tapped']) >= 1)
+    check('Kismet: the land played also came in tapped', len(newland) == 1 and newland[0]['tapped'])
     # my own Kismet-type card does nothing to me; a human gets a reminder instead
     fresh(pg); pg.evaluate("__edhMut(st=>{ st.turn.active=0; st.turn.phase=1; })")
     put(pg, 1, 'Frozen Aether', 'Enchantment', '{3}{U}', '', 'Artifacts, creatures, and lands your opponents control enter tapped.')
@@ -92,7 +92,7 @@ with sync_playwright() as p:
     check("Ensnaring Bridge: with one card in hand only the 1-power creature attacks", all('Goblin Piker' in t for t in atks) and len(atks) <= 1, str(atks))
 
     # ---- Rhystic Study (mine): bot pays {1} when it can; Mystic Remora {4} it declines and I draw ----
-    fresh(pg); lands(pg, 1, 3)
+    fresh(pg); lands(pg, 1, 3, 'Forest')
     put(pg, 0, 'Rhystic Study', 'Enchantment', '{2}{U}', '', 'Whenever an opponent casts a spell, you may draw a card unless that player pays {1}.')
     for k in range(3): put(pg, 0, 'Island', 'Basic Land — Island', '', '', '', 'library')
     put(pg, 1, 'Grizzly Bears', 'Creature — Bear', '{1}{G}', '2/2', '', 'hand')
@@ -127,7 +127,7 @@ with sync_playwright() as p:
     check('Esper Sentinel: triggers once (first noncreature spell), bot pays {1}', len(paid) == 1 and 'pays {1}' in paid[0], str(paid))
 
     # ---- Torpor Orb: ETBs don't happen ----
-    fresh(pg); lands(pg, 1, 3)
+    fresh(pg); lands(pg, 1, 3, 'Forest')
     put(pg, 0, 'Torpor Orb', 'Artifact', '{2}', '', "Creatures entering the battlefield don't cause abilities to trigger.")
     for k in range(3): put(pg, 1, 'Forest', 'Basic Land — Forest', '', '', '', 'library')
     put(pg, 1, 'Elvish Visionary', 'Creature — Elf Shaman', '{1}{G}', '1/1', 'When Elvish Visionary enters, draw a card.', 'hand')

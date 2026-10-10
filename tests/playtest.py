@@ -15,6 +15,7 @@ INVARIANTS = """()=>{const st=__edhState(); const probs=[]; const seen={};
     const total=Object.values(st.cards).filter(c=>c.owner===k&&!c.token).length; if (total!==100 && !p.out) probs.push(`seat ${k} owns ${total} nontoken cards (expected 100)`); }
   for (const id of st.stack) if(!st.cards[id]||st.cards[id].zone!=='stack') probs.push('stack holds a card not on the stack');
   Object.values(st.cards).forEach(c=>{ if (!seen[c.id] && c.zone!=='stack') probs.push(`${c.name} (${c.zone}) is in no zone list`); if (c.zone==='battlefield' && (c.dmg||0) >= 1 && /Creature/.test(c.type) && c.pt && (c.dmg||0) >= (parseInt(c.pt.split('/')[1])||0)+ (c.p1||0) && st.turn.phase!==2) probs.push(`${c.name} survives lethal damage ${c.dmg}`); });
+  if (st.manaViolations) probs.push(`mana: a bot tried to cast something it could not pay for (${st.manaViolations})`);
   return {probs, turn: st.turn.number, active: st.turn.active, over: !!st.over, lives: st.players.slice(0,st.seats).map(p=>p.life), outs: st.players.slice(0,st.seats).map(p=>!!p.out), logN: st.log.length ? st.log[0].t : 0, pending: !!st.pending};}"""
 report = {'games': [], 'manual': collections.Counter(), 'parsed': collections.Counter(), 'partial': collections.Counter(), 'kw_unknown': collections.Counter(), 'errors': [], 'invariants': collections.Counter(), 'logs': collections.Counter()}
 KNOWN_KW = set('flying,reach,first strike,double strike,deathtouch,trample,lifelink,indestructible,menace,vigilance,haste,defender,hexproof,flash'.split(','))

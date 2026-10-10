@@ -137,7 +137,7 @@ with sync_playwright() as p:
     run_bot_turn(pg)
 
     # ---- temp pump wears off at end of turn ----
-    fresh(pg); lands(pg, 1, 2)
+    fresh(pg); lands(pg, 1, 2, 'Forest')
     pk = put(pg, 1, 'Goblin Piker', 'Creature — Goblin Warrior', '{1}{R}', '2/1', '')
     put(pg, 1, 'Giant Growth', 'Instant', '{G}', '', 'Target creature gets +3/+3 until end of turn.', 'hand')
     pg.evaluate("__edhMut(st=>{ st.turn.active=1; st.turn.phase=1; })"); run_bot_turn(pg); st = state(pg)

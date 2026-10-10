@@ -682,7 +682,7 @@ const REQ = {
 };
 const ALL = {
   wipe: (kind) => wipeLocal(kind),
-  newGame: () => { newGame(true); render(); },
+  newGame: () => { newGame(true); render(); clearChat('New game — chat cleared.'); },
   attackEnd: (cardId) => { S.attacks = S.attacks.filter((a) => a.id !== cardId); },
 };
 function maybeBot() {
@@ -883,6 +883,32 @@ function banner(text, sub, pi) {
 
 /* ---------- Side panel ---------- */
 let sideTab = 'log';
+/* ---------- Table chat: live for the room, cleared when a new game starts (nothing is stored) ---------- */
+let chatMsgs = []; let chatUnread = 0; let chatLastSent = 0;
+function chatName() { if (SPECTATE) return `${ROOM.name} (watching)`; const me = net.active && net.seat != null ? net.seat : S.view; return P(me).name; }
+function chatSeat() { return SPECTATE ? -1 : (net.active && net.seat != null ? net.seat : S.view); }
+function addChat(m, mine = false) {
+  chatMsgs.push(m); if (chatMsgs.length > 200) chatMsgs.shift();
+  const side = $('#side'); const shown = side && getComputedStyle(side).display !== 'none';
+  const open = sideTab === 'chat' && shown;
+  if (!mine && !open) chatUnread++;
+  renderChat(); if (!mine && !open) SFX.play('tick');
+}
+function renderChat() {
+  const list = $('#chatList'); if (!list) return;
+  const fmt = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  list.innerHTML = chatMsgs.length ? chatMsgs.map((m) => `<div class="chatmsg ${m.seat === chatSeat() && m.name === chatName() ? 'mine' : ''} ${m.seat < 0 ? 'spec' : ''}"><div class="chatwho">${esc(m.name)}<time>${fmt(m.t)}</time></div><div class="chattext">${esc(m.text)}</div></div>`).join('') : `<p class="side-empty">${MODE === 'room' ? 'Nobody has said anything yet. Chat clears when a new game starts.' : 'Chat works in rooms with other people. Here it is just your notes.'}</p>`;
+  list.scrollTop = list.scrollHeight;
+  const tab = $('.side-tabs .tab[data-tab=chat]'); if (tab) tab.innerHTML = `Chat${chatUnread ? `<span class="badge">${chatUnread}</span>` : ''}`;
+  const sb = $('#sideBtn'); if (sb) { let b = sb.querySelector('.badge'); if (chatUnread) { if (!b) { b = document.createElement('span'); b.className = 'badge'; sb.appendChild(b); } b.textContent = chatUnread; } else if (b) b.remove(); }
+}
+function sendChat(text) {
+  text = String(text || '').trim().slice(0, 300); if (!text) return;
+  if (Date.now() - chatLastSent < 400) return; chatLastSent = Date.now();
+  const m = { seat: chatSeat(), name: chatName(), text, t: Date.now() };
+  addChat(m, true); if (net.active) net.send('chat', m);
+}
+function clearChat(why) { chatMsgs = []; chatUnread = 0; if (why) chatMsgs.push({ seat: -2, name: 'Table', text: why, t: Date.now() }); renderChat(); }
 function renderSide() {
   const el = $('#sideLog'); if (!el) return;
   const fmt = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -1441,6 +1467,8 @@ function respondLocal(fn, on) {
 }
 async function botCast(c) {
   const who = P(c.controller).name; const fromCmd = c.zone === 'command';
+  if (S.paidFor !== c.id && manaValue(c) + (fromCmd ? 2 * (c.casts || 0) : 0) > 0) { S.manaViolations = (S.manaViolations || 0) + 1; console.warn('bot cast without paying', c.name); }
+  S.paidFor = null;
   S.stats.casts[c.controller] = (S.stats.casts[c.controller] || 0) + 1;
   log(fromCmd ? `${who} casts ${c.name} from the command zone` : `${who} casts ${c.name}`);
   moveCard(c.id, c.controller, 'stack', { anim: 'cast' });
@@ -1946,7 +1974,7 @@ function onClick(e) {
     return;
   }
   const tab = e.target.closest('.side-tabs .tab');
-  if (tab) { sideTab = tab.dataset.tab; $$('.side-tabs .tab').forEach((t) => t.classList.toggle('on', t === tab)); $('#sideLog').hidden = sideTab !== 'log'; $('#sideChat').hidden = sideTab !== 'chat'; return; }
+  if (tab) { sideTab = tab.dataset.tab; $$('.side-tabs .tab').forEach((t) => t.classList.toggle('on', t === tab)); $('#sideLog').hidden = sideTab !== 'log'; $('#sideChat').hidden = sideTab !== 'chat'; if (sideTab === 'chat') { chatUnread = 0; renderChat(); setTimeout(() => $('#chatInput')?.focus(), 30); } return; }
   const a = e.target.closest('[data-act]'); if (!a || (a.closest('#modal') && a.dataset.act === 'close')) return;
   if (performance.now() < ignoreClick && e.target.closest('.card[data-id]')) return;
   if (a.dataset.act === 'pileclick' && e.target.closest('.card[data-id]') && !/-(graveyard|exile)$/.test(a.dataset.zone || '')) return;
@@ -2101,9 +2129,11 @@ function bindUI() {
     ], r.left, r.bottom + 4, 'Settings');
   };
   $('#soundBtn').onclick = () => { S.sound = !S.sound; if (S.sound) { SFX.init(); SFX.play('chime', 'U'); } render(); };
+  $('#chatForm').onsubmit = (e) => { e.preventDefault(); const inp = $('#chatInput'); sendChat(inp.value); inp.value = ''; inp.focus(); };
+  renderChat();
   $('#importBtn').onclick = () => { if (SPECTATE) { toast('Spectators don\'t bring a deck. Join with the table code to play.'); return; } importModal(S.view); };
-  $('#sideBtn').onclick = () => { const app = $('#app'); if (innerWidth <= 1280 || isCompact()) app.classList.toggle('show-side'); else app.classList.toggle('no-side'); requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); };
-  $('#newBtn').onclick = () => { if (SPECTATE) { toast('You\'re watching this table'); return; } if (net.active && !net.isHost) { toast('Only the host can start a new game'); return; } confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { if (net.active) net.send('all', { fn: 'newGame' }); newGame(true); render(); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); }); };
+  $('#sideBtn').onclick = () => { const app = $('#app'); if (innerWidth <= 1280 || isCompact()) app.classList.toggle('show-side'); else app.classList.toggle('no-side'); if (sideTab === 'chat' && (app.classList.contains('show-side') || !app.classList.contains('no-side'))) { chatUnread = 0; renderChat(); } requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); };
+  $('#newBtn').onclick = () => { if (SPECTATE) { toast('You\'re watching this table'); return; } if (net.active && !net.isHost) { toast('Only the host can start a new game'); return; } confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { if (net.active) net.send('all', { fn: 'newGame' }); newGame(true); render(); clearChat('New game — chat cleared.'); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); }); };
   document.addEventListener('pointerdown', (e) => { if (S.sound) SFX.init(); onDown(e); });
   document.addEventListener('pointermove', onMove, { passive: false });
   document.addEventListener('pointerup', onUp);
@@ -2192,6 +2222,7 @@ async function boot() {
         S.players.forEach((p, k) => { if (k < S.seats && k !== net.seat && !net.botSeats().includes(k) && !seated.has(k)) { if (!p.empty) { p.empty = true; purgeOwner(k); } } });
         roomBar(); render();
       });
+      net.on('chat', (m) => { if (m && typeof m.text === 'string') addChat({ seat: typeof m.seat === 'number' ? m.seat : -1, name: String(m.name || 'Someone').slice(0, 40), text: String(m.text).slice(0, 300), t: Date.now() }); });
       net.on('resend', () => { net.queueSync(seatSnap, sharedSnap); });
       let lastWatch = new Set();
       const watchNote = () => { const now = new Set(net.spectators().map((p) => p.name + '|' + (p.clientId || ''))); if (!SPECTATE && net.isHost) { [...now].filter((k) => !lastWatch.has(k)).forEach((k) => log(`${k.split('|')[0]} is watching`)); [...lastWatch].filter((k) => !now.has(k)).forEach((k) => log(`${k.split('|')[0]} stopped watching`)); } lastWatch = now; };

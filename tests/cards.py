@@ -100,7 +100,7 @@ with sync_playwright() as p:
     fresh(pg); lands(pg, 1, 2); lands(pg, 1, 2, 'Forest'); real(pg, 1, 'Bloodbraid Elf', 'hand'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Bloodbraid Elf'); st.players[0].life=40; })")
     bolt = real(pg, 1, 'Lightning Bolt', 'library'); pg.evaluate(f"__edhMut(st=>{{ const l=st.players[1].zones.library; l.splice(l.indexOf('{bolt}'),1); l.unshift('{bolt}'); }})")
     bot_turn(pg); st = state(pg)
-    check('Bloodbraid Elf cascades into Lightning Bolt for free; it hits me for 3', any('casts Lightning Bolt for free (Bloodbraid Elf)' in t for t in logs(pg)) and st['players'][0]['life'] <= 37, f"{st['players'][0]['life']} {logs(pg)[-6:]}")
+    check('Bloodbraid Elf cascades into Lightning Bolt for free; it hits me for 3', any('casts Lightning Bolt for free (Bloodbraid Elf' in t for t in logs(pg)) and st['players'][0]['life'] <= 37, f"{st['players'][0]['life']} {logs(pg)[-6:]}")
 
     # ---- Act of Treason: steal, swing, give back ----
     fresh(pg); lands(pg, 1, 3); real(pg, 1, 'Act of Treason', 'hand'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Act of Treason'); st.players[0].life=40; })")

@@ -380,16 +380,64 @@ function castToStack(id, fromRect) {
   const c = S.cards[id]; if (!c) return;
   const fromCmd = c.zone === 'command'; const who = P(c.controller).name;
   if (/Land/.test(c.type) && !fromCmd) { log(`${who} played ${c.name}`); moveCard(id, c.controller, 'battlefield', { anim: 'land', fromRect }); return; }
+  if (c.zone === 'stack') { resolveTop(); return; }
   S.stats.casts[c.controller] = (S.stats.casts[c.controller] || 0) + 1;
   if (fromCmd) log(`${who} cast ${c.name} from the command zone (tax ${2 * (c.casts || 0)})`); else log(`${who} cast ${c.name}`);
   if (MODE !== 'hotseat') { const nth = noteCast(c.controller); if (net.active && !net.isHost) net.send('all', { fn: 'cast', seat: c.controller, cardId: c.id, nth, type: c.type }); else { fireEvent('opponentCasts', { caster: c.controller, card: c, nth }); fireEvent('youCast', { caster: c.controller, card: c, nth }); } }
-  if (isPerm(c)) { moveCard(id, c.controller, 'battlefield', { anim: fromCmd ? 'commander' : 'cast', fromRect, cast: fromCmd }); return; }
+  if (fromCmd) c.casts = (c.casts || 0) + 1;
+  // Other people at the table: the spell waits on the stack until they let it resolve (same window bots give).
+  if (MODE !== 'hotseat' && net.active && humanSeats().some((k) => !net.isMine(k))) { humanCast(c, fromRect); return; }
+  finishCast(c, fromRect, fromCmd);
+  if (!P(c.controller).bot && net.isMine(c.controller) && parseAbilities(c).some((a) => a.kind === 'cascade')) humanCascade(c);
+}
+function finishCast(c, fromRect, fromCmd) {
+  const id = c.id;
+  if (isPerm(c)) { moveCard(id, c.controller, 'battlefield', { anim: fromCmd ? 'commander' : 'cast', fromRect }); return; }
   // Instants and sorceries: announce, flash the card at the table, then it goes to the graveyard.
   const from = fromRect || visRect(cardEl(id)); const dest = c.isCmdr ? 'command' : 'graveyard';
   S.lastSpell = { id, t: Date.now() };
   spellFlash(c, from);
-  if (fromCmd) c.casts = (c.casts || 0) + 1;
   moveCard(id, c.owner, dest, { anim: 'none', fromRect: from, forced: true });
+}
+// A human's spell at a live table: on the stack, everyone else gets OK / Respond / Counter. While someone is
+// responding nothing resolves on its own; the caster can also click the card on the stack to resolve it by hand.
+async function humanCast(c, fromRect) {
+  const fromCmd = c.zone === 'command';
+  moveCard(c.id, c.controller, 'stack', { anim: 'cast', fromRect });
+  S.pending = { id: c.id, by: c.controller, t: Date.now(), acks: [], holds: [], state: 'open' }; render(); SFX.play('chime', firstColor(c));
+  const t0 = Date.now(); const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (;;) {
+    await wait(200); const p = S.pending; if (!p || p.id !== c.id) return;
+    if (!S.cards[c.id] || c.zone !== 'stack') { S.pending = null; donePending.add(c.id); render(); return; } // resolved or moved by hand
+    if (p.state === 'countered' || p.state === 'resolve') break;
+    const others = humanSeats().filter((h) => h !== c.controller); if (!others.length || others.every((h) => p.acks.includes(h))) break;
+    if (!p.holds.length && Date.now() - t0 > 45000) { log(`No response to ${c.name}; it resolves`); break; }
+  }
+  const countered = S.pending && S.pending.state === 'countered'; S.pending = null; donePending.add(c.id);
+  const k = S.stack.indexOf(c.id); if (k >= 0) S.stack.splice(k, 1);
+  if (countered) { log(`${c.name} was countered`); moveCard(c.id, c.owner, c.isCmdr ? 'command' : 'graveyard', { anim: 'fly', forced: true }); render(); return; }
+  finishCast(c, null, fromCmd); render();
+  if (parseAbilities(c).some((a) => a.kind === 'cascade')) humanCascade(c);
+}
+// Cascade for a human (CR 702.85): exile from the top until a nonland card with lesser mana value; offer to cast it
+// free; the rest go to the bottom in a random order.
+function cascadeDig(i, mv) {
+  const lib = P(i).zones.library; const skipped = []; let hit = null;
+  while (lib.length && !hit) { const id = lib.shift(); const c = S.cards[id]; if (c && !/Land/.test(c.type) && manaValue(c) < mv) hit = c; else skipped.push(id); }
+  shuffleArr(skipped); lib.push(...skipped);
+  return { hit, skipped };
+}
+function humanCascade(c) {
+  const i = c.controller; if (!net.isMine(i)) return;
+  const { hit, skipped } = cascadeDig(i, manaValue(c));
+  log(`${P(i).name} cascades with ${c.name}: ${skipped.length} card${skipped.length === 1 ? '' : 's'} to the bottom${hit ? `, found ${hit.name}` : ', found nothing'}`);
+  if (!hit) { toast(`Cascade: nothing with mana value under ${manaValue(c)} in the library`); render(); return; }
+  hit.zone = 'exile'; P(i).zones.exile.push(hit.id); render();
+  openModal(`<h2>Cascade: ${esc(hit.name)}</h2><p>${esc(c.name)} cascaded into <b>${esc(hit.name)}</b>${hit.type ? ` (${esc(hit.type)})` : ''}. Cast it without paying its mana cost, or put it on the bottom of your library.</p>
+  <div class="prow pend-row">${cardHTML(hit, { noid: true, flat: true, reveal: true, cls: 'pend' })}<span class="pcard"><small>${esc((hit.oracle || '').slice(0, 300))}</small></span></div>
+  <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" id="cascBottom">Put it on the bottom</button><button type="button" class="btn" id="cascCast" data-autofocus>Cast it free</button></div>`, { cls: 'narrow' });
+  $('#cascCast').onclick = () => { closeModal(); castToStack(hit.id); };
+  $('#cascBottom').onclick = () => { closeModal(); P(i).zones.exile = P(i).zones.exile.filter((x) => x !== hit.id); hit.zone = 'library'; P(i).zones.library.push(hit.id); log(`${P(i).name} puts ${hit.name} on the bottom`); render(); };
 }
 function spellFlash(c, from) {
   if (!motionMul() || !from) { SFX.play('chime', firstColor(c)); return; }
@@ -460,8 +508,8 @@ function attack(c, t) {
 const attackOf = (c) => S.attacks.find((a) => a.id === c.id);
 const needsAnswer = (a) => !a.ok && !(a.blockers && a.blockers.length);
 const isBlocked = (a) => !!(a.blockers && a.blockers.length);
-function allowAttack(a) { a.ok = true; a.blockers = []; log(`${P(a.target).name} takes the hit from ${S.cards[a.id]?.name || 'an attacker'}`); render(); }
-function allowAll(t) { S.attacks.filter((a) => a.target === t && needsAnswer(a)).forEach((a) => { a.ok = true; a.blockers = []; }); log(`${P(t).name} lets the attack through`); render(); }
+function allowAttack(a) { a.ok = true; a.blockers = []; a.hold = false; log(`${P(a.target).name} takes the hit from ${S.cards[a.id]?.name || 'an attacker'}`); render(); }
+function allowAll(t) { S.attacks.filter((a) => a.target === t && needsAnswer(a)).forEach((a) => { a.ok = true; a.blockers = []; a.hold = false; }); log(`${P(t).name} lets the attack through`); render(); }
 let blocking = null;
 function startBlocking(a) { blocking = { attackId: a.id, seat: a.target }; render(); }
 function stopBlocking() { blocking = null; render(); }
@@ -642,9 +690,18 @@ function applySeat(snap) {
   if (!drag) render();
   ensureArt(snap.cards.filter((c) => !c.token).map((c) => c.name), { quiet: true });
 }
+// Priority window sync: whoever controls the caster owns the pending spell; everyone else follows. A spell that
+// already finished here is never revived by a stale broadcast from another client.
+const donePending = new Set();
+function applyPending(inc) {
+  if (inc && donePending.has(inc.id)) inc = null;
+  if (S.pending && net.isMine(S.pending.by) && (!inc || inc.id === S.pending.id)) return; // mine: I decide
+  if (S.pending && (!inc || inc.id !== S.pending.id)) donePending.add(S.pending.id);
+  S.pending = inc;
+}
 function applyShared(sn) {
   const turnChanged = S.turn.active !== sn.turn.active || S.turn.number !== sn.turn.number;
-  S.turn = sn.turn; S.stack = sn.stack; S.attacks = sn.attacks; S.outOrder = sn.outOrder; S.stats = sn.stats; if (!net.isHost) S.pending = sn.pending || null;
+  S.turn = sn.turn; S.stack = sn.stack; S.attacks = sn.attacks; S.outOrder = sn.outOrder; S.stats = sn.stats; applyPending(sn.pending || null);
   if (turnChanged) { clearDamage(); clearPumps(); clearSick(S.turn.active); }
   botDefend();
   const was = S.over; S.over = sn.over;
@@ -961,13 +1018,13 @@ function renderPrompt() {
       const seat = incoming[0].target; const atkName = P(S.cards[incoming[0].id].controller).name;
       const rows = incoming.map((a) => { const c = S.cards[a.id];
         const kw = Rules.shownKeywords(c).map((k) => `<em class="kwb">${esc(k)}</em>`).join(''); const legal = P(a.target).zones.battlefield.map((id) => S.cards[id]).filter((b) => Rules.canBlock(b, c)).length;
-        return `<div class="prow"><span class="pcard">${esc(c.name)}${ptTag(c)} ${kw}</span>${legal ? `<button type="button" class="btn ghost sm" data-act="block" data-id="${a.id}">Block</button>` : '<small class="pstate">no legal blockers</small>'}<button type="button" class="btn sm" data-act="allow" data-id="${a.id}">Take it</button></div>`; }).join('');
+        return `<div class="prow"><span class="pcard">${esc(c.name)}${ptTag(c)} ${kw}${a.hold ? '<small class="pstate">you\u2019re responding — no damage until you Block or Take it</small>' : ''}</span>${a.hold ? '' : `<button type="button" class="btn ghost sm" data-act="respond" data-id="${a.id}" title="Hold the attack while you cast something or act by hand">Respond…</button>`}${legal ? `<button type="button" class="btn ghost sm" data-act="block" data-id="${a.id}">Block</button>` : '<small class="pstate">no legal blockers</small>'}<button type="button" class="btn sm" data-act="allow" data-id="${a.id}">Take it</button></div>`; }).join('');
       html = `<div class="phead"><b>${esc(atkName)}</b> attacks ${MODE === 'hotseat' ? esc(P(seat).name) : 'you'}<button type="button" class="btn ghost sm" data-act="allowAll" data-p="${seat}">Take all</button></div>${rows}`;
     } else if (outgoing.length) {
       cls = 'prompt multi outgoing';
       const waiting = outgoing.filter((a) => needsAnswer(a) && !P(a.target).bot);
       const ready = outgoing.length - waiting.length;
-      const names = [...new Set(waiting.map((a) => P(a.target).name))];
+      const names = [...new Set(waiting.map((a) => P(a.target).name + (a.hold ? ' (responding)' : '')))];
       const blocked = outgoing.filter(isBlocked);
       const changeable = blocked.filter((a) => mineHuman(a.target) && fromOther(a));
       html = `<div class="prow"><span class="pcard">${waiting.length ? `Waiting for <b>${esc(names.join(', '))}</b> to block or take it (${waiting.length})` : `${blocked.length ? `${blocked.length} blocked · ` : ''}Defenders have answered`}</span>${ready ? `<button type="button" class="btn sm hot" data-act="resolveCombat" data-p="${S.cards[outgoing[0].id].controller}">Resolve combat</button>` : ''}</div>${changeable.map(blockRow).join('')}`;
@@ -1243,7 +1300,7 @@ async function runEffects(src, effects, ctx = {}) {
       case 'sacSelf': { if (e.later) { src.sacAtEnd = true; done.push('sacrifice it at end of turn'); } else if (src.zone === 'battlefield') { moveCard(src.id, src.owner, 'graveyard', { anim: 'fly' }); fireEvent('youSacrifice', { card: src, seat: i }); done.push('sacrifice it'); } break; }
       case 'returnSelf': { if (src.zone === 'battlefield' && !src.token) { moveCard(src.id, src.owner, e.to, { anim: 'fly' }); done.push(`return it to ${e.to}`); } break; }
       case 'cheat': { const c = P(i).zones.hand.map((id) => S.cards[id]).filter((x) => matchesWhat(x, e.what === 'permanent' ? 'nonland permanent' : e.what)).sort((a, b) => manaValue(b) - manaValue(a))[0]; if (c) { moveCard(c.id, i, 'battlefield', { anim: 'land' }); done.push(`put ${c.name} onto the battlefield`); } break; }
-      case 'freecast': { const lib = P(i).zones.library; const mv = manaValue(src); let k = 0; let hit = null; while (k < lib.length && !hit) { const c = S.cards[lib[k]]; if (!/Land/.test(c.type) && manaValue(c) < mv) hit = c; k++; } if (hit) { moveCard(hit.id, i, isPerm(hit) ? 'battlefield' : 'graveyard', { anim: 'cast' }); log(`${P(i).name} casts ${hit.name} for free (${src.name})`); if (!isPerm(hit)) { const w = await runEffects(hit, parseEffects(hit.oracle || '')); if (w) log(`${hit.name}: ${w}`); } shuffleArr(P(i).zones.library); done.push(`cascade into ${hit.name}`); } else done.push('cascade finds nothing'); break; }
+      case 'freecast': { const { hit, skipped } = cascadeDig(i, manaValue(src)); if (hit) { hit.zone = 'exile'; P(i).zones.exile.push(hit.id); moveCard(hit.id, i, isPerm(hit) ? 'battlefield' : 'graveyard', { anim: 'cast' }); log(`${P(i).name} casts ${hit.name} for free (${src.name}; ${skipped.length} to the bottom)`); if (!isPerm(hit)) { const w = await runEffects(hit, parseEffects(hit.oracle || '')); if (w) log(`${hit.name}: ${w}`); } done.push(`cascade into ${hit.name}`); } else done.push(`cascade finds nothing (${skipped.length} to the bottom)`); break; }
       case 'copy': { const t = e.what === 'creature' && /target/.test(src.oracle || '') && !/this creature|~/.test(src.oracle || '') ? (seatCards(i, isCreature).filter((c) => c.id !== src.id).sort((a, b) => valueOf(b) - valueOf(a))[0] || src) : src; if (t && t.zone === 'battlefield') { createTokens(i, { name: t.name, cost: t.cost, type: t.type.replace(/^Legendary /, ''), pt: t.pt, colors: t.colors, kw: t.kw, oracle: t.oracle, copyOf: t.name, _art: { img: t.img, big: t.big, art: t.art, artist: t.artist } }, Math.max(1, Math.min(5, n))); done.push(`${n} copy of ${t.name}`); } break; }
       case 'peekOpp': { done.push('(reveal from an opponent\'s library — left to the table)'); break; }
       case 'scry': { // bots scry like a sensible player: bottom extra lands when flooded, bottom spells when short on lands
@@ -1461,16 +1518,19 @@ function respond(fn, id, seat, on) {
 }
 function respondLocal(fn, on) {
   const p = S.pending; if (!p) return;
-  for (const k of mySeats()) { if (net.active && !net.isHost) net.send('all', { fn, id: p.id, seat: k, on }); else respond(fn, p.id, k, on); }
+  const owner = net.isMine(p.by);
+  for (const k of mySeats()) { if (k === p.by) continue; if (net.active && !owner) net.send('all', { fn, id: p.id, seat: k, on }); else respond(fn, p.id, k, on); }
   if (fn === 'counter') { const c = S.cards[p.id]; log(`${P(mySeats()[0]).name} counters ${c ? c.name : 'the spell'}`); SFX.play('shatter'); }
-  if (net.active && !net.isHost) { const q = S.pending; if (q) { if (fn === 'ack') mySeats().forEach((k) => { if (!q.acks.includes(k)) q.acks.push(k); }); if (fn === 'hold') mySeats().forEach((k) => { on ? q.holds.push(k) : (q.holds = q.holds.filter((h) => h !== k)); }); render(); } }
+  if (fn === 'resolve' && owner) { p.state = 'resolve'; render(); return; }
+  if (net.active && !owner) { const q = S.pending; if (q) { if (fn === 'ack') mySeats().forEach((k) => { if (!q.acks.includes(k)) q.acks.push(k); }); if (fn === 'hold') mySeats().forEach((k) => { on ? q.holds.push(k) : (q.holds = q.holds.filter((h) => h !== k)); }); render(); } }
 }
 async function botCast(c) {
   const who = P(c.controller).name; const fromCmd = c.zone === 'command';
   if (S.paidFor !== c.id && manaValue(c) + (fromCmd ? 2 * (c.casts || 0) : 0) > 0) { S.manaViolations = (S.manaViolations || 0) + 1; console.warn('bot cast without paying', c.name); }
   S.paidFor = null;
   S.stats.casts[c.controller] = (S.stats.casts[c.controller] || 0) + 1;
-  log(fromCmd ? `${who} casts ${c.name} from the command zone` : `${who} casts ${c.name}`);
+  log(fromCmd ? `${who} casts ${c.name} from the command zone (tax ${2 * (c.casts || 0)})` : `${who} casts ${c.name}`);
+  if (fromCmd) c.casts = (c.casts || 0) + 1; // commander tax grows for bots too
   moveCard(c.id, c.controller, 'stack', { anim: 'cast' });
   S.pending = { id: c.id, by: c.controller, t: Date.now(), acks: [], holds: [], state: 'open' }; render(); SFX.play('chime', firstColor(c));
   const nth = noteCast(c.controller);
@@ -1482,7 +1542,7 @@ async function botCast(c) {
     const humans = humanSeats(); if (!humans.length || humans.every((h) => p.acks.includes(h))) break;
     if (!p.holds.length && Date.now() - t0 > 45000) { log(`No response to ${c.name}; it resolves`); break; }
   }
-  const countered = S.pending && S.pending.state === 'countered'; S.pending = null;
+  const countered = S.pending && S.pending.state === 'countered'; S.pending = null; donePending.add(c.id);
   if (countered) { log(`${c.name} was countered`); const top = S.stack.indexOf(c.id); if (top >= 0) S.stack.splice(top, 1); moveCard(c.id, c.owner, 'graveyard', { anim: 'fly' }); render(); return false; }
   if (S.stack[S.stack.length - 1] === c.id) resolveTop(); else if (S.cards[c.id] && c.zone === 'stack') { const k = S.stack.indexOf(c.id); if (k >= 0) S.stack.splice(k, 1); moveCard(c.id, c.controller, isPerm(c) ? 'battlefield' : 'graveyard', { anim: 'land' }); }
   render();
@@ -1492,10 +1552,13 @@ async function botCast(c) {
 }
 function pendingPromptHTML() {
   const p = S.pending; const c = S.cards[p.id]; if (!c) return '';
-  const mine = mySeats(); const waiting = humanSeats().filter((h) => !p.acks.includes(h));
+  const iCast = mySeats().includes(p.by);
+  const mine = mySeats().filter((k) => k !== p.by); const waiting = humanSeats().filter((h) => h !== p.by && !p.acks.includes(h));
   const iAcked = mine.length && mine.every((k) => p.acks.includes(k)); const iHold = mine.some((k) => p.holds.includes(k));
   const card = cardHTML(c, { noid: true, flat: true, reveal: true, cls: 'pend' });
-  const body = !mine.length ? `<span class="pstate">Waiting for ${esc(waiting.map((h) => P(h).name).join(', ') || 'players')}</span>`
+  const holders = p.holds.map((h) => P(h).name);
+  const body = iCast ? `<span class="pstate">${holders.length ? `<b>${esc(holders.join(', '))}</b> ${holders.length > 1 ? 'are' : 'is'} responding — nothing resolves until they're done` : waiting.length ? `Waiting for ${esc(waiting.map((h) => P(h).name).join(', '))} to respond…` : 'Resolving…'}</span><button type="button" class="btn ghost sm" data-act="presolve" title="Resolve it now by hand">Resolve now</button>`
+    : !mine.length ? `<span class="pstate">Waiting for ${esc(waiting.map((h) => P(h).name).join(', ') || 'players')}</span>`
     : iHold ? `<span class="pstate">You have priority. Cast your instant, then…</span><button type="button" class="btn ghost sm" data-act="pcounter">Counter it</button><button type="button" class="btn sm hot" data-act="pok">Let it resolve</button>`
     : iAcked ? `<span class="pstate">Waiting for ${esc(waiting.map((h) => P(h).name).join(', '))}…</span>`
     : `<button type="button" class="btn ghost sm" data-act="pcounter" title="Counter the spell: it goes to the graveyard">Counter it</button><button type="button" class="btn ghost sm" data-act="phold" title="Hold priority while you respond">Respond…</button><button type="button" class="btn sm hot" data-act="pok">OK</button>`;
@@ -1970,7 +2033,8 @@ function onClick(e) {
     if (act === 'cancelTarget') stopTargeting(); else if (act === 'cancelBlock') { if (a) a.blockers = []; stopBlocking(); } else if (act === 'doneBlock') { const b = S.attacks.find((x) => x.id === blocking?.attackId); if (b) finishBlock(b); }
     else if (act === 'allow' && a) allowAttack(a); else if (act === 'block' && a) startBlocking(a); else if (act === 'unblock' && a) unblock(a);
     else if (act === 'allowAll') allowAll(+pb.dataset.p); else if (act === 'resolveCombat') resolveCombat(+pb.dataset.p);
-    else if (act === 'pok') respondLocal('ack'); else if (act === 'phold') respondLocal('hold', true); else if (act === 'pcounter') respondLocal('counter');
+    else if (act === 'pok') respondLocal('ack'); else if (act === 'phold') respondLocal('hold', true); else if (act === 'pcounter') respondLocal('counter'); else if (act === 'presolve') respondLocal('resolve');
+    else if (act === 'respond' && a) { a.hold = true; log(`${P(a.target).name} is responding to ${S.cards[a.id]?.name || 'the attack'}`); render(); }
     return;
   }
   const tab = e.target.closest('.side-tabs .tab');
@@ -2212,7 +2276,7 @@ async function boot() {
       }
       net.on('seat', applySeat); net.on('shared', applyShared);
       net.on('req', ({ fn, to, args }) => { if (REQ[fn]) REQ[fn](to, ...args); });
-      net.on('all', ({ fn, kind, cardId, seat, id, on, key, paid, nth, type, n }) => { if (fn === 'cast') { if (net.isHost) { const cc = S.cards[cardId] || { name: '?', controller: seat, type: type || '' }; fireEvent('opponentCasts', { caster: seat, card: cc, nth: nth || 1 }); } return; } if (fn === 'drew') { if (net.isHost) fireEvent('opponentDraws', { drawer: seat, n: n || 1 }); return; } if (fn === 'answer') { if (asks[key]) { asks[key](paid); delete asks[key]; } return; } if (fn === 'ack' || fn === 'hold' || fn === 'counter') { if (net.isHost) respond(fn, id, seat, on); return; } if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); else if (fn === 'kick' && seat === net.seat) { toast('The host removed you from this table', 6000); net.leave(); setTimeout(() => { location.href = '/'; }, 1500); } });
+      net.on('all', ({ fn, kind, cardId, seat, id, on, key, paid, nth, type, n }) => { if (fn === 'cast') { if (net.isHost) { const cc = S.cards[cardId] || { name: '?', controller: seat, type: type || '' }; fireEvent('opponentCasts', { caster: seat, card: cc, nth: nth || 1 }); } return; } if (fn === 'drew') { if (net.isHost) fireEvent('opponentDraws', { drawer: seat, n: n || 1 }); return; } if (fn === 'answer') { if (asks[key]) { asks[key](paid); delete asks[key]; } return; } if (fn === 'ack' || fn === 'hold' || fn === 'counter') { if (S.pending && net.isMine(S.pending.by)) respond(fn, id, seat, on); return; } if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); else if (fn === 'kick' && seat === net.seat) { toast('The host removed you from this table', 6000); net.leave(); setTimeout(() => { location.href = '/'; }, 1500); } });
       net.on('peers', (peers) => {
         const host = Object.values(peers).find((pr) => pr.isHost && pr.seats);
         if (host && !net.isHost) applyLayout(host.seats, host.botList || []);
@@ -2262,4 +2326,4 @@ boot();
 // Read-only hook for the test suite.
 window.__edhState = () => S;
 window.__edhMut = (fn) => { fn(S); render(); };
-window.__edhApi = () => ({ fire: fireEvent, runEffects, parseEffects, parseAbilities, moveCard, activate: botActivate, spectate: SPECTATE, net, rulesFor, draw, Rules, perf, setPerf, liteOn, loadDeck, ensureArt, allNames, kick: () => bot && Promise.resolve(bot.takeTurn(S.turn.active)).catch((e) => { S.botError = `${e && e.message} @ ${S.botStep}`; console.error(e); passTurn(); }), botBusy: () => !!(bot && bot.busy), cached });
+window.__edhApi = () => ({ cast: castToStack, resolveCombat, fire: fireEvent, runEffects, parseEffects, parseAbilities, moveCard, activate: botActivate, spectate: SPECTATE, net, rulesFor, draw, Rules, perf, setPerf, liteOn, loadDeck, ensureArt, allNames, kick: () => bot && Promise.resolve(bot.takeTurn(S.turn.active)).catch((e) => { S.botError = `${e && e.message} @ ${S.botStep}`; console.error(e); passTurn(); }), botBusy: () => !!(bot && bot.busy), cached });

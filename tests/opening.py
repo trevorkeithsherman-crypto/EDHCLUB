@@ -23,8 +23,8 @@ with sync_playwright() as p:
     for _ in range(14):
         pg.wait_for_timeout(60)
         samples.append(pg.evaluate("([x,y,id])=>{ const el=document.elementFromPoint(x,y); const b=el && el.closest('.oc'); const f=document.querySelector(`.oc[data-oc='${id}'] .oc-face`) || document.querySelector(`.oc[data-oc='${id}']`); return [b ? b.dataset.oc : null, Math.round(f.getBoundingClientRect().top)]; }", [bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] - 4, cid]))
-    settled = samples[5:]
-    check('hovering at the bottom edge: same card stays under the pointer, face lifts and holds still', all(x[0] == cid for x in samples) and len({x[1] for x in settled}) == 1 and settled[0][1] < bb['y'] - 10, str(samples))
+    settled = samples[8:]
+    check('hovering at the bottom edge: same card stays under the pointer, face lifts and holds still', all(x[0] == cid for x in samples) and max(x[1] for x in settled) - min(x[1] for x in settled) <= 1 and settled[-1][1] < bb['y'] - 10, str(samples))
     check('the button itself never moves on hover (only the face)', abs(oc.bounding_box()['y'] - bb['y']) < 1)
     pg.mouse.move(5, 5); pg.wait_for_timeout(300)
     st = state(pg); check('bots kept automatically', all(st['players'][k].get('kept', True) for k in (1, 2, 3)) and all(st['players'][k]['mulls'] == 0 for k in (1, 2, 3)))

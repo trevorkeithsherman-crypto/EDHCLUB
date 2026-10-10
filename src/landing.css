@@ -2,7 +2,7 @@
 :root {
   --bg: #06080d; --glass: rgba(10, 13, 20, .72); --glass-2: rgba(16, 20, 30, .9); --line: rgba(255, 255, 255, .1); --line-2: rgba(255, 255, 255, .18);
   --text: #eef1f6; --muted: #98a2b6; --dim: #6b7486; --gold: #e2b659; --gold-2: #f3d48c; --blue: #4fc3ff; --red: #ff5349;
-  --f-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --f-display: 'Metamorphous', 'Palatino Linotype', Palatino, Georgia, serif;
+  --f-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --f-display: 'Gloock', 'Palatino Linotype', Palatino, Georgia, serif; --f-logo: 'Gloock', 'Palatino Linotype', Palatino, Georgia, serif; --f-logo-i: 'Instrument Serif', 'Palatino Linotype', Palatino, Georgia, serif;
   color-scheme: dark;
 }
 *, *::before, *::after { box-sizing: border-box; }
@@ -15,9 +15,13 @@ button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 [hidden] { display: none !important; }
 .top { max-width: 1120px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 18px 0; }
-.logo { display: flex; align-items: baseline; gap: 6px; text-decoration: none; color: var(--gold); }
-.logo span { font: 400 26px/1 var(--f-display); }
-.logo small { font: 700 11px var(--f-ui); letter-spacing: .24em; text-transform: uppercase; color: var(--muted); }
+.logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--gold); }
+.logo .crest { width: 40px; height: 40px; display: block; flex: none; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .6)); }
+/* Wordmark: Gloock "EDH" in gold, Instrument Serif italic "club" in the table's blue, on one baseline. */
+.wm { display: inline-flex; align-items: baseline; gap: .18em; line-height: 1; white-space: nowrap; }
+.wm b { font: 400 30px/1 var(--f-logo); letter-spacing: -.01em; background: linear-gradient(180deg, #f7e2a6 0%, var(--gold) 48%, #b8893a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.wm i { font: italic 400 30px/1 var(--f-logo-i); color: var(--blue); letter-spacing: 0; }
+.logo:hover .wm i { color: #7ad2ff; }
 #account { display: flex; align-items: center; gap: 10px; }
 #account .who { font: 500 13px var(--f-ui); color: var(--muted); }
 main { max-width: 1120px; margin: 0 auto; display: grid; gap: 28px; padding-bottom: 50px; }
@@ -138,6 +142,7 @@ h1 { font: 800 clamp(34px, 4.6vw, 58px)/1.05 var(--f-ui); letter-spacing: -.025e
 /* Phones: logo + Account stay on the top row; Home / Tables / Decks drop to a full-width segmented bar underneath. */
 @media (max-width: 640px) {
   .top { flex-wrap: wrap; row-gap: 12px; padding-top: 14px; }
+  .logo .crest { width: 34px; height: 34px; } .wm b, .wm i { font-size: 25px; }
   #account { display: contents; }
   #account .who { font-size: 0; margin-left: auto; }
   #account .who .pfp { margin-right: 0; }
@@ -173,8 +178,8 @@ h1 { font: 800 clamp(34px, 4.6vw, 58px)/1.05 var(--f-ui); letter-spacing: -.025e
 .mc-back-art::before { content: ""; position: absolute; inset: 7%; border: 2px solid rgba(226, 182, 89, .45); border-radius: 6% / 4.5%; box-shadow: inset 0 0 0 6px rgba(10, 7, 18, .9), inset 0 0 0 7px rgba(226, 182, 89, .25); }
 .mc-back-art::after { content: ""; position: absolute; width: 58%; aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(226, 182, 89, .4); box-shadow: 0 0 0 10px rgba(226, 182, 89, .06), 0 0 60px rgba(226, 182, 89, .18); }
 .mc-back-logo { position: relative; z-index: 1; display: grid; justify-items: center; color: var(--gold); text-shadow: 0 2px 12px rgba(0, 0, 0, .8); }
-.mc-back-logo span { font: 400 clamp(28px, 4vw, 46px)/1 var(--f-display); }
-.mc-back-logo small { font: 700 10px var(--f-ui); letter-spacing: .34em; text-transform: uppercase; color: var(--gold-2); margin-top: 6px; }
+.mc-back-logo span { font: 400 clamp(28px, 4vw, 46px)/1 var(--f-logo); }
+.mc-back-logo small { font: italic 400 clamp(16px, 2vw, 24px)/1 var(--f-logo-i); text-transform: lowercase; color: var(--blue); margin-top: 2px; }
 /* Front: frame */
 .mc-front { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto auto; gap: 0; padding: 4.2% 4.6% 3.4%; background: linear-gradient(160deg, var(--c1), var(--c2)); color: var(--ink); }
 .mc-front::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E"); mix-blend-mode: multiply; }

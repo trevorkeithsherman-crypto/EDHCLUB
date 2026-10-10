@@ -47,7 +47,7 @@ with sync_playwright() as p:
     pg.set_input_files('#pfpFile', SP + 'face.png'); pg.wait_for_timeout(1500); pg.evaluate("localStorage.setItem('edhclub-last-deck','d1')")
     pg.click('[data-go="signin"]'); pg.wait_for_timeout(300); pg.click('#out'); pg.wait_for_timeout(1200)
     check('sign out: nav offers Sign in / Create account', pg.locator('#account [data-go="signup"]').count() == 1 and pg.locator('#account .pfp').count() == 0)
-    check('sign out: decks panel no longer lists decks', 'Sign in to keep decks' in pg.locator('#decksBody').text_content())
+    check('sign out: back on the landing with guest CTAs', pg.locator('#ctaOut').is_visible() and pg.locator('#ctaIn').count() == 1 and not pg.locator('#ctaIn').is_visible())
     check('sign out: cached photo, last deck and name are cleared', pg.evaluate("[localStorage.getItem('edhclub-avatar'), localStorage.getItem('edhclub-last-deck'), localStorage.getItem('edhclub-name')]") == [None, None, None])
     pg.goto(BASE + '/table.html?mode=bots'); pg.wait_for_timeout(2000)
     check('sign out: bots table shows no photo and no account decks', pg.locator('.me .avatar.photo').count() == 0)

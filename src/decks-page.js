@@ -24,7 +24,7 @@ document.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; co
 async function loadMine() {
   const box = $('#mine');
   if (!online) { box.innerHTML = '<p class="muted">Deck storage needs the online service.</p>'; return; }
-  if (!user) { box.innerHTML = '<p class="muted">Sign in on the <a href="/">lobby</a> to keep decks on your account. You can still play any Top 100 deck as a guest.</p>'; $('#deckCount').textContent = ''; return; }
+  if (!user) { box.innerHTML = '<p class="muted"><a href="/home.html">Sign in</a> to keep decks on your account. You can still play any Top 100 deck as a guest.</p>'; $('#deckCount').textContent = ''; return; }
   mine = await listDecks(); defaultId = await defaultDeckId();
   $('#deckCount').textContent = ` ${mine.length}/${DECK_LIMIT}`;
   $('#newDeck').disabled = mine.length >= DECK_LIMIT; $('#importUrl').disabled = mine.length >= DECK_LIMIT;
@@ -211,7 +211,7 @@ $('#newDeck').onclick = () => editor(null); $('#importUrl').onclick = () => impo
 (async () => {
   if (online) {
     user = await currentUser();
-    if (user) { const name = await displayNameFor(user); const av = localAvatar(); $('#account').innerHTML = `<span class="who">${av ? `<img class="pfp" src="${esc(av)}" alt="">` : `<span class="pfp init">${esc(name[0] || '?')}</span>`}${esc(name)}</span><a class="btn ghost sm" href="/">Lobby</a>`; }
+    if (user) { const name = await displayNameFor(user); const av = localAvatar(); $('#account').innerHTML = `<a class="navlink" href="/home.html">Home</a><a class="navlink" href="/tables.html">Tables</a><a class="navlink on" href="/decks.html">Decks</a><span class="who">${av ? `<img class="pfp" src="${esc(av)}" alt="">` : `<span class="pfp init">${esc(name[0] || '?')}</span>`}${esc(name)}</span>`; }
   }
   showView(location.hash === '#top' || !user ? 'top' : 'mine');
   loadMine();

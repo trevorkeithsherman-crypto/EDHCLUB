@@ -3,7 +3,7 @@
   "short_name": "EDH Club",
   "description": "Free Commander games in your browser. Bring your deck, sit at the table, play with friends or bots.",
   "id": "/",
-  "start_url": "/?source=pwa",
+  "start_url": "/home.html?source=pwa",
   "scope": "/",
   "display": "fullscreen",
   "display_override": ["fullscreen", "standalone", "minimal-ui"],
@@ -19,6 +19,7 @@
   ],
   "shortcuts": [
     { "name": "Practice vs bots", "url": "/table.html?mode=bots", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Top 100 decks", "url": "/decks.html", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Open tables", "url": "/tables.html", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "My decks", "url": "/decks.html", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

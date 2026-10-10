@@ -7,18 +7,35 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', 
 function toast(text, ms = 3200) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = text; $('#toasts').appendChild(t); setTimeout(() => t.remove(), ms); }
 
 let user = null; let name = localName();
+const PAGE = document.body.dataset.page || 'landing';
+const navLinks = () => `<a class="navlink ${PAGE === 'home' ? 'on' : ''}" href="/home.html">Home</a><a class="navlink ${PAGE === 'tables' ? 'on' : ''}" href="/tables.html">Tables</a><a class="navlink" href="/decks.html">Decks</a>`;
 
 async function refreshAccount() {
   user = await currentUser();
   if (user) { name = await displayNameFor(user); setLocalName(name); await myProfile(); }
   const nav = $('#account'); const av = localAvatar();
   nav.innerHTML = user
-    ? `<span class="who">${av ? `<img class="pfp" src="${esc(av)}" alt="">` : `<span class="pfp init">${esc(name[0] || '?')}</span>`}${esc(name)}${user.is_anonymous ? ' (guest)' : ''}</span><button type="button" class="btn ghost sm" data-go="signin">Account</button>`
+    ? `${navLinks()}<span class="who">${av ? `<img class="pfp" src="${esc(av)}" alt="">` : `<span class="pfp init">${esc(name[0] || '?')}</span>`}${esc(name)}${user.is_anonymous ? ' (guest)' : ''}</span><button type="button" class="btn ghost sm" data-go="signin">Account</button>`
     : `<button type="button" class="btn ghost" data-go="signin">Sign in</button><button type="button" class="btn" data-go="signup">Create account</button>`;
-  renderClubs(); renderDecks();
+  renderClubs(); renderDecks(); renderPage();
 }
+// Page-specific chrome: the landing swaps its CTAs once you're signed in; the home page greets you.
+function renderPage() {
+  if (PAGE === 'landing') {
+    const inn = $('#ctaIn'), out = $('#ctaOut'), note = $('#ctaNote');
+    if (inn && out) { inn.hidden = !user; out.hidden = !!user; }
+    if (note) note.hidden = !!user;
+  }
+  if (PAGE === 'home') {
+    const t = $('#greetTitle'), l = $('#greetLead');
+    if (t) t.textContent = user ? `Welcome back, ${name}.` : 'Welcome to EDH Club.';
+    if (l) l.textContent = user ? 'Host a table, grab a seat at an open one, or work on your decks.' : 'Sign in to see your decks and clubs here. You can still host, join or practice as a guest.';
+  }
+}
+// After signing in from the marketing page, land on the home page; elsewhere just close the panel.
+function afterAuth() { if (PAGE === 'landing') { location.href = '/home.html'; return; } go('home'); }
 async function renderDecks() {
-  const body = $('#decksBody'); if (!online) return;
+  const body = $('#decksBody'); if (!body || !online) return;
   if (!user) { body.innerHTML = '<p class="muted">Sign in to keep decks on your account. Save them from the Decks button at any table; the last one you used is seated automatically next time.</p>'; return; }
   const decks = await listDecks(); const last = lastDeckId();
   body.innerHTML = decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · seated automatically' : ''}</small></span><span class="row">${d.id !== last ? `<button type="button" class="btn ghost sm" data-deck-use="${esc(d.id)}">Use next</button>` : ''}<button type="button" class="btn ghost sm" data-deck-del="${esc(d.id)}">Delete</button></span></li>`).join('')}</ul><p class="muted">Edit, favorite and export on the <a href="/decks.html">My decks</a> page, or load one from the Decks button at any table.</p>` : '<p class="muted">No saved decks yet. <a href="/decks.html">Create one</a>, paste a list at a table, or save one of the Top 100.</p>';
@@ -58,7 +75,7 @@ function viewSignIn(tab = 'signin') {
       busy('signup', true);
       try {
         const data = await signUpEmail(em(), pw(), n);
-        if (data.session) { await refreshAccount(); toast(`Welcome to EDH Club, ${n}`); go('home'); }
+        if (data.session) { await refreshAccount(); toast(`Welcome to EDH Club, ${n}`); afterAuth(); }
         else show('Check your email', `<p>We sent a confirmation link to <b>${esc(em())}</b>. Open it to finish creating your account, then come back and sign in.</p><div class="row"><button type="button" class="btn" data-go="signin">Sign in</button></div>`);
       } catch (e) { toast(friendlyAuthError(e), 6000); }
       busy('signup', false);
@@ -68,13 +85,13 @@ function viewSignIn(tab = 'signin') {
     $('#login').onclick = async () => {
       if (!emailOk(em())) { toast('Enter a valid email address'); return; } if (!pw()) { toast('Enter your password'); return; }
       busy('login', true);
-      try { await signInPassword(em(), pw()); await refreshAccount(); toast(`Welcome back, ${name}`); go('home'); } catch (e) { toast(friendlyAuthError(e), 6000); }
+      try { await signInPassword(em(), pw()); await refreshAccount(); toast(`Welcome back, ${name}`); afterAuth(); } catch (e) { toast(friendlyAuthError(e), 6000); }
       busy('login', false);
     };
     $('#forgot').onclick = async () => { if (!emailOk(em())) { toast('Enter your email first, then press Forgot password'); $('#em').focus(); return; } try { await resetPassword(em()); toast('Password reset email sent'); } catch (e) { toast(friendlyAuthError(e), 6000); } };
     $('#magic').onclick = async () => { if (!emailOk(em())) { toast('Enter your email first'); $('#em').focus(); return; } try { await signInEmail(em(), name); toast('Check your email for the sign-in link'); } catch (e) { toast(friendlyAuthError(e), 6000); } };
   } else {
-    $('#guest').onclick = async () => { try { await signInGuest(takeName()); await refreshAccount(); toast(`Welcome, ${name}`); go('home'); } catch (e) { toast('Guest sign-in is off. ' + friendlyAuthError(e), 6000); } };
+    $('#guest').onclick = async () => { try { await signInGuest(takeName()); await refreshAccount(); toast(`Welcome, ${name}`); afterAuth(); } catch (e) { toast('Guest sign-in is off. ' + friendlyAuthError(e), 6000); } };
   }
   const dc = $('#discord'); if (dc) dc.onclick = async () => { try { await signInDiscord(); } catch (e) { toast('Discord sign-in isn\u2019t enabled yet. ' + friendlyAuthError(e), 6000); } };
 }
@@ -99,7 +116,7 @@ function viewAccount() {
   $('#pfpUp').onclick = () => $('#pfpFile').click();
   $('#pfpFile').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 8 * 1024 * 1024) { toast('That image is over 8 MB; pick a smaller one'); return; } try { await uploadAvatar(f); await refreshAccount(); viewAccount(); toast('Profile picture updated'); } catch (err) { toast(friendlyAuthError(err), 6000); } };
   const rm = $('#pfpRm'); if (rm) rm.onclick = async () => { try { await removeAvatar(); await refreshAccount(); viewAccount(); toast('Profile picture removed'); } catch (err) { toast(friendlyAuthError(err), 6000); } };
-  $('#out').onclick = async () => { await signOut(); user = null; name = ''; await refreshAccount(); go('home'); toast('Signed out'); };
+  $('#out').onclick = async () => { await signOut(); user = null; name = ''; if (PAGE !== 'landing') { location.href = '/'; return; } await refreshAccount(); go('home'); toast('Signed out'); };
   const up = $('#upgrade'); if (up) up.onclick = async () => {
     const e = $('#em').value.trim().toLowerCase(), p = $('#pw').value;
     if (!emailOk(e)) { toast('Enter a valid email address'); return; } if (p.length < 8) { toast('Passwords need at least 8 characters'); return; }
@@ -136,7 +153,7 @@ function viewJoin(prefill = '') {
 }
 
 async function renderClubs() {
-  const body = $('#clubsBody');
+  const body = $('#clubsBody'); if (!body) return;
   if (!online) { body.innerHTML = '<p class="muted">Clubs need the online service.</p>'; return; }
   if (!user) { body.innerHTML = '<p class="muted">Sign in to create or join a club.</p><div class="row"><button type="button" class="btn ghost" data-go="signin">Sign in</button></div>'; return; }
   const clubs = await myClubs(user.id);
@@ -158,10 +175,12 @@ async function renderClubs() {
 }
 
 async function renderOpen() {
-  const body = $('#openBody');
+  const body = $('#openBody'); if (!body) return;
   if (!online) { body.innerHTML = '<p class="muted">Open tables appear here once the online service is connected.</p>'; return; }
-  const rooms = await openRooms();
-  body.innerHTML = rooms.length ? `<ul class="list">${rooms.map((r) => `<li><span><b>${esc(r.host_name || 'A planeswalker')}'s table</b> <small>· ${r.seats} seats · bracket ${r.bracket}${r.bots ? ` · ${r.bots} bot${r.bots > 1 ? 's' : ''}` : ''} · ${timeAgo(r.created_at)}</small></span><span class="row"><button type="button" class="btn ghost sm" data-watch="${esc(r.code)}">Watch</button><button type="button" class="btn sm" data-join="${esc(r.code)}">Join</button></span></li>`).join('')}</ul>` : '<p class="muted">No open tables right now. Host one and share the code.</p>';
+  const all = await openRooms(); const rooms = PAGE === 'home' ? all.slice(0, 4) : all;
+  const meta = $('#openMeta'); if (meta) meta.textContent = all.length ? `${all.length} table${all.length > 1 ? 's' : ''} · refreshes every 20 s` : '';
+  body.innerHTML = rooms.length ? `<ul class="list">${rooms.map((r) => `<li><span><b>${esc(r.host_name || 'A planeswalker')}'s table</b> <small>· ${r.seats} seats · bracket ${r.bracket}${r.bots ? ` · ${r.bots} bot${r.bots > 1 ? 's' : ''}` : ''} · ${timeAgo(r.created_at)}</small></span><span class="row"><button type="button" class="btn ghost sm" data-watch="${esc(r.code)}">Watch</button><button type="button" class="btn sm" data-join="${esc(r.code)}">Join</button></span></li>`).join('')}</ul>` : `<p class="muted">No open tables right now. <button type="button" class="link" data-go="create">Host one</button> and share the code.</p>`;
+  if (PAGE === 'home' && all.length > rooms.length) body.insertAdjacentHTML('beforeend', `<p class="muted" style="margin-top:10px"><a href="/tables.html">See all ${all.length} open tables →</a></p>`);
   body.querySelectorAll('[data-join]').forEach((b) => { b.onclick = () => { go('join'); $('#code').value = b.dataset.join; }; });
   body.querySelectorAll('[data-watch]').forEach((b) => { b.onclick = () => { const n = takeName(); location.href = `/table.html?room=${b.dataset.watch}&spectate=1&name=${encodeURIComponent(n)}`; }; });
 }
@@ -178,10 +197,12 @@ function go(where) {
 document.addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
 
 (async function boot() {
-  $('#svcNote').textContent = online ? '' : 'This build isn’t connected to the online service yet, so friends can’t join; bots work.';
+  const sn = $('#svcNote'); if (sn) sn.textContent = online ? '' : 'This build isn’t connected to the online service yet, so friends can’t join; bots work.';
   if (supa) supa.auth.onAuthStateChange(() => refreshAccount());
   await refreshAccount();
-  renderOpen();
+  renderOpen(); if (PAGE === 'tables') setInterval(renderOpen, 20000);
+  if (PAGE === 'landing' && user && new URLSearchParams(location.search).get('source') === 'pwa') { location.replace('/home.html'); return; }
+  if (PAGE === 'home' && !user && online) viewSignIn('signin');
   const q = new URLSearchParams(location.search);
   if (q.get('join')) viewJoin(q.get('join').toUpperCase());
   if (q.get('watch')) { viewJoin(q.get('watch').toUpperCase()); setTimeout(() => { const b = document.getElementById('watch'); if (b) b.focus(); }, 50); }
@@ -189,7 +210,7 @@ document.addEventListener('click', (e) => { const b = e.target.closest('[data-go
   if (!user && q.get('signup') != null) viewSignIn('signup');
 })();
 
-startHero(document.getElementById('heroShot'));
+if (document.getElementById('heroShot')) startHero(document.getElementById('heroShot'));
 
 registerSW();
 // "Install app" appears only when the browser can actually do it (or on iOS, where we explain Add to Home Screen).

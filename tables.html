@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Open tables · EDH Club</title>
+  <meta name="description" content="Public Commander tables waiting for players. Join one, watch one, or host your own.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#06080d">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EDH Club">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Metamorphous&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mana-font@1.18.0/css/mana.min.css">
+  <link rel="stylesheet" href="/src/landing.css">
+</head>
+<body data-page="tables" class="tables-page">
+  <header class="top">
+    <a class="logo" href="/"><span>EDH</span><small>Club</small></a>
+    <nav id="account"><button type="button" class="btn ghost" data-go="signin">Sign in</button></nav>
+  </header>
+
+  <main>
+    <section class="greet">
+      <div>
+        <p class="eyebrow">Open tables</p>
+        <h1>Find a game.</h1>
+        <p class="lead">Public tables waiting for players. Join one with a seat free, watch one that's already underway, or open your own and it'll show up here.</p>
+      </div>
+      <div class="cta">
+        <button type="button" class="btn big" data-go="create">Host a table</button>
+        <button type="button" class="btn big ghost" data-go="join">I have a code</button>
+      </div>
+    </section>
+
+    <section class="panel" id="lobby" hidden>
+      <div class="panel-h"><h2 id="lobbyTitle">Host a table</h2><button type="button" class="link" data-go="home">Back</button></div>
+      <div id="lobbyBody"></div>
+    </section>
+
+    <section class="panel" id="openTables">
+      <div class="panel-h"><h2>Waiting for players</h2><span class="muted small" id="openMeta"></span></div>
+      <div id="openBody"><p class="muted">Loading…</p></div>
+    </section>
+  </main>
+
+  <footer class="fan">EDH Club is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC. Card images and data from <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a>.</footer>
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="/src/lobby.js"></script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Home · EDH Club</title>
+  <meta name="description" content="Your EDH Club home: host or join a table, your decks, open tables and clubs.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#06080d">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EDH Club">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Metamorphous&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mana-font@1.18.0/css/mana.min.css">
+  <link rel="stylesheet" href="/src/landing.css">
+</head>
+<body data-page="home" class="home-page">
+  <header class="top">
+    <a class="logo" href="/"><span>EDH</span><small>Club</small></a>
+    <nav id="account"><button type="button" class="btn ghost" data-go="signin">Sign in</button></nav>
+  </header>
+
+  <main>
+    <section class="greet">
+      <div>
+        <p class="eyebrow">Home</p>
+        <h1 id="greetTitle">Welcome back.</h1>
+        <p class="lead" id="greetLead">Host a table, grab a seat at an open one, or work on your decks.</p>
+      </div>
+      <div class="cta">
+        <button type="button" class="btn big" data-go="create">Host a table</button>
+        <button type="button" class="btn big ghost" data-go="join">Join with a code</button>
+        <a class="btn big ghost" href="/table.html?mode=bots">Practice vs bots</a>
+      </div>
+    </section>
+
+    <section class="panel" id="lobby" hidden>
+      <div class="panel-h"><h2 id="lobbyTitle">Host a table</h2><button type="button" class="link" data-go="home">Back</button></div>
+      <div id="lobbyBody"></div>
+    </section>
+
+    <section class="tiles">
+      <a class="tile" href="/decks.html" id="tileDecks">
+        <i class="ms ms-artist-nib ms-2x"></i>
+        <h2>My decks</h2>
+        <p>Edit your decks with full card art, pick printings and foils, import from Moxfield or Archidekt, or add one of Archidekt's Top 100.</p>
+        <span class="go">Open my decks →</span>
+      </a>
+      <a class="tile" href="/tables.html" id="tileTables">
+        <i class="ms ms-planeswalker ms-2x"></i>
+        <h2>Open tables</h2>
+        <p>Every public table waiting for players right now. Sit down, or watch a game in progress without taking a seat.</p>
+        <span class="go">See open tables →</span>
+      </a>
+    </section>
+
+    <section class="panel" id="decks">
+      <div class="panel-h"><h2>Your decks</h2><a class="btn ghost sm" href="/decks.html">Manage decks →</a></div>
+      <div id="decksBody"><p class="muted">Loading…</p></div>
+    </section>
+
+    <section class="panel" id="openTables">
+      <div class="panel-h"><h2>Open tables</h2><a class="btn ghost sm" href="/tables.html">All tables →</a></div>
+      <div id="openBody"><p class="muted">Loading…</p></div>
+    </section>
+
+    <section class="panel" id="clubs">
+      <div class="panel-h"><h2>Clubs</h2></div>
+      <div id="clubsBody"><p class="muted">Sign in to create or join a club.</p></div>
+    </section>
+  </main>
+
+  <footer class="fan">EDH Club is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC. Card images and data from <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a>.</footer>
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="/src/lobby.js"></script>
+</body>
+</html>

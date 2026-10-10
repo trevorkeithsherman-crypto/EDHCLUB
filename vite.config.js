@@ -8,6 +8,8 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         table: resolve(__dirname, 'table.html'),
         decks: resolve(__dirname, 'decks.html'),
+        home: resolve(__dirname, 'home.html'),
+        tables: resolve(__dirname, 'tables.html'),
       },
     },
   },

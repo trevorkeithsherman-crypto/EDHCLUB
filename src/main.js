@@ -1672,7 +1672,7 @@ function renameModal(pi) {
 }
 async function deckLibraryHTML() {
   if (!online) return '';
-  const user = await currentUser(); if (!user) return '<div class="summary">Sign in on the <a href="/">lobby</a> to keep decks on your account.</div>';
+  const user = await currentUser(); if (!user) return '<div class="summary">Sign in on the <a href="/home.html">home page</a> to keep decks on your account.</div>';
   const decks = await listDecks(); const last = lastDeckId();
   return `<div class="decklib"><div class="eyebrow">Your decks <a class="link" href="/decks.html" style="margin-left:8px;font-size:12px;letter-spacing:0;text-transform:none">Manage decks</a></div>${decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · last used' : ''}</small></span><span class="row"><button type="button" class="btn sm" data-deck-load="${d.id}">Load</button><button type="button" class="btn ghost sm" data-deck-del="${d.id}">Delete</button></span></li>`).join('')}</ul>` : '<p class="muted">No saved decks yet. Paste a list below and save it, or <a href="/decks.html">pick one of the top 100</a>.</p>'}</div>`;
 }
@@ -2231,7 +2231,7 @@ async function boot() {
       toast(SPECTATE ? `Watching table ${ROOM.code}. Hands stay hidden; you can look at anything on the board.` : ROOM.host ? `Table ${ROOM.code} is open. Share the code.` : `You're seated at ${ROOM.code}`, 5000);
     } catch (e) {
       net.leave(); net.seat = null; net.ready = false;
-      document.body.insertAdjacentHTML('afterbegin', `<div class="toast" style="position:fixed;left:50%;top:40%;transform:translateX(-50%);z-index:99;pointer-events:auto;max-width:460px">${esc(e.message)}<br><a href="/">Back to the lobby</a></div>`);
+      document.body.insertAdjacentHTML('afterbegin', `<div class="toast" style="position:fixed;left:50%;top:40%;transform:translateX(-50%);z-index:99;pointer-events:auto;max-width:460px">${esc(e.message)}<br><a href="/home.html">Back home</a></div>`);
       S = null; newGame(false);
     }
   } else if (MODE === 'bots') { net.seats = ROOM.seats; net.botList = Array.from({ length: ROOM.bots }, (_, k) => ROOM.seats - 1 - k).sort(); S = null; newGame(false); S.view = 0; P(0).avatar = localAvatar(); }

@@ -527,7 +527,7 @@ function renderOpening() {
   const spread = Math.min(6, 40 / Math.max(1, n)); const mid = (n - 1) / 2;
   const cards = ids.map((id, j) => { const c = S.cards[id]; const off = j - mid; const src = faceSrc(c, true) || c.img;
     const picked = opening.pick.includes(id);
-    return `<button type="button" class="oc ${picked ? 'picked' : ''} ${owe ? 'pickable' : ''} ${opening.anim ? 'deal' : ''}" data-oc="${id}" style="--r:${(off * spread).toFixed(2)}deg;--y:${(Math.abs(off) ** 1.6 * 6).toFixed(1)}px;--d:${j * 70}ms;z-index:${j + 1}" aria-label="${esc(c.name)}${picked ? ' (to the bottom)' : ''}">${src ? `<img src="${esc(src)}" alt="" draggable="false">` : `<span class="oc-name">${esc(c.name)}<small>${esc(c.type || '')}</small></span>`}${picked ? '<em class="oc-tag">Bottom</em>' : ''}</button>`; }).join('');
+    return `<button type="button" class="oc ${picked ? 'picked' : ''} ${owe ? 'pickable' : ''} ${opening.anim ? 'deal' : ''}" data-oc="${id}" style="--r:${(off * spread).toFixed(2)}deg;--y:${(Math.abs(off) ** 1.6 * 6).toFixed(1)}px;--d:${j * 70}ms;z-index:${j + 1}" aria-label="${esc(c.name)}${picked ? ' (to the bottom)' : ''}"><span class="oc-face">${src ? `<img src="${esc(src)}" alt="" draggable="false">` : `<span class="oc-name">${esc(c.name)}<small>${esc(c.type || '')}</small></span>`}${picked ? '<em class="oc-tag">Bottom</em>' : ''}</span></button>`; }).join('');
   const sub = owe ? `Mulligan ${p.mulls}: choose <b>${owe}</b> card${owe > 1 ? 's' : ''} to put on the bottom, then keep. <span class="oc-count">${opening.pick.length}/${owe}</span>`
     : p.mulls === 1 ? 'Your first mulligan was free. Keep these 7, or mulligan again (you’ll put one on the bottom).'
     : 'Keep these 7 or take a mulligan. The first one is free in Commander.';

@@ -17,6 +17,16 @@ with sync_playwright() as p:
     check('buttons: View battlefield, Mulligan, Keep hand', pg.locator('#opening [data-op=view]').count() == 1 and pg.locator('#opening [data-op=mull]').count() == 1 and 'Keep hand' in pg.locator('#opening [data-op=keep]').text_content())
     check('cards are big (>= 150px wide on desktop)', pg.locator('#opening .oc').first.bounding_box()['width'] >= 150)
     check('no Mulligan button on the hand bar', pg.locator('.handbar [data-act=mull]').count() == 0)
+    # hover near the bottom edge: the hit area stays put, so the card lifts once and stays up (no bounce)
+    pg.wait_for_timeout(1200); oc = pg.locator('#opening .oc').nth(3); bb = oc.bounding_box(); cid = oc.get_attribute('data-oc')
+    pg.mouse.move(bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] - 4); samples = []
+    for _ in range(14):
+        pg.wait_for_timeout(60)
+        samples.append(pg.evaluate("([x,y,id])=>{ const el=document.elementFromPoint(x,y); const b=el && el.closest('.oc'); const f=document.querySelector(`.oc[data-oc='${id}'] .oc-face`) || document.querySelector(`.oc[data-oc='${id}']`); return [b ? b.dataset.oc : null, Math.round(f.getBoundingClientRect().top)]; }", [bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] - 4, cid]))
+    settled = samples[5:]
+    check('hovering at the bottom edge: same card stays under the pointer, face lifts and holds still', all(x[0] == cid for x in samples) and len({x[1] for x in settled}) == 1 and settled[0][1] < bb['y'] - 10, str(samples))
+    check('the button itself never moves on hover (only the face)', abs(oc.bounding_box()['y'] - bb['y']) < 1)
+    pg.mouse.move(5, 5); pg.wait_for_timeout(300)
     st = state(pg); check('bots kept automatically', all(st['players'][k].get('kept', True) for k in (1, 2, 3)) and all(st['players'][k]['mulls'] == 0 for k in (1, 2, 3)))
     pg.wait_for_timeout(2500); st = state(pg)
     check('bots wait while I decide (turn does not move, nothing cast)', st['turn']['number'] == 1 and all(not st['players'][k]['zones']['battlefield'] for k in (1, 2, 3)))

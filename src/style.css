@@ -618,17 +618,23 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .op-sub b { color: var(--text); }
 .oc-count { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: rgba(79, 195, 255, .14); border: 1px solid rgba(79, 195, 255, .45); color: var(--text); font-weight: 700; }
 .op-fan { --w: clamp(96px, 13.2vw, 190px); position: relative; display: flex; justify-content: center; align-items: flex-end; width: 100%; padding: clamp(24px, 5vh, 56px) 10px clamp(20px, 4vh, 40px); }
-.oc { position: relative; flex: none; width: var(--w); aspect-ratio: 63 / 88; margin: 0 calc(var(--w) * -0.16); padding: 0; border: 0; border-radius: 4.75% / 3.4%; background: #15110d; cursor: default; transform: translateY(var(--y)) rotate(var(--r)); transform-origin: 50% 120%; box-shadow: 0 18px 40px rgba(0, 0, 0, .7), 0 0 0 1px rgba(0, 0, 0, .8); transition: transform .22s cubic-bezier(.2, .8, .3, 1), box-shadow .22s, filter .22s; }
+.oc { position: relative; flex: none; width: var(--w); aspect-ratio: 63 / 88; margin: 0 calc(var(--w) * -0.16); padding: 0; border: 0; background: none; cursor: default; transform: translateY(var(--y)) rotate(var(--r)); transform-origin: 50% 120%; -webkit-tap-highlight-color: transparent; }
+/* The button is the hit area and never moves; only the face inside lifts, so a pointer near the bottom edge can't
+   make it bounce (the same fix the in-game hand uses). */
+.oc-face { position: absolute; inset: 0; display: block; border-radius: 4.75% / 3.4%; background: #15110d; box-shadow: 0 18px 40px rgba(0, 0, 0, .7), 0 0 0 1px rgba(0, 0, 0, .8); transform-origin: 50% 100%; transform: translateZ(0); transition: transform .18s ease, box-shadow .18s ease, filter .18s ease; will-change: transform; backface-visibility: hidden; }
 .oc img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; pointer-events: none; user-select: none; }
-.oc:hover, .oc.lift { transform: translateY(calc(var(--y) - 26px)) rotate(var(--r)) scale(1.06); z-index: 20 !important; box-shadow: 0 26px 50px rgba(0, 0, 0, .8), 0 0 0 2px var(--blue), 0 0 30px rgba(79, 195, 255, .45); }
+.oc:hover, .oc.lift, .oc:focus-visible { z-index: 20 !important; }
+.oc:focus-visible { outline: none; }
+.oc:hover .oc-face, .oc.lift .oc-face, .oc:focus-visible .oc-face { transform: rotate(calc(var(--r) * -1)) translateY(-30px) scale(1.07); box-shadow: 0 26px 50px rgba(0, 0, 0, .8), 0 0 0 2px var(--blue), 0 0 30px rgba(79, 195, 255, .45); }
 .oc.pickable { cursor: pointer; }
-.oc.picked { filter: brightness(.55) saturate(.6); transform: translateY(calc(var(--y) + 22px)) rotate(var(--r)) scale(.96); box-shadow: 0 0 0 2px var(--gold), 0 10px 24px rgba(0, 0, 0, .7); }
+.oc.picked .oc-face { filter: brightness(.55) saturate(.6); transform: translateY(22px) scale(.96); box-shadow: 0 0 0 2px var(--gold), 0 10px 24px rgba(0, 0, 0, .7); }
+.oc.picked:hover .oc-face { transform: translateY(14px) scale(.98); }
 .oc-tag { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); padding: 4px 10px; border-radius: 999px; background: var(--gold); color: #1a1408; font: 800 11px var(--f-ui); letter-spacing: .08em; text-transform: uppercase; font-style: normal; box-shadow: 0 4px 12px rgba(0, 0, 0, .6); filter: none; }
 .oc-name { position: absolute; inset: 8%; display: grid; align-content: start; gap: 4px; text-align: left; font: 700 13px/1.2 var(--f-ui); color: #1a1408; }
 .oc-name small { font: 500 10px var(--f-ui); color: #4a3d22; }
-.oc:has(.oc-name) { background: linear-gradient(160deg, #e8dcc0, #bfae8a); }
-.oc.deal { animation: ocDeal .5s cubic-bezier(.2, .9, .3, 1.1) both; animation-delay: var(--d); }
-@keyframes ocDeal { from { opacity: 0; transform: translateY(60vh) rotate(0deg) scale(.6); } }
+.oc:has(.oc-name) .oc-face { background: linear-gradient(160deg, #e8dcc0, #bfae8a); }
+.oc.deal .oc-face { animation: ocDeal .55s cubic-bezier(.2, .9, .3, 1.1) backwards; animation-delay: var(--d); }
+@keyframes ocDeal { from { opacity: 0; transform: translateY(60vh) scale(.6); } to { opacity: 1; transform: translateZ(0); } }
 .op-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .op-btn { min-width: 170px; padding: 13px 22px; border-radius: 999px; font: 800 14px var(--f-ui); letter-spacing: .03em; }
 .op-btn.ghost { background: rgba(0, 0, 0, .45); }
@@ -641,10 +647,10 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 @media (max-width: 640px) {
   .op-fan { --w: min(20.5vw, 130px); flex-wrap: wrap; gap: 8px 5px; padding: 16px 0 12px; }
   .oc { margin: 0; transform: none; }
-  .oc:hover, .oc.lift { transform: translateY(-8px) scale(1.04); }
-  .oc.picked { transform: translateY(8px) scale(.96); }
+  .oc:hover .oc-face, .oc.lift .oc-face { transform: translateY(-8px) scale(1.04); }
+  .oc.picked .oc-face { transform: translateY(8px) scale(.96); }
   .op-btn { min-width: 0; flex: 1 1 140px; padding: 12px 14px; }
 }
 @media (max-height: 560px) and (min-width: 641px) { .op-fan { --w: min(13vw, 36vh); padding: 10px; } .op-sub { display: none; } }
-@media (prefers-reduced-motion: reduce) { .opening, .oc.deal, .opening-back { animation: none; } }
-.lite .opening { backdrop-filter: none; } .lite .oc.deal { animation: none; }
+@media (prefers-reduced-motion: reduce) { .opening, .oc.deal .oc-face, .opening-back { animation: none; } .oc-face { transition: none; } }
+.lite .opening { backdrop-filter: none; } .lite .oc.deal .oc-face { animation: none; } .lite .oc-face { will-change: auto; }

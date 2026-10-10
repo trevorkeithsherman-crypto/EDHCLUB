@@ -1,5 +1,6 @@
 import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest, myProfile, uploadAvatar, removeAvatar, localAvatar } from './supa.js';
 import { startHero } from './hero.js';
+import { fetchCards, cached } from './scryfall.js';
 import { registerSW, install, onInstallable, isIOS } from './pwa.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -212,6 +213,20 @@ document.addEventListener('click', (e) => { const b = e.target.closest('[data-go
 })();
 
 if (document.getElementById('heroShot')) startHero(document.getElementById('heroShot'));
+
+// Feature cards: real art on each face, and a flip the moment a card scrolls into view (staggered by --i).
+(async function featureCards() {
+  const cards = [...document.querySelectorAll('.mcard')]; if (!cards.length) return;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const flip = (el) => { el.classList.add('flipped'); };
+  if ('IntersectionObserver' in window && !reduce) {
+    const io = new IntersectionObserver((es) => { es.forEach((e) => { if (e.isIntersecting) { flip(e.target); io.unobserve(e.target); } }); }, { threshold: 0.35, rootMargin: '0px 0px -8% 0px' });
+    cards.forEach((c) => io.observe(c));
+  } else cards.forEach(flip);
+  const names = cards.map((c) => c.dataset.art).filter(Boolean);
+  try { await fetchCards(names); } catch { /* placeholders stay */ }
+  cards.forEach((c) => { const e = cached(c.dataset.art); const art = c.querySelector('.mc-art'); if (e && e.art) { art.style.backgroundImage = `url("${e.art}")`; const who = c.querySelector('.mc-artist'); if (who && e.artist) who.textContent = `${e.artist} (${c.dataset.art})`; } else art.classList.add('ph'); });
+})();
 
 registerSW();
 // "Install app" appears only when the browser can actually do it (or on iOS, where we explain Add to Home Screen).

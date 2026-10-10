@@ -158,13 +158,43 @@ h1 { font: 800 clamp(34px, 4.6vw, 58px)/1.05 var(--f-ui); letter-spacing: -.025e
 .steps .num { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(180deg, #2f8fe0, #1a5fb4); color: #fff; font: 800 15px var(--f-ui); box-shadow: 0 0 18px rgba(79, 195, 255, .4); margin-bottom: 12px; }
 .steps h3 { font: 700 18px var(--f-ui); margin: 0 0 6px; letter-spacing: -.01em; }
 .steps p { margin: 0; color: var(--muted); font-size: 14px; }
-.feat { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
-.feat article { background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--line); border-radius: 14px; padding: 22px; transition: border-color .15s, transform .15s; }
-.feat article:hover { border-color: var(--line-2); transform: translateY(-2px); }
-.feat .ms { color: var(--blue); display: block; margin-bottom: 10px; }
-.feat .pipset { display: flex; gap: 3px; font-size: 20px; margin-bottom: 12px; }
-.feat h3 { font: 700 17px var(--f-ui); margin: 0 0 6px; letter-spacing: -.01em; }
-.feat p { margin: 0; color: var(--muted); font-size: 14px; }
+/* Feature cards: each feature is a card in EDH Club's own frame. They start face-down and flip as they scroll into view. */
+.feat { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px 18px; perspective: 1600px; }
+.mcard { --c1: #2c3a52; --c2: #121a2b; --ink: #11161f; position: relative; aspect-ratio: 63 / 88; min-height: 0; perspective: 1400px; font-family: var(--f-ui); }
+.mcard.c-w { --c1: #efe3bf; --c2: #c9b88b; } .mcard.c-u { --c1: #9fcbec; --c2: #3d79b4; } .mcard.c-b { --c1: #5a5668; --c2: #262330; } .mcard.c-r { --c1: #f0a37c; --c2: #b8452e; } .mcard.c-g { --c1: #a6d19c; --c2: #3e7c4b; } .mcard.c-c { --c1: #b9c3cc; --c2: #6f7d8c; }
+.mc-inner { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateY(180deg); transition: transform .9s cubic-bezier(.3, .7, .25, 1); transition-delay: calc(var(--i, 0) * 90ms); will-change: transform; }
+.mcard.flipped .mc-inner { transform: rotateY(0deg); }
+.mcard.flipped:hover .mc-inner { transition-delay: 0s; transform: rotateY(0deg) translateY(-6px) rotateX(2deg); }
+.mc-face { position: absolute; inset: 0; border-radius: 4.75% / 3.4%; backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden; box-shadow: 0 18px 40px rgba(0, 0, 0, .65), 0 0 0 1px rgba(0, 0, 0, .7); }
+/* Back: EDH Club's own card back */
+.mc-back { transform: rotateY(180deg); background: radial-gradient(ellipse at 50% 40%, #2a1e3f 0%, #120c1e 60%, #0a0712 100%); border: 10px solid #0b0812; }
+.mc-back-art { position: absolute; inset: 0; display: grid; place-items: center; background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(226, 182, 89, .07) 0 6deg, transparent 6deg 12deg), radial-gradient(circle at 50% 50%, rgba(226, 182, 89, .18), transparent 55%); }
+.mc-back-art::before { content: ""; position: absolute; inset: 7%; border: 2px solid rgba(226, 182, 89, .45); border-radius: 6% / 4.5%; box-shadow: inset 0 0 0 6px rgba(10, 7, 18, .9), inset 0 0 0 7px rgba(226, 182, 89, .25); }
+.mc-back-art::after { content: ""; position: absolute; width: 58%; aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(226, 182, 89, .4); box-shadow: 0 0 0 10px rgba(226, 182, 89, .06), 0 0 60px rgba(226, 182, 89, .18); }
+.mc-back-logo { position: relative; z-index: 1; display: grid; justify-items: center; color: var(--gold); text-shadow: 0 2px 12px rgba(0, 0, 0, .8); }
+.mc-back-logo span { font: 400 clamp(28px, 4vw, 46px)/1 var(--f-display); }
+.mc-back-logo small { font: 700 10px var(--f-ui); letter-spacing: .34em; text-transform: uppercase; color: var(--gold-2); margin-top: 6px; }
+/* Front: frame */
+.mc-front { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto auto; gap: 0; padding: 4.2% 4.6% 3.4%; background: linear-gradient(160deg, var(--c1), var(--c2)); color: var(--ink); }
+.mc-front::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E"); mix-blend-mode: multiply; }
+.mc-name, .mc-type { display: flex; justify-content: space-between; align-items: center; gap: 6px; background: linear-gradient(180deg, rgba(255, 255, 255, .78), rgba(255, 255, 255, .6)); border: 1px solid rgba(0, 0, 0, .35); border-radius: 6px / 10px; padding: 5px 9px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 1px 2px rgba(0, 0, 0, .35); position: relative; z-index: 1; }
+.mc-name h3 { margin: 0; font: 700 clamp(12px, 1.05vw, 14px)/1.15 var(--f-ui); letter-spacing: -.01em; color: var(--ink); }
+.mc-cost { display: flex; gap: 2px; font-size: 13px; flex: none; }
+.mc-art { margin: 0 2px; min-height: 0; border: 2px solid rgba(0, 0, 0, .6); border-top: 0; border-bottom: 0; background: #1a2030 center / cover no-repeat; position: relative; }
+.mc-art::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 30px rgba(0, 0, 0, .35); }
+.mc-art.ph { background: radial-gradient(ellipse at 40% 30%, var(--c1), var(--c2) 80%); }
+.mc-type { margin-top: -1px; font: 600 clamp(10px, .85vw, 12px) var(--f-ui); }
+.mc-set { color: var(--ink); font-size: 14px; opacity: .8; }
+.mc-text { margin: 4px 2px 0; background: linear-gradient(180deg, rgba(255, 252, 245, .92), rgba(246, 240, 228, .9)); border: 1px solid rgba(0, 0, 0, .4); border-radius: 3px; padding: 7px 9px 6px; min-height: 0; overflow: hidden; display: grid; align-content: start; gap: 5px; position: relative; z-index: 1; }
+.mc-text p { margin: 0; font: 500 clamp(10.5px, .82vw, 12.5px)/1.32 var(--f-ui); color: var(--ink); }
+.mc-text .mc-flavor { font-style: italic; color: #4a4134; border-top: 1px solid rgba(0, 0, 0, .12); padding-top: 4px; font-size: .92em; }
+.mc-pt { position: absolute; right: 5.5%; bottom: 3.2%; z-index: 2; background: linear-gradient(180deg, rgba(255, 255, 255, .85), rgba(255, 255, 255, .65)); border: 1px solid rgba(0, 0, 0, .45); border-radius: 6px; padding: 2px 10px; font: 800 13px var(--f-ui); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+.mc-credit { font: 500 8.5px var(--f-ui); color: rgba(255, 255, 255, .8); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); padding: 4px 2px 0; position: relative; z-index: 1; }
+.mcard:has(.mc-pt) .mc-credit { padding-right: 70px; }
+.mc-front .ms { color: var(--ink); }
+@media (max-width: 560px) { .feat { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; } .mc-text p { font-size: 9.5px; line-height: 1.28; } .mc-text .mc-flavor { display: none; } .mc-name h3 { font-size: 11px; } .mc-credit { font-size: 7.5px; } .mcard { aspect-ratio: 63 / 92; } }
+@media (prefers-reduced-motion: reduce) { .mc-inner { transition: none; transform: rotateY(0deg); } }
+
 .band { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .band div { background: var(--glass-2); padding: 18px 20px; display: grid; gap: 2px; }
 .band b { font: 800 22px var(--f-ui); letter-spacing: -.02em; color: var(--gold-2); }

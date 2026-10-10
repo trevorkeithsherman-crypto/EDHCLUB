@@ -211,7 +211,7 @@ $('#newDeck').onclick = () => editor(null); $('#importUrl').onclick = () => impo
 (async () => {
   if (online) {
     user = await currentUser();
-    if (user) { const name = await displayNameFor(user); const av = localAvatar(); $('#account').innerHTML = `<a class="navlink" href="/home.html">Home</a><a class="navlink" href="/tables.html">Tables</a><a class="navlink on" href="/decks.html">Decks</a><span class="who">${av ? `<img class="pfp" src="${esc(av)}" alt="">` : `<span class="pfp init">${esc(name[0] || '?')}</span>`}${esc(name)}</span>`; }
+    if (user) { const name = await displayNameFor(user); const av = localAvatar(); $('#account').innerHTML = `<a class="navlink" href="/home.html">Home</a><a class="navlink" href="/tables.html">Tables</a><a class="navlink on" href="/decks.html">Decks</a><span class="who">${av ? `<img class="pfp" src="${esc(av)}" alt="">` : `<span class="pfp init">${esc(name[0] || '?')}</span>`}${esc(name)}</span><a class="btn ghost sm" href="/home.html?account=1">Account</a>`; }
   }
   showView(location.hash === '#top' || !user ? 'top' : 'mine');
   loadMine();

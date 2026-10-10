@@ -208,6 +208,7 @@ document.addEventListener('click', (e) => { const b = e.target.closest('[data-go
   if (q.get('watch')) { viewJoin(q.get('watch').toUpperCase()); setTimeout(() => { const b = document.getElementById('watch'); if (b) b.focus(); }, 50); }
   if (q.get('reset')) { setTimeout(async () => { await refreshAccount(); if (user) { viewAccount(); toast('Set your new password below'); } }, 800); }
   if (!user && q.get('signup') != null) viewSignIn('signup');
+  if (user && q.get('account') != null) viewAccount();
 })();
 
 if (document.getElementById('heroShot')) startHero(document.getElementById('heroShot'));

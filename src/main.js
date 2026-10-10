@@ -161,7 +161,8 @@ function purgeOwner(i) {
 function loadDeck(i, text, cmdName) {
   const p = P(i); const d = parseDeck(text, cmdName);
   purgeOwner(i);
-  Object.assign(p, { deckText: text, life: 40, poison: 0, cmdDmg: {}, out: false, outAt: 0, mulls: 0, zones: emptyZones() });
+  Object.assign(p, { deckText: text, life: 40, poison: 0, cmdDmg: {}, out: false, outAt: 0, mulls: 0, kept: !!p.bot, zones: emptyZones() });
+  if (opening && opening.seat === i) opening = null;
   d.cmd.forEach((n) => { const pr = d.cmdPrints?.[n] || {}; const c = makeCard({ ...lookup(n, pr.set, pr.num), name: n, set: pr.set || '', num: pr.num || '', foil: !!pr.foil, sfid: pr.sfid || '' }, i); c.isCmdr = true; c.zone = 'command'; p.zones.command.push(c.id); });
   d.main.forEach((e) => { const def = { ...lookup(e.name, e.set, e.num), name: e.name, set: e.set || '', num: e.num || '', foil: !!e.foil, sfid: e.sfid || '' }; for (let k = 0; k < e.n; k++) { const c = makeCard(def, i); p.zones.library.push(c.id); } });
   shuffleArr(p.zones.library);
@@ -477,12 +478,73 @@ function shuffleLib(pi, quiet) { shuffleArr(P(pi).zones.library); SFX.play('shuf
 // moved on, the game has started and the button goes away (every mode).
 const gameStarted = () => S.turn.number > 1 || S.attacks.length > 0 || Object.values(S.stats.casts || {}).some(Boolean) || S.players.some((q, k) => k < S.seats && q.zones && q.zones.battlefield.length > 0);
 function mulligan(pi) {
-  if (gameStarted()) { toast('The game has started; mulligans are for the opening hand'); return; }
+  if (gameStarted() || P(pi).kept !== false) { toast('The game has started; mulligans are for the opening hand'); return; }
   const p = P(pi); p.zones.hand.forEach((id) => { S.cards[id].zone = 'library'; p.zones.library.push(id); }); p.zones.hand = [];
-  shuffleArr(p.zones.library); p.mulls++; render(); SFX.play('shuffle');
-  setTimeout(() => draw(pi, 7), motionMul() ? 200 : 0);
-  toast(p.mulls === 1 ? 'Free mulligan. You draw 7.' : `Mulligan ${p.mulls}: put ${p.mulls - 1} card${p.mulls > 2 ? 's' : ''} on the bottom.`);
-  log(`${p.name} took mulligan ${p.mulls}`);
+  shuffleArr(p.zones.library); p.mulls++;
+  // Opening hands are dealt straight from the library (no draw triggers): 7 cards, London mulligan bottoms on keep.
+  const hand = p.zones.library.splice(0, 7); hand.forEach((id) => { S.cards[id].zone = 'hand'; }); p.zones.hand = hand;
+  SFX.play('shuffle'); if (opening) { opening.pick = []; opening.anim = true; }
+  log(`${p.name} took mulligan ${p.mulls}${p.mulls === 1 ? ' (free)' : ''}`);
+  render();
+}
+/* ---------- Opening hand: big cards, View battlefield / Mulligan / Keep. Humans only; bots keep what they get. ----------
+   Commander rules: the first mulligan is free, then London mulligan (draw 7, put one card on the bottom per extra
+   mulligan when you keep). Only the player's own hand is ever shown here. */
+let opening = null; // { seat, hidden, pick: [ids to bottom], anim }
+const bottomsOwed = (p) => Math.max(0, (p.mulls || 0) - 1);
+function openingSeat() {
+  if (SPECTATE || S.over || gameStarted() || window.__edhSkipOpening) return null;
+  const k = MODE === 'room' ? net.seat : S.view;
+  if (k == null || k >= S.seats) return null;
+  const p = P(k); if (!p || p.bot || p.out || p.empty || p.kept !== false || !net.isMine(k) || !p.zones.hand.length) return null;
+  return k;
+}
+function keepHand(k) {
+  const p = P(k); const owe = bottomsOwed(p); const pick = (opening && opening.pick) || [];
+  if (owe && pick.length !== owe) { toast(`Choose ${owe} card${owe > 1 ? 's' : ''} to put on the bottom`); return; }
+  if (owe) { pick.forEach((id) => { p.zones.hand = p.zones.hand.filter((x) => x !== id); S.cards[id].zone = 'library'; p.zones.library.push(id); }); }
+  p.kept = true; opening = null;
+  log(`${p.name} keeps ${p.zones.hand.length}${owe ? ` (put ${owe} on the bottom)` : ''}${p.mulls ? ` after ${p.mulls} mulligan${p.mulls > 1 ? 's' : ''}` : ''}`);
+  SFX.play('chime', 'U'); render();
+}
+function renderOpening() {
+  let ov = $('#opening'); const k = openingSeat();
+  if (k == null) { if (ov) ov.remove(); $('#openingBack')?.remove(); opening = null; return; }
+  if (!opening || opening.seat !== k) opening = { seat: k, hidden: false, pick: [], anim: true };
+  const p = P(k); const owe = bottomsOwed(p);
+  opening.pick = opening.pick.filter((id) => p.zones.hand.includes(id));
+  if (opening.hidden) {
+    if (ov) ov.remove();
+    if (!$('#openingBack')) { const b = document.createElement('button'); b.type = 'button'; b.id = 'openingBack'; b.className = 'opening-back'; b.textContent = 'Back to your opening hand'; b.onclick = () => { opening.hidden = false; opening.anim = false; render(); }; document.body.appendChild(b); }
+    return;
+  }
+  $('#openingBack')?.remove();
+  const ids = p.zones.hand.slice(); const n = ids.length;
+  const key = JSON.stringify([k, ids, ids.map((id) => !!S.cards[id].img), opening.pick, p.mulls]);
+  if (ov && ov.dataset.key === key) return;
+  if (!ov) { ov = document.createElement('div'); ov.id = 'opening'; ov.className = 'opening'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Your opening hand'); document.body.appendChild(ov); }
+  ov.dataset.key = key;
+  const spread = Math.min(6, 40 / Math.max(1, n)); const mid = (n - 1) / 2;
+  const cards = ids.map((id, j) => { const c = S.cards[id]; const off = j - mid; const src = faceSrc(c, true) || c.img;
+    const picked = opening.pick.includes(id);
+    return `<button type="button" class="oc ${picked ? 'picked' : ''} ${owe ? 'pickable' : ''} ${opening.anim ? 'deal' : ''}" data-oc="${id}" style="--r:${(off * spread).toFixed(2)}deg;--y:${(Math.abs(off) ** 1.6 * 6).toFixed(1)}px;--d:${j * 70}ms;z-index:${j + 1}" aria-label="${esc(c.name)}${picked ? ' (to the bottom)' : ''}">${src ? `<img src="${esc(src)}" alt="" draggable="false">` : `<span class="oc-name">${esc(c.name)}<small>${esc(c.type || '')}</small></span>`}${picked ? '<em class="oc-tag">Bottom</em>' : ''}</button>`; }).join('');
+  const sub = owe ? `Mulligan ${p.mulls}: choose <b>${owe}</b> card${owe > 1 ? 's' : ''} to put on the bottom, then keep. <span class="oc-count">${opening.pick.length}/${owe}</span>`
+    : p.mulls === 1 ? 'Your first mulligan was free. Keep these 7, or mulligan again (you’ll put one on the bottom).'
+    : 'Keep these 7 or take a mulligan. The first one is free in Commander.';
+  ov.innerHTML = `<div class="op-inner"><p class="op-eyebrow">${MODE === 'hotseat' ? 'Opening hand' : 'Your opening hand'}</p><h2 class="op-title">${esc(p.name)}</h2><p class="op-sub">${sub}</p>
+    <div class="op-fan">${cards}</div>
+    <div class="op-actions"><button type="button" class="btn op-btn ghost" data-op="view">View battlefield</button><button type="button" class="btn op-btn mull" data-op="mull">Mulligan${p.mulls ? ` (${p.mulls + 1})` : ''}</button><button type="button" class="btn op-btn keep" data-op="keep" ${owe && opening.pick.length !== owe ? 'disabled' : ''}>${owe ? `Bottom ${owe} &amp; keep ${n - owe}` : 'Keep hand'}</button></div></div>`;
+  opening.anim = false;
+  ov.onclick = (e) => {
+    const b = e.target.closest('[data-op]');
+    if (b) { const op = b.dataset.op; if (op === 'view') { opening.hidden = true; render(); } else if (op === 'mull') mulligan(k); else if (op === 'keep') keepHand(k); return; }
+    const c = e.target.closest('[data-oc]'); if (!c) return;
+    if (!owe) { c.classList.toggle('lift'); return; }
+    const id = c.dataset.oc; const pk = opening.pick;
+    if (pk.includes(id)) opening.pick = pk.filter((x) => x !== id); else if (pk.length < owe) opening.pick = [...pk, id]; else opening.pick = [...pk.slice(1), id];
+    render();
+  };
+  setTimeout(() => ov.querySelector('[data-op=keep]:not([disabled])')?.focus({ preventScroll: true }), 30);
 }
 function toggleTap(c) { c.tapped = !c.tapped; if (MODE !== 'hotseat' && c.zone === 'battlefield') setTimeout(() => fireEvent(c.tapped ? 'becomesTapped' : 'becomesUntapped', { card: c }), 30); const el = cardEl(c.id); if (el) el.classList.toggle('tapped', c.tapped); SFX.play('tick'); queueSave(); requestAnimationFrame(drawArrows); }
 function counter(c, key, d) { c[key] = key === 'ctr' ? Math.max(0, (c[key] || 0) + d) : (c[key] || 0) + d; render(); FX.bounce(cardEl(c.id)?.querySelector(key === 'ctr' ? '.bc' : '.bp')); SFX.play('tick'); }
@@ -682,7 +744,7 @@ const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'con
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
-  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: !!p.empty }, zones: p.zones, cards };
+  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, kept: p.kept !== false, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: !!p.empty }, zones: p.zones, cards };
 }
 function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, pending: S.pending || null, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40) }; }
 function applySeat(snap) {
@@ -750,6 +812,10 @@ function maybeBot() {
   if (!bot || S.over) return;
   const i = S.turn.active; const p = P(i);
   if (!p.bot || !net.isMine(i) || p.out) return;
+  if (!gameStarted() && !window.__edhSkipOpening && S.players.some((q, k) => k < S.seats && !q.bot && !q.out && !q.empty && q.kept === false)) {
+    S.openWait = S.openWait || Date.now();
+    if (Date.now() - S.openWait < 90000) { if (!bot.retry) { bot.retry = true; setTimeout(() => { bot.retry = false; maybeBot(); }, 800); } return; }
+  }
   if (bot.busy) { if (!bot.retry) { bot.retry = true; setTimeout(() => { bot.retry = false; maybeBot(); }, 400); } return; }
   if (!bot.scheduled) { bot.scheduled = true; setTimeout(() => { bot.scheduled = false; if (P(S.turn.active).bot && !S.over) Promise.resolve(bot.takeTurn(S.turn.active)).catch((e) => { S.botError = `${e && e.message} @ ${S.botStep}`; log(`${P(S.turn.active).name} hit a snag (${e && e.message}); passing the turn`); console.error(e); passTurn(); }); }, 600); }
 }
@@ -819,7 +885,7 @@ function seatHTML(i, full) {
     const hand = p.zones.hand.map((id) => cardHTML(S.cards[id], SPECTATE ? { back: true } : {})).join('') || `<span class="hand-empty">${SPECTATE ? 'Empty hand' : 'Your hand is empty'}</span>`;
     const mine = net.isMine(S.turn.active) && S.turn.active === i;
     dock = `<div class="dock"><div class="piles">${slot('command', 'Command')}${slot('library', 'Library')}${slot('graveyard', 'Graveyard')}${slot('exile', 'Exile')}</div>
-      <div class="handwrap"><div class="handbar"><span>Hand · ${p.zones.hand.length}</span><span class="sp"></span><button type="button" class="btn ghost sm" data-act="draw" data-p="${i}">Draw</button>${gameStarted() ? '' : `<button type="button" class="btn ghost sm" data-act="mull" data-p="${i}">Mulligan</button>`}</div>
+      <div class="handwrap"><div class="handbar"><span>Hand · ${p.zones.hand.length}</span><span class="sp"></span><button type="button" class="btn ghost sm" data-act="draw" data-p="${i}">Draw</button></div>
       <div class="hand" data-zone="p${i}-hand" data-pile="p${i}-hand">${hand}</div></div>
       <div class="actions"><button type="button" class="endturn ${mine ? 'mine' : ''}" data-act="pass">${mine ? 'End turn' : 'Pass turn'}</button><button type="button" class="btn sm" data-act="next">Next phase</button></div></div>`;
   }
@@ -872,7 +938,7 @@ function render() {
   if (net.active && net.ready && net.seat != null) rememberRoom(ROOM.code, { seat: net.seat, clientId: undefined, ...recallRoom(ROOM.code), mine: net.ownedSeats().map(seatSnap), shared: sharedSnap(), deck: { id: P(net.seat).deckId, name: P(net.seat).deckName } });
   maybeBot();
   if (zoomId && !S.cards[zoomId]) hideZoom();
-  renderPrompt();
+  renderPrompt(); renderOpening();
   const tb = $('#tapbar'); if (tb && !tb.hidden) { const tc = S.cards[tb.dataset.id]; if (tc && cardEl(tc.id)) requestAnimationFrame(() => showTapbar(tc)); else hideTapbar(); }
   requestAnimationFrame(drawArrows); queueSave();
 }
@@ -2132,7 +2198,7 @@ function onKey(e) {
     case 'u': if (mine(me)) act(() => { const ids = P(me).zones.battlefield.filter((id) => S.cards[id].tapped); ids.forEach((id) => { S.cards[id].tapped = false; }); if (ids.length) { log(`${P(me).name} untapped ${ids.length} permanent${ids.length > 1 ? 's' : ''}`); SFX.play('tick'); } render(); }); return;
     case 's': if (mine(me)) act(() => shuffleLib(me)); return;
     case 'e': if (mine(S.turn.active)) act(() => $('[data-act=pass]')?.click()); return;
-    case 'm': if (mine(me)) act(() => mulligan(me)); return;
+    case 'm': if (opening) { opening.hidden = false; render(); } return;
     case 'k': act(tokenModal); return;
     case 'r': act(() => $('[data-act=d20]')?.click()); return;
     case 'p': act(() => $('#sideBtn').click()); return;

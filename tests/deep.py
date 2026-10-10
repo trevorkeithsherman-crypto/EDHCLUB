@@ -80,6 +80,8 @@ window.__edhChannel = (name, opts) => {
 def setup(ctx):
     # the test box is a small container; present it as a capable device so auto performance mode stays off unless a test asks
     ctx.add_init_script("if (!window.__edhDeviceSet) { Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8, configurable: true }); Object.defineProperty(navigator, 'deviceMemory', { get: () => 8, configurable: true }); }")
+    # suites that predate the opening-hand screen start with hands already kept; tests/opening.py opts back in
+    ctx.add_init_script("if (!window.__edhOpening) window.__edhSkipOpening = true;")
     pg = ctx.new_page(); pg.set_viewport_size({'width': 1440, 'height': 900})
     errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.route('https://api.scryfall.com/**', collection)
@@ -158,7 +160,7 @@ with sync_playwright() as p:
     # draw / keyboard
     pg.keyboard.press('d'); pg.wait_for_timeout(600); check('D key draws a card', len(state(pg)['players'][0]['zones']['hand']) == 8)
     pg.click('[data-act=draw]'); pg.wait_for_timeout(600); check('Draw button draws a card', len(state(pg)['players'][0]['zones']['hand']) == 9)
-    pg.click('[data-act=mull]'); pg.wait_for_timeout(2200); st = state(pg); check('mulligan reshuffles and draws 7', len(st['players'][0]['zones']['hand']) == 7 and st['players'][0]['mulls'] == 1)
+    check('no Mulligan button on the hand bar (the opening-hand screen handles it)', pg.locator('[data-act=mull]').count() == 0)
     # play a land by drag
     land = pg.locator('.hand .card').filter(has=pg.locator('img[alt="Mountain"]')).first
     if land.count() == 0:  # ensure a land in hand via library search
@@ -168,7 +170,7 @@ with sync_playwright() as p:
     drag(pg, land, pg.locator('.me .bf'), dx=-300, dy=80)
     st = state(pg); bf = [st['cards'][i] for i in st['players'][0]['zones']['battlefield']]
     check('drag land from hand to battlefield', any(c['name'] == 'Mountain' for c in bf))
-    check('once a permanent is out the Mulligan button is gone and M does nothing', pg.locator('[data-act=mull]').count() == 0 and (pg.keyboard.press('m') or True) and state(pg)['players'][0]['mulls'] == 1)
+    check('once a permanent is out, M does nothing', (pg.keyboard.press('m') or True) and state(pg)['players'][0]['mulls'] == 0 and pg.locator('#opening').count() == 0)
     check('a dropped land is placed where it was dropped (lower half)', any(c['name'] == 'Mountain' and c['y'] > 0.4 for c in bf))
     # cast a creature via double-click, resolve
     for _ in range(14):

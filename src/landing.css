@@ -167,7 +167,8 @@ h1 { font: 800 clamp(34px, 4.6vw, 58px)/1.05 var(--f-ui); letter-spacing: -.025e
 .mcard.flipped:hover .mc-inner { transition-delay: 0s; transform: rotateY(0deg) translateY(-6px) rotateX(2deg); }
 .mc-face { position: absolute; inset: 0; border-radius: 4.75% / 3.4%; backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden; box-shadow: 0 18px 40px rgba(0, 0, 0, .65), 0 0 0 1px rgba(0, 0, 0, .7); }
 /* Back: EDH Club's own card back */
-.mc-back { transform: rotateY(180deg); background: radial-gradient(ellipse at 50% 40%, #2a1e3f 0%, #120c1e 60%, #0a0712 100%); border: 10px solid #0b0812; }
+.mc-back { transform: rotateY(180deg); background: radial-gradient(ellipse at 50% 40%, #2a1e3f 0%, #120c1e 60%, #0a0712 100%) center / cover no-repeat; border: 10px solid #0b0812; }
+.mc-back.real { border: 0; background-color: #15110d; } .mc-back.real .mc-back-art { display: none; }
 .mc-back-art { position: absolute; inset: 0; display: grid; place-items: center; background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(226, 182, 89, .07) 0 6deg, transparent 6deg 12deg), radial-gradient(circle at 50% 50%, rgba(226, 182, 89, .18), transparent 55%); }
 .mc-back-art::before { content: ""; position: absolute; inset: 7%; border: 2px solid rgba(226, 182, 89, .45); border-radius: 6% / 4.5%; box-shadow: inset 0 0 0 6px rgba(10, 7, 18, .9), inset 0 0 0 7px rgba(226, 182, 89, .25); }
 .mc-back-art::after { content: ""; position: absolute; width: 58%; aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(226, 182, 89, .4); box-shadow: 0 0 0 10px rgba(226, 182, 89, .06), 0 0 60px rgba(226, 182, 89, .18); }

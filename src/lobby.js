@@ -1,6 +1,6 @@
 import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest, myProfile, uploadAvatar, removeAvatar, localAvatar } from './supa.js';
 import { startHero } from './hero.js';
-import { fetchCards, cached } from './scryfall.js';
+import { fetchCards, cached, CARD_BACK } from './scryfall.js';
 import { registerSW, install, onInstallable, isIOS } from './pwa.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -217,6 +217,8 @@ if (document.getElementById('heroShot')) startHero(document.getElementById('hero
 // Feature cards: real art on each face, and a flip the moment a card scrolls into view (staggered by --i).
 (async function featureCards() {
   const cards = [...document.querySelectorAll('.mcard')]; if (!cards.length) return;
+  // The real card back (same image the table uses), over our own design as the fallback while it loads or if it can't.
+  const back = new Image(); back.onload = () => cards.forEach((c) => { const b = c.querySelector('.mc-back'); b.style.backgroundImage = `url("${CARD_BACK}")`; b.classList.add('real'); }); back.src = CARD_BACK;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const flip = (el) => { el.classList.add('flipped'); };
   if ('IntersectionObserver' in window && !reduce) {

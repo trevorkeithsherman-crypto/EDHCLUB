@@ -129,7 +129,7 @@ function hydrate() {
   return n;
 }
 async function ensureArt(names, { quiet = false } = {}) {
-  const need = names.filter((n) => (typeof n === 'string' ? !cached(n) : !cached(n.name, n.set, n.num) || cached(n.name, n.set, n.num).set !== n.set));
+  const need = names.filter((n) => { if (typeof n === 'string') return !cached(n); const e = cached(n.name, n.set, n.num); return !e || (e.set !== n.set && e.askedSet !== String(n.set || '').toLowerCase()); });
   if (!need.length) { if (hydrate()) render(); return; }
   const t = quiet ? null : toast(`Loading card art for ${need.length} card${need.length > 1 ? 's' : ''}…`, 60000);
   try {
@@ -142,13 +142,13 @@ async function ensureArt(names, { quiet = false } = {}) {
     if (!quiet) toast("Couldn't reach Scryfall. Cards show by name until it's back.", 5000);
   }
 }
-const allNames = () => { const seen = new Set(); return Object.values(S.cards).filter((c) => !c.token).map((c) => (c.set && c.num ? { name: c.name, set: c.set, num: c.num } : c.name)).filter((x) => { const k = typeof x === 'string' ? x : `${x.set}|${x.num}`; if (seen.has(k)) return false; seen.add(k); return true; }); };
+const allNames = () => { const seen = new Set(); return Object.values(S.cards).filter((c) => !c.token).map((c) => (c.set && c.num ? { name: c.name, set: c.set, num: c.num, sfid: c.sfid || '' } : c.name)).filter((x) => { const k = typeof x === 'string' ? x : `${x.set}|${x.num}`; if (seen.has(k)) return false; seen.add(k); return true; }); };
 
 /* ---------- Deck parsing ---------- */
 function parseDeck(text, cmdOverride) { return parseList(text, cmdOverride, (n) => lookup(n).type); }
 function makeCard(def, owner) {
   const id = `c${net.active ? net.seat : 'l'}_${S.nextId++}`;
-  const c = { id, name: def.name, cost: def.cost || '', type: def.type || 'Card', pt: def.pt || '', colors: def.colors || '', kw: def.kw || '', oracle: def.oracle || '', set: def.set || '', num: def.num || '', foil: !!def.foil, img: def.img || '', big: def.big || '', art: def.art || '', backImg: def.backImg || '', backBig: def.backBig || '', artist: def.artist || '', owner, controller: owner, zone: 'library', tapped: false, faceDown: false, flipped: false, p1: 0, ctr: 0, token: false, x: 0, y: 0, isCmdr: false, casts: 0 };
+  const c = { id, name: def.name, cost: def.cost || '', type: def.type || 'Card', pt: def.pt || '', colors: def.colors || '', kw: def.kw || '', oracle: def.oracle || '', set: def.set || '', num: def.num || '', foil: !!def.foil, sfid: def.sfid || '', img: def.img || '', big: def.big || '', art: def.art || '', backImg: def.backImg || '', backBig: def.backBig || '', artist: def.artist || '', owner, controller: owner, zone: 'library', tapped: false, faceDown: false, flipped: false, p1: 0, ctr: 0, token: false, x: 0, y: 0, isCmdr: false, casts: 0 };
   S.cards[id] = c; return c;
 }
 function shuffleArr(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -162,8 +162,8 @@ function loadDeck(i, text, cmdName) {
   const p = P(i); const d = parseDeck(text, cmdName);
   purgeOwner(i);
   Object.assign(p, { deckText: text, life: 40, poison: 0, cmdDmg: {}, out: false, outAt: 0, mulls: 0, zones: emptyZones() });
-  d.cmd.forEach((n) => { const pr = d.cmdPrints?.[n] || {}; const c = makeCard({ ...lookup(n, pr.set, pr.num), name: n, set: pr.set || '', num: pr.num || '', foil: !!pr.foil }, i); c.isCmdr = true; c.zone = 'command'; p.zones.command.push(c.id); });
-  d.main.forEach((e) => { const def = { ...lookup(e.name, e.set, e.num), name: e.name, set: e.set || '', num: e.num || '', foil: !!e.foil }; for (let k = 0; k < e.n; k++) { const c = makeCard(def, i); p.zones.library.push(c.id); } });
+  d.cmd.forEach((n) => { const pr = d.cmdPrints?.[n] || {}; const c = makeCard({ ...lookup(n, pr.set, pr.num), name: n, set: pr.set || '', num: pr.num || '', foil: !!pr.foil, sfid: pr.sfid || '' }, i); c.isCmdr = true; c.zone = 'command'; p.zones.command.push(c.id); });
+  d.main.forEach((e) => { const def = { ...lookup(e.name, e.set, e.num), name: e.name, set: e.set || '', num: e.num || '', foil: !!e.foil, sfid: e.sfid || '' }; for (let k = 0; k < e.n; k++) { const c = makeCard(def, i); p.zones.library.push(c.id); } });
   shuffleArr(p.zones.library);
   const hand = p.zones.library.splice(0, 7); hand.forEach((id) => { S.cards[id].zone = 'hand'; }); p.zones.hand = hand;
   return d;

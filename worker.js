@@ -61,7 +61,9 @@ async function deckText(request, id) {
 // Moxfield: public deck → importer text. Moxfield's API sits behind bot protection and only answers approved
 // user agents; when it refuses we say so, and the client falls back to "Export → copy → paste".
 const moxName = (e) => e?.card?.name || e?.name || '';
-const moxPrint = (e) => (e?.card?.set && e?.card?.cn ? ` (${String(e.card.set).toUpperCase()}) ${e.card.cn}` : '') + (e?.finish && /foil/i.test(e.finish) && !/non/i.test(e.finish) ? ' *F*' : '');
+// Printing as "(SET) number", foil flag, and Moxfield's Scryfall id when it has one: set codes and collector numbers
+// don't always match Scryfall's, and the id is what makes the right art load first time.
+const moxPrint = (e) => (e?.card?.set && e?.card?.cn ? ` (${String(e.card.set).toUpperCase()}) ${e.card.cn}` : '') + (e?.finish && /foil/i.test(e.finish) && !/non/i.test(e.finish) ? ' *F*' : '') + (/^[0-9a-f-]{36}$/i.test(e?.card?.scryfall_id || '') ? ` [sf=${e.card.scryfall_id.toLowerCase()}]` : '');
 const moxBoard = (d, key) => { const b = d.boards?.[key]?.cards || d[key] || {}; return Object.values(b).filter((e) => e && typeof e === 'object' && moxName(e)); };
 async function moxfieldText(request, id) {
   if (!/^[A-Za-z0-9_-]{6,40}$/.test(id)) return reply({ error: 'bad id' }, 400);
@@ -77,7 +79,7 @@ async function moxfieldText(request, id) {
       if (!cmd.length && !main.length) throw new Error('Moxfield returned an empty deck');
       const text = `Commander\n${cmd.map((n) => '1 ' + n).join('\n')}\n\nDeck\n${main.map((e) => `${e.q} ${e.line}`).join('\n')}`;
       const count = main.reduce((s, e) => s + e.q, 0) + cmd.length;
-      return reply({ id, name: d.name || 'Moxfield deck', owner: d.createdByUser?.userName || d.createdByUser?.displayName || '', commander: cmd.map((n) => n.replace(/ \([A-Z0-9]+\) \S+( \*F\*)?$/, '')).join(' + '), count, text, url: `https://www.moxfield.com/decks/${id}`, source: 'moxfield' }, 200, 24 * 3600);
+      return reply({ id, name: d.name || 'Moxfield deck', owner: d.createdByUser?.userName || d.createdByUser?.displayName || '', commander: cmd.map((n) => n.replace(/ \[sf=[0-9a-f-]+\]$/, '').replace(/ \([A-Z0-9]+\) \S+( \*F\*)?$/, '')).join(' + '), count, text, url: `https://www.moxfield.com/decks/${id}`, source: 'moxfield' }, 200, 24 * 3600);
     } catch (e) { return reply({ error: e.message }, 502); }
   });
 }

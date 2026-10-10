@@ -63,29 +63,44 @@ function toEntry(card) {
  * @returns {Promise<{missing:string[], fetched:number}>}
  */
 export async function fetchCards(names, onProgress) {
-  // Items are names, or { name, set, num } for a specific printing.
+  // Items are names, or { name, set, num, sfid } for a specific printing (sfid = Scryfall id, the surest match).
   const items = names.map((n) => (typeof n === 'string' ? { name: n.trim() } : n)).filter((x) => x && x.name);
   const seen = new Set(); const want = items.filter((x) => { const k = x.set && x.num ? 'p|' + printKey(x.set, x.num) : cardKey(x.name); if (seen.has(k)) return false; seen.add(k); return !cache[k]; });
-  const missing = [];
+  const missing = []; const retryByName = [];
+  const ident = (x) => (x.sfid ? { id: x.sfid } : x.set && x.num ? { set: x.set.toLowerCase(), collector_number: String(x.num) } : { name: x.name.split(' // ')[0].trim() });
   for (let i = 0; i < want.length; i += 75) {
     const chunk = want.slice(i, i + 75);
     if (i > 0) await sleep(120);
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ identifiers: chunk.map((x) => (x.set && x.num ? { set: x.set.toLowerCase(), collector_number: String(x.num) } : { name: x.name.split(' // ')[0].trim() })) }),
-    });
+    const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ identifiers: chunk.map(ident) }) });
     if (!res.ok) throw new Error(`Scryfall returned ${res.status}`);
     const json = await res.json();
     for (const card of json.data || []) {
       const entry = toEntry(card);
-      const asked = chunk.find((x) => x.set && x.num && x.set.toLowerCase() === card.set && String(x.num).toLowerCase() === String(card.collector_number).toLowerCase());
-      if (asked) { cache['p|' + printKey(card.set, card.collector_number)] = entry; cache[cardKey(card.name, card.set, card.collector_number)] = entry; }
+      const asked = chunk.find((x) => (x.sfid && x.sfid === card.id) || (x.set && x.num && x.set.toLowerCase() === card.set && String(x.num).toLowerCase() === String(card.collector_number).toLowerCase()));
+      if (asked) {
+        cache['p|' + printKey(card.set, card.collector_number)] = entry; cache[cardKey(card.name, card.set, card.collector_number)] = entry;
+        // the deck may name the printing the way another site does (Moxfield set codes / numbers): remember it under that key too
+        if (asked.set && asked.num && (asked.set.toLowerCase() !== card.set || String(asked.num).toLowerCase() !== String(card.collector_number).toLowerCase())) { const alias = { ...entry, askedSet: asked.set.toLowerCase(), askedNum: String(asked.num) }; cache['p|' + printKey(asked.set, asked.num)] = alias; cache[cardKey(asked.name, asked.set, asked.num)] = alias; }
+      }
       if (!cache[cardKey(card.name)] || !asked) cache[cardKey(card.name)] = cache[cardKey(card.name)] || entry;
       if (card.card_faces) for (const f of card.card_faces) cache[cardKey(f.name)] = cache[cardKey(f.name)] || entry;
     }
-    for (const nf of json.not_found || []) if (nf.name) missing.push(nf.name); else if (nf.set) missing.push(`${nf.set} ${nf.collector_number}`);
+    // A printing Scryfall doesn't know (odd set code or collector number) still deserves the card: ask again by name.
+    for (const nf of json.not_found || []) {
+      if (nf.name) { missing.push(nf.name); continue; }
+      const x = chunk.find((y) => (nf.id && y.sfid === nf.id) || (nf.set && y.set && y.set.toLowerCase() === String(nf.set).toLowerCase() && String(y.num).toLowerCase() === String(nf.collector_number).toLowerCase()));
+      if (x) retryByName.push(x); else missing.push(nf.set ? `${nf.set} ${nf.collector_number}` : nf.id || '?');
+    }
     onProgress && onProgress(Math.min(want.length, i + 75), want.length);
+  }
+  if (retryByName.length) {
+    const r2 = await fetchCards(retryByName.map((x) => x.name), null);
+    for (const x of retryByName) {
+      const e = cache[cardKey(x.name)];
+      if (!e) { missing.push(...r2.missing.filter((m) => m === x.name.split(' // ')[0].trim())); continue; }
+      const alias = { ...e, askedSet: (x.set || '').toLowerCase(), askedNum: String(x.num || '') };
+      if (x.set && x.num) { cache['p|' + printKey(x.set, x.num)] = alias; cache[cardKey(x.name, x.set, x.num)] = alias; }
+    }
   }
   if (want.length) persist();
   return { missing, fetched: want.length };

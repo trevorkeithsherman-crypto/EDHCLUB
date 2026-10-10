@@ -87,7 +87,7 @@ async function editor(d, keep = null, openTab = 'auto') {
     const p = parseList(ta.value, $('#edCmd').value, typeOf);
     entries = [...p.cmd.map((n) => ({ name: n, n: 1, ...(p.cmdPrints[n] || {}), cmdr: true })), ...p.main];
     const q = ($('#edArtQ').value || '').toLowerCase();
-    const want = entries.map((e) => (e.set && e.num ? { name: e.name, set: e.set, num: e.num } : e.name));
+    const want = entries.map((e) => (e.set && e.num ? { name: e.name, set: e.set, num: e.num, sfid: e.sfid || '' } : e.name));
     const need = want.filter((w) => !cached(typeof w === 'string' ? w : w.name, w.set, w.num));
     if (need.length) { try { await fetchCards(need.slice(0, 150)); } catch { /* offline */ } }
     const groups = [['Commander', entries.filter((e) => e.cmdr)], ['Deck', entries.filter((e) => !e.cmdr)]];

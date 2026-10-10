@@ -19,10 +19,12 @@ def load():
 def type_line(d):
     sup = ' '.join(d.get('tp', [])); t = ' '.join(d.get('t', [])); sub = ' '.join(d.get('tb', []))
     return ' '.join(x for x in [sup, t] if x) + (' — ' + sub if sub else '')
+import uuid
+def sfid(name): return str(uuid.uuid5(uuid.NAMESPACE_URL, 'edhclub:' + name))
 def to_scry(name, d, set_code='pt', num='1'):
     cost = (d.get('m') or '').upper()
     cost = re.sub(r'\{([wubrgc])\}', lambda m: '{' + m.group(1).upper() + '}', cost)
-    o = {'object': 'card', 'name': name, 'mana_cost': cost, 'type_line': type_line(d), 'oracle_text': d.get('o', ''), 'colors': [c.upper() for c in d.get('c', '')], 'color_identity': [c.upper() for c in d.get('ci', '')],
+    o = {'object': 'card', 'id': sfid(name), 'name': name, 'mana_cost': cost, 'type_line': type_line(d), 'oracle_text': d.get('o', ''), 'colors': [c.upper() for c in d.get('c', '')], 'color_identity': [c.upper() for c in d.get('ci', '')],
          'keywords': [k.title() for k in d.get('k', [])], 'artist': 'Playtest', 'set': set_code, 'set_name': 'Playtest', 'collector_number': num, 'released_at': '2026-01-01', 'finishes': ['nonfoil', 'foil'], 'cmc': d.get('v', 0),
          'image_uris': {'normal': f'https://cards.scryfall.io/normal/{slug(name)}.jpg', 'large': f'https://cards.scryfall.io/large/{slug(name)}.jpg', 'art_crop': f'https://cards.scryfall.io/art/{slug(name)}.jpg'}}
     if d.get('p') is not None: o['power'] = str(d['p']); o['toughness'] = str(d.get('to', 0))
@@ -35,10 +37,18 @@ def scry_route(route):
     db = load(); req = route.request; u = req.url
     if req.method == 'POST' and req.post_data:
         body = json.loads(req.post_data); data = []; nf = []
+        ids = None
         for i in body.get('identifiers', []):
             n = i.get('name'); d = db.get(n) if n else None
             if not d and n:  # try the front face name
                 d = next((v for k, v in db.items() if k.split(' // ')[0] == n), None)
+            if i.get('id'):  # Scryfall id: known when it is one of ours
+                if ids is None: ids = {sfid(k): k for k in db}
+                n = ids.get(i['id']); d = db.get(n) if n else None
+                if d: data.append(to_scry(n, d, 'pt', '1')); continue
+                nf.append(i); continue
+            if i.get('set') and not n:  # printing lookups: only the 'pt' set exists here; anything else is an unknown printing
+                nf.append(i); continue
             if d: data.append(to_scry(n, d, i.get('set', 'pt'), i.get('collector_number', '1')))
             else: nf.append(i)
         route.fulfill(status=200, content_type='application/json', body=json.dumps({'data': data, 'not_found': nf})); return

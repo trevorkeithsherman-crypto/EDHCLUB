@@ -168,6 +168,7 @@ with sync_playwright() as p:
     drag(pg, land, pg.locator('.me .bf'), dx=-300, dy=80)
     st = state(pg); bf = [st['cards'][i] for i in st['players'][0]['zones']['battlefield']]
     check('drag land from hand to battlefield', any(c['name'] == 'Mountain' for c in bf))
+    check('once a permanent is out the Mulligan button is gone and M does nothing', pg.locator('[data-act=mull]').count() == 0 and (pg.keyboard.press('m') or True) and state(pg)['players'][0]['mulls'] == 1)
     check('a dropped land is placed where it was dropped (lower half)', any(c['name'] == 'Mountain' and c['y'] > 0.4 for c in bf))
     # cast a creature via double-click, resolve
     for _ in range(14):

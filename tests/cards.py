@@ -172,6 +172,20 @@ with sync_playwright() as p:
     fresh(pg); real(pg, 1, 'Steel Overseer'); so = card(pg, 1, 'Steel Overseer')['id']; real(pg, 1, 'Grizzly Bears'); pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=[]; })"); bot_turn(pg)
     check('Steel Overseer taps to put +1/+1 counters on artifact creatures (itself)', state(pg)['cards'][so]['p1'] >= 1, str(logs(pg)[-5:]))
 
+    # ---- Mill: spell, landfall crab, Bruvac doubling, "instead" clauses ignored ----
+    def stock_me(n=14):
+        for k in range(n): real(pg, 0, ['Forest', 'Grizzly Bears', 'Shock'][k % 3], 'library')
+    fresh(pg); lands(pg, 1, 3, 'Island'); real(pg, 1, 'Tome Scour', 'hand'); stock_me()
+    pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Tome Scour'); })"); g0 = len(state(pg)['players'][0]['zones']['graveyard']); bot_turn(pg)
+    check('Tome Scour: bot mills me for five', len(state(pg)['players'][0]['zones']['graveyard']) == g0 + 5 and any('milled 5' in t for t in logs(pg)), str(logs(pg)[-4:]))
+    fresh(pg); lands(pg, 1, 2, 'Island'); real(pg, 1, 'Ruin Crab'); real(pg, 1, 'Island', 'hand'); stock_me()
+    pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Island'); })"); g0 = len(state(pg)['players'][0]['zones']['graveyard']); bot_turn(pg)
+    check('Ruin Crab: the land drop mills each opponent three', len(state(pg)['players'][0]['zones']['graveyard']) == g0 + 3, str(logs(pg)[-4:]))
+    fresh(pg); lands(pg, 1, 3, 'Island'); real(pg, 1, 'Bruvac the Grandiloquent'); real(pg, 1, 'Tome Scour', 'hand'); stock_me()
+    pg.evaluate("__edhMut(st=>{ st.players[1].zones.hand=st.players[1].zones.hand.filter(id=>st.cards[id].name==='Tome Scour'); })"); g0 = len(state(pg)['players'][0]['zones']['graveyard']); bot_turn(pg)
+    check('Bruvac doubles it: Tome Scour mills ten', len(state(pg)['players'][0]['zones']['graveyard']) == g0 + 10, str(logs(pg)[-4:]))
+    fx = pg.evaluate("__edhApi().parseEffects(\"At the beginning of your upkeep, any number of target players each mill two cards. If you're the monarch, each of those players mills ten cards instead.\")")
+    check("Court of Cunning: only the two-card mill is read; the 'instead' clause is left alone", [e for e in fx if e['k'] == 'mill'] == [{'k': 'mill', 'n': 2, 'who': 'opponent'}], str(fx))
     check('no JS errors', not errs, str(errs)[:400])
     browser.close()
 fails = [r for r in results if not r[1]]

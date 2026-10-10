@@ -473,7 +473,11 @@ function draw(pi, n) {
   log(`${p.name} drew ${n === 1 ? 'a card' : n + ' cards'}`);
 }
 function shuffleLib(pi, quiet) { shuffleArr(P(pi).zones.library); SFX.play('shuffle'); FX.shake($(`[data-pile="p${pi}-library"]`)); if (!quiet) { log(`${P(pi).name} shuffled their library`); toast('Library shuffled'); } render(); }
+// Mulligans are for the opening hand only: once anyone has a permanent out, a spell cast, an attack, or the turn has
+// moved on, the game has started and the button goes away (every mode).
+const gameStarted = () => S.turn.number > 1 || S.attacks.length > 0 || Object.values(S.stats.casts || {}).some(Boolean) || S.players.some((q, k) => k < S.seats && q.zones && q.zones.battlefield.length > 0);
 function mulligan(pi) {
+  if (gameStarted()) { toast('The game has started; mulligans are for the opening hand'); return; }
   const p = P(pi); p.zones.hand.forEach((id) => { S.cards[id].zone = 'library'; p.zones.library.push(id); }); p.zones.hand = [];
   shuffleArr(p.zones.library); p.mulls++; render(); SFX.play('shuffle');
   setTimeout(() => draw(pi, 7), motionMul() ? 200 : 0);
@@ -815,7 +819,7 @@ function seatHTML(i, full) {
     const hand = p.zones.hand.map((id) => cardHTML(S.cards[id], SPECTATE ? { back: true } : {})).join('') || `<span class="hand-empty">${SPECTATE ? 'Empty hand' : 'Your hand is empty'}</span>`;
     const mine = net.isMine(S.turn.active) && S.turn.active === i;
     dock = `<div class="dock"><div class="piles">${slot('command', 'Command')}${slot('library', 'Library')}${slot('graveyard', 'Graveyard')}${slot('exile', 'Exile')}</div>
-      <div class="handwrap"><div class="handbar"><span>Hand · ${p.zones.hand.length}</span><span class="sp"></span><button type="button" class="btn ghost sm" data-act="draw" data-p="${i}">Draw</button><button type="button" class="btn ghost sm" data-act="mull" data-p="${i}">Mulligan</button></div>
+      <div class="handwrap"><div class="handbar"><span>Hand · ${p.zones.hand.length}</span><span class="sp"></span><button type="button" class="btn ghost sm" data-act="draw" data-p="${i}">Draw</button>${gameStarted() ? '' : `<button type="button" class="btn ghost sm" data-act="mull" data-p="${i}">Mulligan</button>`}</div>
       <div class="hand" data-zone="p${i}-hand" data-pile="p${i}-hand">${hand}</div></div>
       <div class="actions"><button type="button" class="endturn ${mine ? 'mine' : ''}" data-act="pass">${mine ? 'End turn' : 'Pass turn'}</button><button type="button" class="btn sm" data-act="next">Next phase</button></div></div>`;
   }
@@ -1233,6 +1237,8 @@ function tapAll(i, what) { seatCards(i, (c) => matchesWhat(c, what) && c.tapped)
 const xValue = (src, eff) => { const o = lc(src.oracle); if (/x is (?:its|~'s|this creature's) power|equal to (?:its|~'s|this creature's) power/.test(o)) return powerOf(src); if (/x is the number of cards in your hand/.test(o)) return P(src.controller).zones.hand.length; if (/x is the number of creature cards in your graveyard/.test(o)) return P(src.controller).zones.graveyard.map((id) => S.cards[id]).filter(isCreature).length; const m = o.match(/where x is the number of ([a-z]+?)s? you control/); if (m) return seatCards(src.controller, (c) => new RegExp(m[1], 'i').test(c.type) || (m[1] === 'creature' && isCreature(c))).length; if (/x is the number of creatures/.test(o)) return seatCards(src.controller, isCreature).length; return 1; };
 const lc = (s) => String(s || '').toLowerCase();
 // Run a list of parsed effects for a source card. Returns a short description for the log.
+// Bruvac the Grandiloquent: an opponent of Bruvac's controller mills twice as many cards.
+const millDoubled = (k) => S.players.some((q, j) => j !== k && j < S.seats && !q.out && seatCards(j).some((c) => c.zone === 'battlefield' && /would mill one or more cards, they mill twice that many/i.test(c.oracle || '')));
 async function runEffects(src, effects, ctx = {}) {
   const i = src.controller; const done = []; const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const rules = rulesFor(i); const theOpp = () => (ctx.actor != null && ctx.actor !== i ? ctx.actor : oppsOf(i).sort((a, b) => P(a).life - P(b).life)[0]);
@@ -1277,7 +1283,7 @@ async function runEffects(src, effects, ctx = {}) {
         const who = e.who === 'opponents' ? oppsOf(i) : [ctx.actor != null && ctx.actor !== i ? ctx.actor : oppsOf(i).sort((a, b) => P(b).zones.hand.length - P(a).zones.hand.length)[0]].filter((k) => k != null); who.forEach((k) => { if (net.isMine(k)) REQ.discard(k, n, src.name); else request(k, 'discard', n, src.name); }); done.push(`${who.map((k) => P(k).name).join(', ')} discard ${n}`); break; }
       case 'edict': { const who = e.who === 'opponents' ? oppsOf(i) : e.who === 'all' ? [i, ...oppsOf(i)] : e.actorOnly && ctx.seat != null ? [ctx.seat] : [ctx.actor != null && ctx.actor !== i ? ctx.actor : oppsOf(i).sort((a, b) => seatCards(b, isCreature).length - seatCards(a, isCreature).length)[0]].filter((k) => k != null); who.forEach((k) => { if (net.isMine(k)) REQ.edict(k, n, e.what, src.name); else request(k, 'edict', n, e.what, src.name); }); done.push(`${who.map((k) => P(k).name).join(', ')} sacrifice ${n} ${e.what}`); break; }
       case 'untap': { if (e.self) { src.tapped = false; done.push('untap it'); break; } if (e.n !== 'x' && e.n < 50) { const pool = seatCards(i, (c) => matchesWhat(c, e.what) && c.tapped).slice(0, e.n); pool.forEach((c) => { c.tapped = false; }); done.push(`untap ${pool.length} ${e.what}${pool.length === 1 ? '' : 's'}`); break; } tapAll(i, e.what); done.push(`untap ${e.what}s`); break; }
-      case 'mill': { const who = e.who === 'you' ? [i] : e.who === 'all' ? [i, ...oppsOf(i)] : [oppsOf(i)[0]].filter((k) => k != null); who.forEach((k) => { if (net.isMine(k)) REQ.mill(k, n); else request(k, 'mill', n); }); done.push(`mill ${n}`); break; }
+      case 'mill': { const who = e.who === 'you' ? [i] : e.who === 'all' ? [i, ...oppsOf(i)] : [oppsOf(i)[0]].filter((k) => k != null); who.forEach((k) => { const nn = millDoubled(k) ? n * 2 : n; if (net.isMine(k)) REQ.mill(k, nn); else request(k, 'mill', nn); }); done.push(`mill ${n}${who.some(millDoubled) ? ' (doubled)' : ''}`); break; }
       case 'mana': { P(i).floating = (P(i).floating || 0) + (e.n === 'x' ? 1 : e.n); break; }
       case 'surveil': { const lib = P(i).zones.library; const top = lib.slice(0, n); const landsOut = seatCards(i, (c) => /Land/.test(c.type)).length; const gone = top.filter((id) => (/Land/.test(S.cards[id].type) && landsOut >= 6) || (!/Land/.test(S.cards[id].type) && landsOut < 3 && !isCreature(S.cards[id]))); P(i).zones.library = top.filter((id) => !gone.includes(id)).concat(lib.slice(n)); gone.forEach((id) => { S.cards[id].zone = 'graveyard'; P(i).zones.graveyard.push(id); }); done.push(`surveil ${n}${gone.length ? ` (${gone.length} to the graveyard)` : ''}`); break; }
       case 'explore': { for (let k = 0; k < n; k++) { const id = P(i).zones.library[0]; if (!id) break; const top = S.cards[id]; const target = e.on === 'target' ? (seatCards(i, isCreature).sort((a, b) => valueOf(b) - valueOf(a))[0] || src) : src; if (/Land/.test(top.type)) { moveCard(id, i, 'hand', { anim: 'fly' }); done.push(`explore: ${top.name} to hand`); } else { if (target && target.zone === 'battlefield') target.p1 = (target.p1 || 0) + 1; done.push(`explore: +1/+1 counter (${top.name} stays on top)`); } } break; }

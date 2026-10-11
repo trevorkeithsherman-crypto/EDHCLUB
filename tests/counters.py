@@ -1,0 +1,97 @@
+"""Counters of every kind: one adjustable Counters panel (− n + per kind) replaces the +1/+1 / −1/−1 menu items,
+cards that "enter with N counters" get them automatically (X is set by hand), named counters (charge, stun, shield…)
+and keyword counters render on the card, and bots read counter text and put the right kind on the right permanent.
+Run: python3 tests/counters.py <port>"""
+import sys, json
+sys.argv = ['x', sys.argv[1]]
+src = open('tests/deep.py').read().split('with sync_playwright() as p:')[0]
+exec(src)
+MK = """const mk=(st,seat,name,type,zone,oracle,pt)=>{const id='k'+seat+Math.random().toString(36).slice(2,7); st.cards[id]={id,name,type,cost:'{2}',pt:pt||'',oracle:oracle||'',colors:'R',kw:'',img:'',big:'',art:'',backImg:'',backBig:'',artist:'',owner:seat,controller:seat,zone,tapped:false,faceDown:false,flipped:false,p1:0,ctr:0,token:false,x:.3,y:.6,isCmdr:false,casts:0,sick:false}; st.players[seat].zones[zone].push(id); return id;};"""
+def give(pg, seat, name, type_, zone, oracle, pt=''): return pg.evaluate("([seat,name,type,zone,oracle,pt])=>{let out;__edhMut(st=>{" + MK + "out=mk(st,seat,name,type,zone,oracle,pt);});return out;}", [seat, name, type_, zone, oracle, pt])
+def card(pg, cid): return pg.evaluate("(id)=>{const c=__edhState().cards[id]; return c && {p1:c.p1||0, ctr:c.ctr||0, cn:c.cn||null, kwc:c.kwc||'', zone:c.zone}}", cid)
+def rclick(pg, cid): pg.evaluate("(id)=>{const el=document.querySelector(`.card[data-id='${id}']`); const r=el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.x+r.width/2,clientY:r.y+r.height/2,button:2}));}", cid)
+def menu_items(pg): return [t.strip() for t in pg.locator('#menu .mi').all_text_contents()]
+def logs(pg, n=6): return [l['text'] for l in state(pg)['log'][:n]]
+with sync_playwright() as p:
+    browser = p.chromium.launch(); ctx = browser.new_context(); pg, errs = setup(ctx)
+    pg.goto(BASE + '/table.html?mode=bots&name=Trevor&seats=2&bots=1'); pg.wait_for_timeout(1800)
+    # ---- enters with N counters (printed on the card) ----
+    a = give(pg, 0, 'Mindless Automaton', 'Artifact Creature — Construct', 'hand', 'Mindless Automaton enters the battlefield with two +1/+1 counters on it.\n{1}, Discard a card: Put a +1/+1 counter on Mindless Automaton.', '0/0')
+    pg.evaluate(f"__edhApi().moveCard('{a}', 0, 'battlefield')"); pg.wait_for_timeout(400)
+    check('a creature that enters with two +1/+1 counters gets them on arrival', card(pg, a)['p1'] == 2 and any('enters with 2 +1/+1 counters' in l for l in logs(pg)), f"{card(pg, a)} {logs(pg, 3)}")
+    check('…and the badge on the card shows +2/+2', pg.locator(f'.card[data-id="{a}"] .bp').text_content().strip() == '+2/+2')
+    b = give(pg, 0, 'Aeon Chronicler', 'Creature — Avatar', 'hand', 'Aeon Chronicler enters with three +1/+1 counters and a time counter on it.', '0/0')
+    pg.evaluate(f"__edhApi().moveCard('{b}', 0, 'battlefield')"); pg.wait_for_timeout(400)
+    check('two kinds at once: three +1/+1 and one time counter', card(pg, b)['p1'] == 3 and card(pg, b)['ctr'] == 1, str(card(pg, b)))
+    check('the named counter badge is labelled with its kind', pg.locator(f'.card[data-id="{b}"] .bc').get_attribute('title') == '1 time')
+    x = give(pg, 0, 'Walking Ballista', 'Artifact Creature — Construct', 'hand', 'Walking Ballista enters with X +1/+1 counters on it.\n{4}: Put a +1/+1 counter on Walking Ballista.\nRemove a +1/+1 counter from Walking Ballista: It deals 1 damage to any target.', '0/0')
+    pg.evaluate(f"__edhApi().moveCard('{x}', 0, 'battlefield')"); pg.wait_for_timeout(400)
+    check('a human\'s "enters with X counters" opens the Counters panel for them to set X, and the 0/0 is NOT buried meanwhile', card(pg, x)['p1'] == 0 and card(pg, x)['zone'] == 'battlefield' and pg.locator('#cpBody').count() == 1 and 'enters with X counters' in pg.locator('#modal p').text_content(), str(card(pg, x)))
+    pg.wait_for_timeout(700); check('…still on the battlefield after state-based actions would have run', card(pg, x)['zone'] == 'battlefield')
+    # ---- the Counters panel ----
+    kinds = pg.locator('#cpBody .ctrrow').evaluate_all('els => els.map(e => e.dataset.kind)')
+    check('panel lists +1/+1 and −1/−1 rows for a creature, each with − n +', kinds[:2] == ['+1/+1', '-1/-1'] and pg.locator('#cpBody [data-cp="+1/+1"][data-d="1"]').count() == 1 and pg.locator('#cpBody [data-cp="+1/+1"][data-d="-1"]').is_disabled())
+    for _ in range(4): pg.click('#cpBody [data-cp="+1/+1"][data-d="1"]'); pg.wait_for_timeout(60)
+    check('pressing + four times puts four +1/+1 counters on it; the P/T readout and card badge follow', card(pg, x)['p1'] == 4 and pg.locator('#cpBody [data-kind="+1/+1"] .v').text_content() == '4' and 'Now 4/4' in pg.locator('#cpPt').text_content() and pg.locator(f'.card[data-id="{x}"] .bp').text_content().strip() == '+4/+4')
+    pg.click('#cpBody [data-cp="+1/+1"][data-d="-1"]'); pg.wait_for_timeout(60)
+    check('− takes one back', card(pg, x)['p1'] == 3)
+    pg.select_option('#cpOther', 'stun'); pg.wait_for_timeout(200)
+    check('"Another kind" adds a stun counter row with one on it', card(pg, x)['cn'] == {'stun': 1} and pg.locator('#cpBody [data-kind="stun"] .v').text_content() == '1')
+    pg.click('#cpBody [data-cp="stun"][data-d="1"]'); pg.wait_for_timeout(60)
+    check('stun chip on the card reads "2 stun"', pg.locator(f'.card[data-id="{x}"] .bn').first.text_content().strip() == '2 stun')
+    pg.select_option('#cpOther', 'flying'); pg.wait_for_timeout(200)
+    check('a keyword counter (flying) is a one-off toggle: + is disabled once it\'s there, and the card gains flying', card(pg, x)['kwc'] == 'flying' and pg.locator('#cpBody [data-cp="flying"][data-d="1"]').is_disabled() and pg.evaluate(f"__edhApi().Rules.has(__edhState().cards['{x}'], 'flying')"))
+    pg.click('#cpBody [data-cp="flying"][data-d="-1"]'); pg.wait_for_timeout(60)
+    check('…and − removes it', card(pg, x)['kwc'] == '')
+    pg.click('#modal [data-act=close]'); pg.wait_for_timeout(200)
+    check('closing logs one line with the card\'s counters', any('Walking Ballista counters — +3/+3, 2 stun' in l for l in logs(pg, 3)), str(logs(pg, 3)))
+    rclick(pg, x); pg.wait_for_timeout(250)
+    items = menu_items(pg)
+    check('card menu has one Counters… entry (with the current counters) instead of +1/+1 / −1/−1 / add / remove', any(i.startswith('Counters') and '+3/+3' in i for i in items) and not any(i in ('+1/+1 counter', '−1/−1 counter', 'Add a counter', 'Remove a counter') for i in items), str(items))
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(150)
+    # a non-creature with a named counter in its text gets that kind as its main row, no +1/+1 rows
+    ch = give(pg, 0, 'Everflowing Chalice', 'Artifact', 'battlefield', 'Multikicker {2}\nEverflowing Chalice enters with a charge counter on it for each time it was kicked.\n{T}: Add {C} for each charge counter on Everflowing Chalice.')
+    rclick(pg, ch); pg.wait_for_timeout(250); pg.locator('#menu .mi:has-text("Counters")').click(); pg.wait_for_timeout(300)
+    kinds = pg.locator('#cpBody .ctrrow').evaluate_all('els => els.map(e => e.dataset.kind)')
+    check('an artifact that names charge counters gets a charge row and no +1/+1 rows', kinds == ['charge'], str(kinds))
+    pg.click('#cpBody [data-cp="charge"][data-d="1"]'); pg.click('#cpBody [data-cp="charge"][data-d="1"]'); pg.wait_for_timeout(100)
+    check('charge counters land in the main counter badge', card(pg, ch)['ctr'] == 2 and pg.locator(f'.card[data-id="{ch}"] .bc').text_content().strip() == '2')
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(200)
+    # keyboard: C opens the panel, 1 / 2 still nudge +1/+1
+    pg.hover(f'.card[data-id="{a}"]', force=True); pg.keyboard.press('1'); pg.wait_for_timeout(100)
+    check('hotkey 1 still adds a +1/+1 counter', card(pg, a)['p1'] == 3)
+    pg.hover(f'.card[data-id="{a}"]', force=True); pg.keyboard.press('c'); pg.wait_for_timeout(300)
+    check('hotkey C opens the Counters panel', pg.locator('#cpBody').count() == 1 and 'Mindless Automaton' in pg.locator('#modal h2').text_content())
+    pg.keyboard.press('Escape'); pg.wait_for_timeout(200)
+    # counters clear when the card leaves the battlefield
+    pg.evaluate(f"__edhApi().moveCard('{x}', 0, 'graveyard')"); pg.wait_for_timeout(300)
+    check('leaving the battlefield clears every kind of counter', card(pg, x) == {'p1': 0, 'ctr': 0, 'cn': None, 'kwc': '', 'zone': 'graveyard'}, str(card(pg, x)))
+    # ---- bots read counter text ----
+    bk = give(pg, 1, 'Everflowing Chalice', 'Artifact', 'hand', 'Multikicker {2}\nEverflowing Chalice enters with a charge counter on it for each time it was kicked.\n{T}: Add {C} for each charge counter on Everflowing Chalice.')
+    pg.evaluate(f"__edhApi().moveCard('{bk}', 1, 'battlefield')"); pg.wait_for_timeout(400)
+    check('bot: an X / "for each" entry gets a sensible default (2) and says so in the log', card(pg, bk)['ctr'] == 2 and any('enters with 2 charge (X)' in l for l in logs(pg)), f"{card(pg, bk)} {logs(pg, 3)}")
+    bw = give(pg, 1, 'Hangarback Walker', 'Artifact Creature — Construct', 'hand', 'Hangarback Walker enters with X +1/+1 counters on it.', '0/0')
+    pg.evaluate(f"__edhApi().moveCard('{bw}', 1, 'battlefield')"); pg.wait_for_timeout(400)
+    check('bot: X +1/+1 counters default to 2 so the 0/0 survives', card(pg, bw)['p1'] == 2)
+    # bot ETB trigger: a stun counter goes on MY best creature, a shield counter on the bot's own
+    my = give(pg, 0, 'Big Bear', 'Creature — Bear', 'battlefield', '', '6/6')
+    st = give(pg, 1, 'Stunner', 'Creature — Wizard', 'hand', 'When Stunner enters, put a stun counter on target creature an opponent controls.', '2/2')
+    pg.evaluate(f"__edhApi().moveCard('{st}', 1, 'battlefield')"); pg.wait_for_timeout(900)
+    check('bot trigger "put a stun counter on target creature an opponent controls" lands on my creature', card(pg, my)['cn'] == {'stun': 1}, f"{card(pg, my)} {logs(pg, 4)}")
+    sh = give(pg, 1, 'Shielder', 'Creature — Knight', 'hand', 'When Shielder enters, put a shield counter on target creature you control.', '2/2')
+    pg.evaluate(f"__edhApi().moveCard('{sh}', 1, 'battlefield')"); pg.wait_for_timeout(900)
+    bot_cards = pg.evaluate("()=>{const s=__edhState(); return s.players[1].zones.battlefield.map(id=>s.cards[id]).filter(c=>c.cn&&c.cn.shield).map(c=>c.name)}")
+    check('bot trigger "put a shield counter on target creature you control" goes on one of its own creatures', bot_cards and 'Big Bear' not in bot_cards, f"{bot_cards} {logs(pg, 4)}")
+    fl = give(pg, 1, 'Winger', 'Creature — Bird', 'hand', 'When Winger enters, put a flying counter on target creature you control.', '1/1')
+    pg.evaluate(f"__edhApi().moveCard('{fl}', 1, 'battlefield')"); pg.wait_for_timeout(900)
+    kw = pg.evaluate("()=>{const s=__edhState(); return s.players[1].zones.battlefield.map(id=>s.cards[id]).filter(c=>(c.kwc||'').includes('flying')).map(c=>c.name)}")
+    check('bot keyword counter (flying) is a real keyword counter on its creature', bool(kw), f"{kw} {logs(pg, 4)}")
+    # proliferate grows named counters too (not stun)
+    pg.evaluate(f"__edhMut(st=>{{ st.cards['{ch}'].cn = {{ oil: 1 }}; }})")
+    pg.evaluate(f"__edhApi().runEffects(__edhState().cards['{ch}'], __edhApi().parseEffects('proliferate'), {{}})"); pg.wait_for_timeout(300)
+    check('proliferate adds to charge and oil counters (and skips stun)', card(pg, ch)['ctr'] == 3 and card(pg, ch)['cn'] == {'oil': 2} and card(pg, my)['cn'] == {'stun': 1}, f"{card(pg, ch)} {card(pg, my)}")
+    check('no JS errors', not errs, str(errs)[:300])
+    browser.close()
+fails = [r for r in results if not r[1]]
+print(f'\n{len(results) - len(fails)}/{len(results)} passed')
+for n, ok, note in fails: print('  FAIL', n, note)

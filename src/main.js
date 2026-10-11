@@ -5,7 +5,7 @@ import { net, rememberRoom, recallRoom } from './net.js';
 import { makeBot } from './bots.js';
 import * as Rules from './combat.js';
 import { parseList, deckStats, deckText } from './decklist.js';
-import { parseAbilities, parseEffects, staticGrant, boardRules, castTax, castBlock, spellKind, manaValue } from './effects.js';
+import { parseAbilities, parseEffects, staticGrant, boardRules, castTax, castBlock, spellKind, manaValue, counterKinds, entersWith, KW_COUNTERS } from './effects.js';
 import { deckLink, fetchLinkedDeck } from './deckimport.js';
 import { registerSW, canInstall, install, onInstallable, isIOS, toggleFullscreen, fullscreenOn, fullscreenSupported } from './pwa.js';
 import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId, saveRoomState, loadRoomState, setRoomVoice, touchRoomPlayer, updateRoomLive, myBlocks, blockUser, unblockUser, fileReport } from './supa.js';
@@ -229,7 +229,7 @@ function cardHTML(c, o = {}) {
   if (hidden) return `<div class="${cls} facedown" ${idA} style="${st}"><div class="ci back ${backOk ? 'pic' : ''}"><span>EC</span>${backOk ? `<img src="${CARD_BACK}" alt="" draggable="false" decoding="async">` : ''}</div></div>`;
   const host = c.attachedTo ? S.cards[c.attachedTo] : null; const tether = host ? `<div class="tether" title="Attached to ${esc(host.name)}">⟶ ${esc(host.name.split(',')[0].slice(0, 14))}</div>` : '';
   const sg = c.p1 > 0 ? '+' : '';
-  const over = `${c.p1 ? `<div class="bp">${sg}${c.p1}/${sg}${c.p1}</div>` : ''}${c.ctr ? `<div class="bc">${c.ctr}</div>` : ''}${c.dmg ? `<div class="dmg" title="Damage marked this turn">${c.dmg}</div>` : ''}${c.sick && c.zone === 'battlefield' && isCreature(c) && !Rules.has(c, 'haste') ? '<div class="zz" title="Summoning sick: can\'t attack until your next turn">zz</div>' : ''}${c.token ? '<div class="tk">Token</div>' : ''}${tether}`;
+  const over = `${c.p1 ? `<div class="bp">${sg}${c.p1}/${sg}${c.p1}</div>` : ''}${c.ctr ? `<div class="bc" title="${c.ctr} ${esc(mainKind(c) || 'counter')}">${c.ctr}</div>` : ''}${c.cn ? Object.entries(c.cn).map(([k, v]) => `<div class="bn" title="${v} ${esc(k)} counter${v > 1 ? 's' : ''}">${v} ${esc(k.slice(0, 6))}</div>`).join('') : ''}${c.kwc ? kwcList(c).map((k) => `<div class="bn kw" title="${esc(k)} counter">${esc(k.split(' ').map((w) => w.slice(0, 3)).join(' '))}</div>`).join('') : ''}${c.dmg ? `<div class="dmg" title="Damage marked this turn">${c.dmg}</div>` : ''}${c.sick && c.zone === 'battlefield' && isCreature(c) && !Rules.has(c, 'haste') ? '<div class="zz" title="Summoning sick: can\'t attack until your next turn">zz</div>' : ''}${c.token ? '<div class="tk">Token</div>' : ''}${tether}`;
   const src = faceSrc(c, o.big);
   if (src) {
     const mod = c.pt && ptModified(c) ? ptOf(c) : null;
@@ -327,7 +327,7 @@ function moveCard(id, pi, zone, o = {}) {
   const fromZone = c.zone;
   detach(c);
   if (c.token && zone !== 'battlefield' && zone !== 'stack') { delete S.cards[id]; S.attacks = S.attacks.filter((a) => a.id !== id); render(); FX.puff(from, colorHex(c)); SFX.play('pop'); return; }
-  if (fromZone === 'battlefield' && zone !== 'battlefield') { dropAttachments(c); c.attachedTo = null; c.kwc = ''; c.goad = null; c.animUntil = 0; c._dying = false; c.tapped = false; c.p1 = 0; c.ctr = 0; c.dmg = 0; c.sick = false; c.faceDown = false; c.flipped = false; S.attacks = S.attacks.filter((a) => a.id !== id); S.attacks.forEach((a) => { if (a.blockers && a.blockers.includes(id)) { a.blockers = a.blockers.filter((b) => b !== id); } }); }
+  if (fromZone === 'battlefield' && zone !== 'battlefield') { dropAttachments(c); c.attachedTo = null; c.kwc = ''; c.goad = null; c.animUntil = 0; c._dying = false; c.tapped = false; c.p1 = 0; c.ctr = 0; c.cn = null; c.dmg = 0; c.sick = false; c.faceDown = false; c.flipped = false; S.attacks = S.attacks.filter((a) => a.id !== id); S.attacks.forEach((a) => { if (a.blockers && a.blockers.includes(id)) { a.blockers = a.blockers.filter((b) => b !== id); } }); }
   if (fromZone === 'command' && c.isCmdr && o.cast) c.casts = (c.casts || 0) + 1;
   c.controller = (zone === 'battlefield' || zone === 'stack' || zone === 'hand') ? pi : c.owner;
   c.zone = zone;
@@ -339,7 +339,7 @@ function moveCard(id, pi, zone, o = {}) {
   if (zone === 'stack') S.stack.push(id);
   else { const list = P(c.controller).zones[zone]; if (zone === 'library') { o.bottom ? list.push(id) : list.unshift(id); } else list.push(id); }
   render();
-  if (zone === 'battlefield') { if (fromZone !== 'battlefield') { c.sick = true; if (/Planeswalker/.test(c.type) && c.loyalty) c.ctr = parseInt(c.loyalty, 10) || 0; if (/Saga/.test(c.type)) c.ctr = 0; } if (o.x == null) autoPlace(c); else { c.x = o.x; c.y = o.y; } render();
+  if (zone === 'battlefield') { if (fromZone !== 'battlefield') { c.sick = true; if (/Planeswalker/.test(c.type) && c.loyalty) c.ctr = parseInt(c.loyalty, 10) || 0; if (/Saga/.test(c.type)) c.ctr = 0; if (!o.noEnterCounters && net.isMine(c.controller)) applyEntersWith(c); } if (o.x == null) autoPlace(c); else { c.x = o.x; c.y = o.y; } render();
     if (fromZone !== 'battlefield' && MODE !== 'hotseat' && !o.forced) { const r = rulesFor(c.controller); const kinds = [...r.entersTapped]; const hit = kinds.find((k) => spellKind(c, k === 'nonbasic' ? 'nonbasic' : k) || (k === 'creature' && isCreature(c))); if (hit && !c.tapped) { const src = r.sources.find((x) => x.rule === 'entersTapped'); if (P(c.controller).bot) { c.tapped = true; log(`${c.name} enters tapped (${src ? src.name : 'board rule'})`); } else if (net.isMine(c.controller) && S.reminders !== false) toast(`${src ? src.name : 'Board rule'}: ${c.name} enters tapped`, 5000); } }
     if (fromZone !== 'battlefield' && MODE !== 'hotseat' && P(c.controller).bot && net.isMine(c.controller)) setTimeout(async () => { if (!S.cards[id] || c.zone !== 'battlefield') return; if (/Aura/.test(c.type)) { const host = bestHostFor(c.controller, c); if (host) { attachTo(c, host); log(`${c.name} enchants ${host.name}`); } else log(`${c.name} — choose what it enchants by hand`); } if (/Saga/.test(c.type)) { c.ctr = 1; await sagaChapter(c, 1); } }, 80);
     if (fromZone !== 'battlefield' && MODE !== 'hotseat') setTimeout(() => { if (S.cards[id] && c.zone === 'battlefield') { fireEvent('etb', { card: c }); if (/Land/.test(c.type)) fireEvent('landfall', { card: c }); if (isCreature(c)) fireEvent('creatureEnters', { card: c }); if (c.token) fireEvent('tokenEnters', { card: c }); } }, 60); }
@@ -548,6 +548,51 @@ function renderOpening() {
 }
 function toggleTap(c) { c.tapped = !c.tapped; if (MODE !== 'hotseat' && c.zone === 'battlefield') setTimeout(() => fireEvent(c.tapped ? 'becomesTapped' : 'becomesUntapped', { card: c }), 30); const el = cardEl(c.id); if (el) el.classList.toggle('tapped', c.tapped); SFX.play('tick'); queueSave(); requestAnimationFrame(drawArrows); }
 function counter(c, key, d) { c[key] = key === 'ctr' ? Math.max(0, (c[key] || 0) + d) : (c[key] || 0) + d; render(); FX.bounce(cardEl(c.id)?.querySelector(key === 'ctr' ? '.bc' : '.bp')); SFX.play('tick'); }
+/* ---------- Counters of every kind ----------
+   p1 = net +1/+1 (negative = -1/-1), ctr = the card's main named counter (loyalty, lore, level, charge…), cn = any
+   other named counters { stun: 1 }, kwc = keyword counters (flying, first strike…). Kinds come from the card's text. */
+const KW_CTR = new Set(KW_COUNTERS);
+function mainKind(c) { if (/Planeswalker/.test(c.type || '')) return 'loyalty'; if (/Saga/.test(c.type || '')) return 'lore'; const ks = counterKinds(c).filter((k) => !/^[+-]/.test(k) && !KW_CTR.has(k)); return ks[0] || null; }
+const kwcList = (c) => String(c.kwc || '').split(',').map((x) => x.trim()).filter(Boolean);
+function counterCount(c, kind) { if (kind === '+1/+1') return Math.max(0, c.p1 || 0); if (kind === '-1/-1') return Math.max(0, -(c.p1 || 0)); if (KW_CTR.has(kind)) return kwcList(c).includes(kind) ? 1 : 0; if (kind === (mainKind(c) || 'counter')) return c.ctr || 0; return (c.cn && c.cn[kind]) || 0; }
+function addCounter(c, kind, d) {
+  if (kind === '+1/+1') c.p1 = (c.p1 || 0) + d;
+  else if (kind === '-1/-1') c.p1 = (c.p1 || 0) - d;
+  else if (KW_CTR.has(kind)) { const l = kwcList(c).filter((k) => k !== kind); if (d > 0) l.push(kind); c.kwc = l.join(','); }
+  else if (kind === (mainKind(c) || 'counter')) c.ctr = Math.max(0, (c.ctr || 0) + d);
+  else { c.cn = { ...(c.cn || {}) }; c.cn[kind] = Math.max(0, (c.cn[kind] || 0) + d); if (!c.cn[kind]) delete c.cn[kind]; if (!Object.keys(c.cn).length) c.cn = null; }
+}
+// all kinds worth a row for this card: what its text names, what it already has, plus +1/+1 and -1/-1 for creatures
+function counterRows(c) {
+  const out = []; const push = (k) => { if (k && !out.includes(k)) out.push(k); };
+  if (isCreature(c) || c.p1) { push('+1/+1'); push('-1/-1'); }
+  push(mainKind(c)); if (c.ctr && !mainKind(c)) push('counter');
+  counterKinds(c).forEach(push); Object.keys(c.cn || {}).forEach(push); kwcList(c).forEach(push);
+  return out;
+}
+const OTHER_KINDS = ['charge', 'stun', 'shield', 'oil', 'time', 'age', 'fade', 'quest', 'verse', 'spore', 'storage', 'gold', 'ice', 'blood', 'brick', 'coin', 'finality', 'flood', 'ki', 'knowledge', 'omen', 'page', 'pressure', 'soul', 'study', 'task', 'tide', 'training', 'velocity', 'wish', 'flying', 'first strike', 'double strike', 'deathtouch', 'lifelink', 'trample', 'vigilance', 'menace', 'hexproof', 'indestructible', 'reach', 'haste'];
+function counterSummary(c) { const parts = []; if (c.p1) parts.push(`${c.p1 > 0 ? '+' : ''}${c.p1}/${c.p1 > 0 ? '+' : ''}${c.p1}`); const mk = mainKind(c) || 'counter'; if (c.ctr) parts.push(`${c.ctr} ${mk}`); Object.entries(c.cn || {}).forEach(([k, v]) => parts.push(`${v} ${k}`)); kwcList(c).forEach((k) => parts.push(k)); return parts.join(', '); }
+// The adjustable counter panel: every kind gets − count +; closing logs what changed as one line.
+function counterPanel(c, opt = {}) {
+  const before = counterSummary(c); let extra = [];
+  const row = (k) => { const n = counterCount(c, k); const kw = KW_CTR.has(k); return `<div class="dmgrow ctrrow" data-kind="${esc(k)}"><span><b>${esc(k)}</b> counter${kw ? '' : 's'}</span><div class="ctl"><button type="button" class="mini" data-cp="${esc(k)}" data-d="-1" ${n <= 0 ? 'disabled' : ''} aria-label="Remove a ${esc(k)} counter">−</button><span class="v">${n}</span><button type="button" class="mini" data-cp="${esc(k)}" data-d="1" ${kw && n ? 'disabled' : ''} aria-label="Add a ${esc(k)} counter">+</button></div></div>`; };
+  const body = () => { const kinds = counterRows(c); extra.forEach((k) => { if (!kinds.includes(k)) kinds.push(k); }); return kinds.map(row).join('') + `<div class="dmgrow ctradd"><span class="muted small">Another kind</span><select id="cpOther" aria-label="Add another kind of counter"><option value="">Choose…</option>${OTHER_KINDS.filter((k) => !kinds.includes(k)).map((k) => `<option value="${k}">${k}</option>`).join('')}<option value="__custom">Type a name…</option></select></div>`; };
+  const pt = () => (c.pt ? `<span class="muted small" id="cpPt">Now ${esc(ptOf(c))}</span>` : '');
+  openModal(`<h2>Counters on ${esc(c.name)}</h2><p>${opt.x ? `<b>${esc(c.name)} enters with X counters.</b> Set X now — nothing happens to it until you press Done.` : 'Press − or + on any kind. Cards that enter with counters already have them; bots add theirs from the card text.'}</p><div class="dmgrows" id="cpBody">${body()}</div><div class="row" style="justify-content:space-between;align-items:center">${pt()}<button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'narrow', onClose: () => { c.ctrPending = false; const after = counterSummary(c); if (after !== before) log(`${P(c.controller).name}: ${c.name} counters — ${after || 'none'}`); render(); } });
+  const m = $('#modal');
+  const refresh = () => { $('#cpBody').innerHTML = body(); const p = $('#cpPt'); if (p && c.pt) p.textContent = `Now ${ptOf(c)}`; render(); };
+  m.addEventListener('click', (e) => { const b = e.target.closest('[data-cp]'); if (!b) return; addCounter(c, b.dataset.cp, +b.dataset.d); SFX.play('tick'); refresh(); FX.bounce(cardEl(c.id)?.querySelector('.bp, .bc, .bn')); });
+  m.addEventListener('change', (e) => { if (e.target.id !== 'cpOther') return; let k = e.target.value; if (k === '__custom') k = (prompt('Counter name (e.g. "verse"):') || '').trim().toLowerCase().replace(/ counters?$/, ''); if (!k) { e.target.value = ''; return; } extra.push(k); addCounter(c, k, 1); refresh(); });
+}
+// "Enters with N counters": applied for everyone when the card arrives (it's printed on the card); X is set by hand.
+function applyEntersWith(c) {
+  const list = entersWith(c); if (!list.length) return;
+  const bot = P(c.controller).bot; const done = []; let unknown = false;
+  list.forEach(({ kind, n }) => { if (n === 'x') { if (bot) { addCounter(c, kind, 2); done.push(`2 ${kind} (X)`); } else unknown = true; return; } addCounter(c, kind, n); done.push(`${n} ${kind}`); });
+  if (done.length) log(`${c.name} enters with ${done.join(' and ')} counter${done.length > 1 || !/^1 /.test(done[0]) ? 's' : ''}`);
+  // a human's X: open the panel right away (and hold state-based actions so a 0/0 isn't buried before X is set)
+  if (unknown && net.isMine(c.controller)) { c.ctrPending = true; setTimeout(() => { if (S.cards[c.id] && c.zone === 'battlefield') counterPanel(c, { x: true }); else c.ctrPending = false; }, 120); }
+}
 function createTokens(pi, def, count) {
   const p = P(pi); let k = 0;
   const step = () => {
@@ -740,7 +785,7 @@ function wipeLocal(kind) {
 }
 
 /* ---------- Room sync ---------- */
-const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'dmg', 'kw', 'sick', 'anim', 'set', 'num', 'foil', 'tp', 'tt', 'tkw', 'attachedTo', 'kwc', 'goad', 'loyalty', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts'];
+const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'cn', 'dmg', 'kw', 'sick', 'anim', 'set', 'num', 'foil', 'tp', 'tt', 'tkw', 'attachedTo', 'kwc', 'goad', 'loyalty', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts'];
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
@@ -958,7 +1003,7 @@ function checkSBA() {
   for (let k = 0; k < S.seats; k++) {
     if (!net.isMine(k)) continue;
     for (const id of P(k).zones.battlefield.slice()) {
-      const c = S.cards[id]; if (!c || c._dying || !isCreature(c) || !c.pt || Rules.has(c, 'indestructible')) continue;
+      const c = S.cards[id]; if (!c || c._dying || c.ctrPending || !isCreature(c) || !c.pt || Rules.has(c, 'indestructible')) continue;
       const t = toughnessOf(c);
       if (t <= 0 || (c.dmg || 0) >= t) { log(`${c.name} ${t <= 0 ? 'has 0 toughness and' : 'has lethal damage and'} dies`); moveCard(id, c.owner, 'graveyard', { anim: 'fly' }); }
     }
@@ -1236,8 +1281,7 @@ function cardMenu(c, x, y) {
       if (Rules.canAttack(c).ok) S.players.forEach((p, k) => { if (k !== c.controller && !p.out && k < S.seats) add(`Attack ${p.name}`, () => attack(c, k)); });
     }
     sep();
-    add('+1/+1 counter', () => counter(c, 'p1', 1)); add('−1/−1 counter', () => counter(c, 'p1', -1));
-    add('Add a counter', () => counter(c, 'ctr', 1)); if (c.ctr) add('Remove a counter', () => counter(c, 'ctr', -1));
+    add(`Counters…${counterSummary(c) ? ` (${counterSummary(c)})` : ''}`, () => counterPanel(c));
     add(c.faceDown ? 'Turn face up' : 'Turn face down', () => { c.faceDown = !c.faceDown; render(); });
     add('Copy as token', () => createTokens(c.controller, { name: c.name, cost: '', type: /Token/.test(c.type) ? c.type : 'Token ' + c.type, pt: c.pt, colors: c.colors, img: c.img, big: c.big, backImg: c.backImg, backBig: c.backBig, artist: c.artist, copyOf: c.name }, 1));
     sep();
@@ -1394,7 +1438,7 @@ async function runEffects(src, effects, ctx = {}) {
       case 'surveil': { const lib = P(i).zones.library; const top = lib.slice(0, n); const landsOut = seatCards(i, (c) => /Land/.test(c.type)).length; const gone = top.filter((id) => (/Land/.test(S.cards[id].type) && landsOut >= 6) || (!/Land/.test(S.cards[id].type) && landsOut < 3 && !isCreature(S.cards[id]))); P(i).zones.library = top.filter((id) => !gone.includes(id)).concat(lib.slice(n)); gone.forEach((id) => { S.cards[id].zone = 'graveyard'; P(i).zones.graveyard.push(id); }); done.push(`surveil ${n}${gone.length ? ` (${gone.length} to the graveyard)` : ''}`); break; }
       case 'explore': { for (let k = 0; k < n; k++) { const id = P(i).zones.library[0]; if (!id) break; const top = S.cards[id]; const target = e.on === 'target' ? (seatCards(i, isCreature).sort((a, b) => valueOf(b) - valueOf(a))[0] || src) : src; if (/Land/.test(top.type)) { moveCard(id, i, 'hand', { anim: 'fly' }); done.push(`explore: ${top.name} to hand`); } else { if (target && target.zone === 'battlefield') target.p1 = (target.p1 || 0) + 1; done.push(`explore: +1/+1 counter (${top.name} stays on top)`); } } break; }
       case 'connive': { draw(i, 1); await wait(150); const hand = P(i).zones.hand.map((id) => S.cards[id]).sort((a, b) => valueOf(a) - valueOf(b)); const dis = hand[0]; if (dis) { moveCard(dis.id, i, 'graveyard', { anim: 'fly' }); if (!/Land/.test(dis.type) && src.zone === 'battlefield') src.p1 = (src.p1 || 0) + 1; done.push(`connive (discard ${dis.name}${!/Land/.test(dis.type) ? ', +1/+1 counter' : ''})`); } break; }
-      case 'proliferate': { let k = 0; seatCards(i).forEach((c) => { if (c.p1 > 0) { c.p1++; k++; } else if (c.ctr > 0 && !/Saga/.test(c.type)) { c.ctr++; k++; } }); if (P(i).energy) { P(i).energy++; k++; } oppsOf(i).forEach((o) => { seatCards(o, (c) => c.p1 < 0).forEach((c) => { c.p1--; k++; }); }); done.push(`proliferate (${k})`); break; }
+      case 'proliferate': { let k = 0; seatCards(i).forEach((c) => { if (c.p1 > 0) { c.p1++; k++; } else if (c.ctr > 0 && !/Saga/.test(c.type)) { c.ctr++; k++; } if (c.cn) Object.keys(c.cn).forEach((kk) => { if (kk !== 'stun') { c.cn[kk]++; k++; } }); }); if (P(i).energy) { P(i).energy++; k++; } oppsOf(i).forEach((o) => { seatCards(o, (c) => c.p1 < 0).forEach((c) => { c.p1--; k++; }); }); done.push(`proliferate (${k})`); break; }
       case 'dig': { const lib = P(i).zones.library.map((id) => S.cards[id]); const top = lib.slice(0, n); const want = top.filter((c) => !e.what || matchesWhat(c, e.what === 'land' ? 'Land' : e.what === 'basic land' ? 'Basic' : e.what)).sort((a, b) => valueOf(b) - valueOf(a)); const take = e.all ? want : want.slice(0, 1); take.forEach((c) => moveCard(c.id, i, e.take, { anim: e.take === 'battlefield' ? 'land' : 'fly' })); const rest = top.filter((c) => !take.includes(c)); if (e.bottom) { P(i).zones.library = P(i).zones.library.filter((id) => !rest.some((c) => c.id === id)).concat(rest.map((c) => c.id)); } done.push(take.length ? `look at ${n}, take ${take.map((c) => c.name).join(', ')}` : `look at ${n}, nothing to take`); break; }
       case 'impulse': { const ids = P(i).zones.library.slice(0, n); ids.forEach((id) => moveCard(id, i, 'exile', { anim: 'fly' })); const playable = ids.map((id) => S.cards[id]).filter((c) => c && (/Land/.test(c.type) ? !P(i).landPlayed : manaValue(c) <= (bot ? bot.manaAvailable(i) : 0))); const c = playable[0]; if (c) { if (/Land/.test(c.type)) moveCard(c.id, i, 'battlefield', { anim: 'land' }); else { if (bot) bot.payMana(i, manaValue(c)); moveCard(c.id, i, isPerm(c) ? 'battlefield' : 'graveyard', { anim: 'cast' }); if (!isPerm(c)) { const w = await runEffects(c, parseEffects(c.oracle || '')); if (w) log(`${c.name}: ${w}`); } } done.push(`exile ${n}, play ${c.name}`); } else done.push(`exile ${n} (nothing playable)`); break; }
       case 'fight': { const t = pickTarget(i, 'creature', true); if (!t) break; const me = isCreature(src) ? src : seatCards(i, isCreature).sort((a, b) => valueOf(b) - valueOf(a))[0]; if (!me) break; dmgTo(t, powerOf(me), me); dmgTo(me, powerOf(t), t); done.push(`${me.name} fights ${t.name}`); break; }
@@ -1402,9 +1446,9 @@ async function runEffects(src, effects, ctx = {}) {
       case 'gyExile': { const who = e.who === 'opponents' ? oppsOf(i) : [oppsOf(i).sort((a, b) => P(b).zones.graveyard.length - P(a).zones.graveyard.length)[0]].filter((k) => k != null); who.forEach((k) => { const ids = P(k).zones.graveyard.slice(); ids.forEach((id) => { if (net.isMine(k)) moveCard(id, k, 'exile', { anim: 'none' }); else request(k, 'cardTo', id, 'exile'); }); done.push(`exile ${P(k).name}'s graveyard (${ids.length})`); }); break; }
       case 'counterspell': { done.push('(counter: nothing to counter at sorcery speed)'); break; }
       case 'steal': { const t = pickTarget(i, e.what === 'nonland permanent' ? 'nonland permanent' : e.what, true); if (!t) break; const from = t.controller; moveCard(t.id, i, 'battlefield', { anim: 'fly', x: 0.5, y: 0.3 }); t.sick = !e.haste; if (e.untap) t.tapped = false; if (e.temp) t.stolenFrom = { seat: from, turn: S.turn.number }; done.push(`gain control of ${t.name}${e.temp ? ' until end of turn' : ''}`); break; }
-      case 'flicker': { const t = pickTarget(i, 'creature', true) || seatCards(i, isCreature)[0]; if (t) { t.tapped = false; t.dmg = 0; t.p1 = 0; done.push(`blink ${t.name}`); } break; }
+      case 'flicker': { const t = pickTarget(i, 'creature', true) || seatCards(i, isCreature)[0]; if (t) { t.tapped = false; t.dmg = 0; t.p1 = 0; t.cn = null; t.kwc = ''; done.push(`blink ${t.name}`); } break; }
       case 'kwcounter': { const targets = e.on === 'target' ? [seatCards(i, isCreature).sort((a, b) => valueOf(b) - valueOf(a))[0]].filter(Boolean) : [src]; targets.forEach((c) => { c.kwc = `${c.kwc || ''},${e.kw}`; }); if (targets.length) done.push(`${e.kw} counter on ${targets[0].name}`); break; }
-      case 'ctr': { const targets = e.on === 'target' ? [seatCards(i, (c) => /Artifact/.test(c.type)).sort((a, b) => valueOf(b) - valueOf(a))[0] || src].filter(Boolean) : [src]; targets.forEach((c) => { c.ctr = (c.ctr || 0) + n; }); done.push(`${n} ${e.kw} counter${n > 1 ? 's' : ''}`); break; }
+      case 'ctr': { const hostile = (/^(stun|age|time|fade|vanishing|doom|hatchling|plague|infection)/.test(e.kw) || /opponent controls|don't control/.test(e.what || '')) && /creature/.test(e.what || ''); const mine = (f) => seatCards(i, f).sort((a, b) => valueOf(b) - valueOf(a))[0]; const targets = e.on === 'target' ? [hostile ? pickTarget(i, 'creature', true) : /artifact/.test(e.what || '') ? mine((c) => /Artifact/.test(c.type)) : /creature/.test(e.what || '') ? mine(isCreature) : /land/.test(e.what || '') ? mine((c) => /Land/.test(c.type)) : mine(() => true)].filter(Boolean) : [src]; targets.forEach((c) => addCounter(c, e.kw, n)); done.push(`${n} ${e.kw} counter${n > 1 ? 's' : ''}${targets[0] && targets[0] !== src ? ` on ${targets[0].name}` : ''}`); break; }
       case 'doubleCounters': { const targets = e.on === 'mine' ? seatCards(i, (c) => c.p1 > 0) : e.on === 'target' ? [seatCards(i, (c) => c.p1 > 0).sort((a, b) => b.p1 - a.p1)[0]].filter(Boolean) : [src]; targets.forEach((c) => { c.p1 = (c.p1 || 0) * 2; }); done.push('double the counters'); break; }
       case 'tap': { const pool = oppsOf(i).flatMap((k) => seatCards(k, (c) => matchesWhat(c, e.what) && !c.tapped)).sort((a, b) => valueOf(b) - valueOf(a)); (e.all ? pool : pool.slice(0, n)).forEach((c) => { c.tapped = true; }); done.push(`tap ${e.all ? 'all' : n} ${e.what}${e.all || n > 1 ? 's' : ''}`); break; }
       case 'energy': { P(i).energy = (P(i).energy || 0) + n; done.push(`get ${n} energy`); break; }
@@ -2247,7 +2291,7 @@ const SHORTCUTS = [
   { keys: ['F'], label: 'Flip / transform (double-faced) or face-down', group: 'Cards' },
   { keys: ['L'], label: 'Look closer', group: 'Cards' },
   { keys: ['1', '2'], label: '+1/+1 counter · −1/−1 counter', group: 'Cards' },
-  { keys: ['C'], label: 'Counter (generic) on the card', group: 'Cards' },
+  { keys: ['C'], label: 'Counters panel (every kind, − / +)', group: 'Cards' },
   { keys: ['D'], label: 'Draw a card', group: 'Turn' },
   { keys: ['U'], label: 'Untap all your permanents', group: 'Turn' },
   { keys: ['S'], label: 'Shuffle your library', group: 'Turn' },
@@ -2302,7 +2346,7 @@ function onKey(e) {
     case 'l': if (canSee(c)) act(() => closerModal(c)); return;
     case '1': if (c.zone === 'battlefield') act(() => counter(c, 'p1', 1)); return;
     case '2': if (c.zone === 'battlefield') act(() => counter(c, 'p1', -1)); return;
-    case 'c': if (c.zone === 'battlefield') act(() => counter(c, 'ctr', 1)); return;
+    case 'c': if (c.zone === 'battlefield') act(() => counterPanel(c)); return;
   }
 }
 function shortcutsModal() {

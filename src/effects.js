@@ -86,7 +86,7 @@ export function parseEffects(text) {
     // --- counters and pumps ---
     if ((m = s.match(/put (a|an|two|three|four|five|x|\d+|that many) \+1\/\+1 counters? on (?:it|him|her|this creature|this permanent|this [a-z]+|~|target creature you control|target creature|another target creature you control|another target creature|each creature you control|each other creature you control|each creature|up to \w+ target creatures?|creatures you control|each creature token you control|each (?:[a-z]+) creature you control|each (?:[a-z]+) you control)/))) { const w = m[0]; const ft = (w.match(/each ([a-z]+) (?:creature )?you control/) || [])[1]; out.push({ k: 'counter', n: m[1] === 'that many' ? 'count' : num(m[1]), filter: ft && ft !== 'creature' && ft !== 'other' ? ft : null, on: /each creature you control|each other creature you control|creatures you control|each creature token|each [a-z]+ (?:creature )?you control/.test(w) ? 'mine' : /each creature(?! you)/.test(w) ? 'all' : /target/.test(w) ? 'target' : 'self', other: /each other/.test(w) }); }
     if ((m = s.match(/put (a|an|two|three|x|\d+) -1\/-1 counters? on (target creature|each creature|each creature your opponents control|each other creature|target creature an opponent controls)/))) out.push({ k: 'counter', n: -num(m[1]), on: /each creature your opponents/.test(m[2]) ? 'theirs' : /each/.test(m[2]) ? 'all' : 'target' });
-    if ((m = s.match(/put (a|an|two) (charge|loyalty|lore|oil|shield|flying|first strike|deathtouch|lifelink|trample|vigilance|menace|hexproof|indestructible|reach|double strike) counters? on (it|this [a-z]+|~|target creature|target artifact|target permanent|another target creature)/))) out.push({ k: /charge|oil|lore/.test(m[2]) ? 'ctr' : 'kwcounter', n: num(m[1]), kw: m[2], on: /target/.test(m[3]) ? 'target' : 'self' });
+    if ((m = s.match(new RegExp(`put (a|an|two|three|four|five|x|\\d+) (${CTR_WORD}) counters? on (it|this [a-z]+|~|target creature an opponent controls|target creature you don't control|target creature|target artifact|target permanent|target land|another target creature|target creature you control|up to one target creature)`)) ) && !/^[+-]/.test(m[2]) && !CTR_STOP.has(m[2])) out.push({ k: KW_COUNTERS.includes(m[2]) ? 'kwcounter' : 'ctr', n: num(m[1]), kw: m[2], on: /target/.test(m[3]) ? 'target' : 'self', what: m[3] });
     if ((m = s.match(/(target creature|target creature you control|another target creature|another target creature you control|creatures you control|each creature you control|it|this creature|that creature|~|they|those creatures) (?:each )?gets? \+(\d+|x)\/\+(\d+|x)(?: and (?:gains?|has) ([a-z ]+?))?(?: until end of turn|(?= and)|$)/)) && (/until end of turn/.test(s) || /^until end of turn/.test(s))) out.push({ k: 'pump', p: num(m[2]), t: num(m[3]), on: /creatures you control|each creature you control|they|those/.test(m[1]) ? 'mine' : /target/.test(m[1]) ? 'target' : 'self', kw: (m[4] || '').replace(/ and /g, ',') });
     if ((m = s.match(/(target creature|creatures you control|it|this creature|~) gains? ([a-z ]+?(?:, [a-z ]+)*(?:,? and [a-z ]+)?) until end of turn/)) && !/\+\d/.test(s)) out.push({ k: 'pump', p: 0, t: 0, on: /creatures you control/.test(m[1]) ? 'mine' : /target/.test(m[1]) ? 'target' : 'self', kw: m[2].replace(/,? and /g, ',').replace(/, /g, ',') });
     if ((m = s.match(/(target creature|creatures you control|each creature you control|~|it|this creature) (?:can't be blocked|gains? menace|gains? flying)[^.]*this turn/))) out.push({ k: 'pump', p: 0, t: 0, on: /creatures you control|each creature/.test(m[1]) ? 'mine' : /target/.test(m[1]) ? 'target' : 'self', kw: /can't be blocked/.test(s) ? 'unblockable' : /menace/.test(s) ? 'menace' : 'flying' });
@@ -112,6 +112,30 @@ export function parseEffects(text) {
 const EVERGREEN = ['flying', 'reach', 'first strike', 'double strike', 'deathtouch', 'trample', 'lifelink', 'indestructible', 'menace', 'vigilance', 'haste', 'defender', 'hexproof', 'flash', 'shroud', 'fear', 'intimidate', 'horsemanship', 'unblockable'];
 const ABILITY_WORD = /^(?:[a-z][a-z' -]*?) — (?=\S)/i;
 const lineKind = (l) => (/^whenever|^when |^at the beginning/.test(l) ? 'trigger' : /^[^:]{1,80}: /.test(l) ? 'activated' : 'static');
+/* ---------- Counters: which kinds a card talks about, and what it enters with ---------- */
+const selfText = (c) => { const name = String(c?.name || ''); const e = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); let t = String(c?.oracle || ''); if (name) { t = t.replace(new RegExp(e(name.split(' // ')[0]), 'g'), '~'); const n1 = name.split(',')[0]; if (n1.length > 3) t = t.replace(new RegExp(e(n1), 'g'), '~'); } return lc(t).replace(/\(.*?\)/g, ''); };
+export const KW_COUNTERS = ['flying', 'first strike', 'double strike', 'deathtouch', 'lifelink', 'trample', 'vigilance', 'menace', 'hexproof', 'indestructible', 'reach', 'haste', 'flash', 'shroud', 'defender', 'decayed', 'exalted'];
+const CTR_WORD = '(?:\\+1\\/\\+1|-1\\/-1|\\+1\\/\\+0|\\+0\\/\\+1|-0\\/-1|-1\\/-0|first strike|double strike|[a-z]+(?:-[a-z]+)?)';
+const CTR_STOP = new Set(['a', 'an', 'the', 'more', 'no', 'those', 'these', 'all', 'of', 'with', 'additional', 'that', 'any', 'each', 'x', 'many', 'fewer', 'other', 'another', 'their', 'its', 'your', 'remove', 'removes', 'removed', 'from', 'ability', 'abilities', 'spell', 'spells', 'be', 'is', 'has', 'have', 'had', 'most', 'or', 'and', 'less', 'number', 'kind', 'kinds', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'it', 'controller', 'player', 'opponent', 'you', 'they', 'remaining', 'both', 'fewest', 'such', 'as', 'put', 'on', 'counting', 'were', 'was', 'add', 'adds', 'several', 'move', 'moves', 'double', 'doubled', 'new', 'same', 'different', 'every', 'this', 'to', 'in', 'for', 'if', 'get', 'gets', 'own', 'half', 'total', 'instead', 'then', 'there', 'where', 'without', 'extra', 'twice', 'poison', 'energy', 'experience', 'rad', 'ticket']);
+export const counterLabel = (k) => (k === 'p1' ? '+1/+1' : k === 'm1' ? '-1/-1' : k);
+// Every counter kind named on the card, in order of first mention: '+1/+1', '-1/-1', 'loyalty', 'charge', 'stun', 'flying'…
+export function counterKinds(c) {
+  const t = selfText(c); const out = [];
+  if (/Planeswalker/.test(c?.type || '')) out.push('loyalty');
+  if (/Saga/.test(c?.type || '')) out.push('lore');
+  if (/\blevel up\b/.test(t)) out.push('level');
+  const re = new RegExp(`(?:^|[\\s(,"])(${CTR_WORD}) counters?\\b`, 'g'); let m;
+  while ((m = re.exec(t))) { const k = m[1]; if (CTR_STOP.has(k) || out.includes(k)) continue; out.push(k); }
+  return out;
+}
+// "~ enters with two +1/+1 counters on it" → [{ kind: '+1/+1', n: 2 }]; X / "a number of" → n: 'x' (set by hand)
+export function entersWith(c) {
+  const t = selfText(c); const out = [];
+  const head = /(?:~|this creature|this permanent|this artifact|this enchantment|this land|this [a-z]+) enters(?: the battlefield)? with ((?:(?:a|an|two|three|four|five|six|seven|eight|nine|ten|\d+|x|a number of|that many|an additional|twice that many) [^.]*?counters?)(?: and (?:a|an|two|three|four|five|six|seven|eight|nine|ten|\d+) [^.]*?counters?)*) on it/g;
+  const one = new RegExp(`(a|an|two|three|four|five|six|seven|eight|nine|ten|\\d+|x|a number of|that many|an additional|twice that many) (${CTR_WORD}) counters?`, 'g');
+  let m; while ((m = head.exec(t))) { const perEach = /^ for each/.test(t.slice(head.lastIndex)); let q; one.lastIndex = 0; while ((q = one.exec(m[1]))) { const n = perEach || /^(x|a number of|that many|twice that many)$/.test(q[1]) ? 'x' : q[1] === 'an additional' ? 1 : num(q[1]); if (!CTR_STOP.has(q[2])) out.push({ kind: q[2], n }); } }
+  return out;
+}
 export function parseAbilities(c) {
   const name = String(c.name || ''); const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   let text = String(c.oracle || '');

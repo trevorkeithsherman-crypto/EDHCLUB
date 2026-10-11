@@ -1096,6 +1096,8 @@ const sideVisible = () => { const sd = $('#side'); return sd && getComputedStyle
 let targeting = null;
 const expandedSeats = new Set();
 const isCompact = () => matchMedia('(max-width: 760px), (max-height: 520px)').matches;
+// the right panel is a toggle (hidden until Panel) below this width; above it, it is always there unless hidden
+const sideIsToggle = () => matchMedia('(max-width: 1100px)').matches || isCompact();
 function startTargeting(c) { targeting = { id: c.id, from: c.controller }; render(); }
 function stopTargeting() { targeting = null; render(); }
 const ptTag = (c) => (ptOf(c) ? ` <small>${esc(ptOf(c))}</small>` : '');
@@ -2351,7 +2353,7 @@ function bindUI() {
   $('#chatForm').onsubmit = (e) => { e.preventDefault(); const inp = $('#chatInput'); sendChat(inp.value); inp.value = ''; inp.focus(); };
   renderChat();
   $('#importBtn').onclick = () => { if (SPECTATE) { toast('Spectators don\'t bring a deck. Join with the table code to play.'); return; } importModal(S.view); };
-  $('#sideBtn').onclick = () => { const app = $('#app'); if (innerWidth <= 1280 || isCompact()) app.classList.toggle('show-side'); else app.classList.toggle('no-side'); if (sideTab === 'chat' && (app.classList.contains('show-side') || !app.classList.contains('no-side'))) { chatUnread = 0; renderChat(); } requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); };
+  $('#sideBtn').onclick = () => { const app = $('#app'); if (sideIsToggle()) app.classList.toggle('show-side'); else app.classList.toggle('no-side'); if (sideTab === 'chat' && (app.classList.contains('show-side') || !app.classList.contains('no-side'))) { chatUnread = 0; renderChat(); } requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); };
   $('#newBtn').onclick = () => { if (SPECTATE) { toast('You\'re watching this table'); return; } if (net.active && !net.isHost) { toast('Only the host can start a new game'); return; } confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { if (net.active) net.send('all', { fn: 'newGame' }); newGame(true); render(); clearChat('New game — chat cleared.'); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); }); };
   document.addEventListener('pointerdown', (e) => { if (S.sound) SFX.init(); onDown(e); });
   document.addEventListener('pointermove', onMove, { passive: false });
@@ -2366,7 +2368,9 @@ function bindUI() {
     if (t.closest('.ci.pic')) t.closest('.ci').classList.add('loading');
   }, true);
   const probe = new Image(); probe.onerror = () => { backOk = false; render(); }; probe.src = CARD_BACK;
-  addEventListener('resize', () => requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }));
+  // crossing the panel breakpoint (window resize, full screen, zoom) resets the toggle so the panel never gets stuck hidden
+  let wasToggle = sideIsToggle();
+  addEventListener('resize', () => requestAnimationFrame(() => { const t = sideIsToggle(); if (t !== wasToggle) { wasToggle = t; $('#app').classList.remove('show-side', 'no-side'); } sizeBattlefields(); fanHand(); drawArrows(); }));
   addEventListener('pagehide', () => { if (net.active) net.leave(); });
   $('#table').addEventListener('scroll', () => requestAnimationFrame(drawArrows), true);
   addEventListener('scroll', () => requestAnimationFrame(drawArrows));

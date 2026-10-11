@@ -3,7 +3,7 @@
 // between requests to stay inside Scryfall's rate guidance. Results are cached in
 // localStorage so a deck only hits the network the first time it is seated.
 
-const CACHE_KEY = 'edhclub-scryfall-v2';
+const CACHE_KEY = 'edhclub-scryfall-v3';
 // The standard Magic card back, as hosted by Scryfall (card_back_id 0aeebaf5-8c7d-4636-9e82-8c27447861f7).
 export const CARD_BACK = 'https://backs.scryfall.io/normal/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg';
 const API = 'https://api.scryfall.com/cards/collection';
@@ -18,7 +18,7 @@ function persist() {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Entries cached before art crops were stored are refetched once; the old key is cleared.
-try { localStorage.removeItem('edhclub-scryfall-v1'); } catch { /* ignore */ }
+try { localStorage.removeItem('edhclub-scryfall-v1'); localStorage.removeItem('edhclub-scryfall-v2'); } catch { /* ignore */ }
 export const cardKey = (name, set, num) => String(name).toLowerCase().split(' // ')[0].trim() + (set ? `|${String(set).toLowerCase()}|${String(num || '').toLowerCase()}` : '');
 export const printKey = (set, num) => `${String(set).toLowerCase()}|${String(num).toLowerCase()}`;
 
@@ -43,6 +43,10 @@ function toEntry(card) {
     type: card.type_line || front.type_line || '',
     pt: power != null ? `${power}/${toughness}` : '',
     colors: (card.colors || front.colors || card.color_identity || []).join(''),
+    identity: (card.color_identity || []).join(''),
+    mv: typeof card.cmc === 'number' ? card.cmc : 0,
+    usd: (card.prices && (card.prices.usd || card.prices.usd_foil)) || '',
+    legal: card.legalities ? (card.legalities.commander || '') : '',
     img: imgs.normal || '',
     art: imgs.art_crop || (backImgs && backImgs.art_crop) || '',
     big: imgs.large || imgs.normal || '',
@@ -140,4 +144,22 @@ export async function fetchPrintings(name) {
   } catch { /* offline */ }
   if (out.length) persist();
   printsCache[key] = out; return out;
+}
+
+/* ---------- Card search for the deck editor ---------- */
+const searchCache = {};
+/** Scryfall full-text search (one page, up to 175 cards). `q` uses Scryfall syntax; results are cached by name too. */
+export async function searchCards(q) {
+  const key = q.trim().toLowerCase(); if (!key) return [];
+  if (searchCache[key]) return searchCache[key];
+  try {
+    const res = await fetch(`https://api.scryfall.com/cards/search?order=name&unique=cards&q=${encodeURIComponent(q)}`);
+    if (res.status === 404) { searchCache[key] = []; return []; }
+    if (!res.ok) throw new Error(`Scryfall returned ${res.status}`);
+    const json = await res.json();
+    const out = (json.data || []).map(toEntry);
+    out.forEach((e) => { cache[cardKey(e.name)] = cache[cardKey(e.name)] || e; });
+    if (out.length) persist();
+    searchCache[key] = out; return out;
+  } catch (e) { if (/404/.test(String(e))) return []; throw e; }
 }

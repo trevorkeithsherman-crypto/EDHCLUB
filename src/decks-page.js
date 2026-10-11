@@ -1,7 +1,7 @@
 // Decks page: "My decks" (the account's library, up to 20) and the Top 100 from Archidekt.
 import { online, currentUser, saveDeck, getDeck, listDecks, deleteDeck, updateDeckMeta, setDefaultDeck, defaultDeckId, lastDeckId, setLastDeckId, localAvatar, displayNameFor, DECK_LIMIT } from './supa.js';
-import { fetchCards, fetchPrintings, cached } from './scryfall.js';
-import { parseList, deckStats, deckText } from './decklist.js';
+import { fetchCards, fetchPrintings, cached, searchCards } from './scryfall.js';
+import { parseList, deckStats, deckText, deckBreakdown } from './decklist.js';
 import { deckLink, fetchLinkedDeck } from './deckimport.js';
 
 const $ = (s, r = document) => r.querySelector(s); const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -68,10 +68,14 @@ async function editor(d, keep = null, openTab = 'auto') {
   const full = keep ? { name: keep.name, commander: '', list: keep.list, mat: d ? (await getDeck(d.id)).mat : 'auto' } : d ? await getDeck(d.id) : { name: '', commander: '', list: '', mat: 'auto' };
   openModal(`<h2>${d ? 'Edit deck' : 'New deck'}</h2>
   <div class="grid2"><label>Deck name<input id="edName" maxlength="40" value="${esc(full.name)}" placeholder="Krenko goblins" data-autofocus></label><label>Commander (optional)<input id="edCmd" value="${esc(keep ? keep.cmd : '')}" placeholder="Taken from the list if left blank"></label></div>
-  <div class="tabs"><button type="button" class="tab" data-ed="art">Cards</button><button type="button" class="tab on" data-ed="list">List</button></div>
+  <div class="tabs"><button type="button" class="tab" data-ed="art">Cards</button><button type="button" class="tab on" data-ed="list">List</button><button type="button" class="tab" data-ed="stats">Stats</button></div>
   <div id="edListWrap"><label>Decklist<textarea id="edList" rows="14" spellcheck="false" placeholder="Paste a Moxfield or Archidekt export, one card per line: 1 Sol Ring">${esc(full.list)}</textarea></label>
   <div class="summary" id="edSum"></div></div>
-  <div id="edArt" hidden><p class="muted small">Right-click a card (or tap ⋯) to change its artwork, foil, or count. Choices are written into the list as <code>(set) number</code> and <code>*F*</code>, so Moxfield and Archidekt read them too.</p><input type="search" id="edArtQ" class="zsearch" placeholder="Filter cards…" autocomplete="off"><div id="edArtCards"></div></div>
+  <div id="edArt" hidden>
+    <div class="addbar"><input type="search" id="edAddQ" class="zsearch" placeholder="Add a card: type a name (Scryfall syntax works: t:dragon o:flying)" autocomplete="off"><label class="chk" title="Only show cards inside the commander's color identity"><input type="checkbox" id="edAddId" checked> My colors</label></div>
+    <div id="edAddRes" class="addres" hidden></div>
+    <p class="muted small">Right-click a card (or tap ⋯) to change its artwork, foil, or count. Choices are written into the list as <code>(set) number</code> and <code>*F*</code>, so Moxfield and Archidekt read them too.</p><input type="search" id="edArtQ" class="zsearch" placeholder="Filter cards…" autocomplete="off"><div id="edArtCards"></div></div>
+  <div id="edStats" hidden></div>
   <div class="row" style="justify-content:space-between"><span class="muted small" id="edHint">${d ? '' : `${mine.length}/${DECK_LIMIT} decks used`}</span><span class="row"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn" id="edSave">${d ? 'Save changes' : 'Save deck'}</button></span></div>`, 'wide');
   const ta = $('#edList'); let names = [];
   const sum = async () => {
@@ -128,7 +132,57 @@ async function editor(d, keep = null, openTab = 'auto') {
     $('#artFoil').onchange = (ev) => { setText(applyPrintText(ta.value, e, e.set ? { set: e.set, num: e.num } : null, ev.target.checked)); e.foil = ev.target.checked; };
     $$('[data-pr]').forEach((b) => { b.onclick = () => { const x = prints[+b.dataset.pr]; const foil = $('#artFoil').checked || !!(x.finishes && !/nonfoil/.test(x.finishes)); setText(applyPrintText(ta.value, e, { set: x.set, num: x.num }, foil)); toast(`${e.name}: ${x.setName}`); close(); }; });
   }
-  $$('[data-ed]').forEach((t) => { t.onclick = () => { const v = t.dataset.ed; $$('[data-ed]').forEach((x) => x.classList.toggle('on', x === t)); $('#edListWrap').hidden = v !== 'list'; $('#edArt').hidden = v !== 'art'; if (v === 'art') artCards(); }; });
+  $$('[data-ed]').forEach((t) => { t.onclick = () => { const v = t.dataset.ed; $$('[data-ed]').forEach((x) => x.classList.toggle('on', x === t)); $('#edListWrap').hidden = v !== 'list'; $('#edArt').hidden = v !== 'art'; $('#edStats').hidden = v !== 'stats'; if (v === 'art') artCards(); if (v === 'stats') statsTab(); }; });
+  // ---- add cards: Scryfall search, filtered to the commander's colors by default; + adds a copy to the list ----
+  const identityOf = () => { const p = parseList(ta.value, $('#edCmd').value, typeOf); const id = [...new Set(p.cmd.flatMap((n) => ((cached(n) || {}).identity || '').split('')))].filter(Boolean).join(''); return id; };
+  const addCard = (name) => { const lines = ta.value.split(/\r?\n/); let hit = false; const out = lines.map((line) => { const m = line.match(/^(\d+)x?\s+(.+?)(\s+\([A-Za-z0-9]{2,6}\)\s+[\w★-]+)?(\s+\*[A-Za-z]\*)?(\s+\[sf=[^\]]+\])?\s*$/); if (m && m[2].trim().toLowerCase() === name.toLowerCase() && !hit) { hit = true; return line.replace(/^(\d+)/, String(+m[1] + 1)); } return line; });
+    if (!hit) { const hasDeck = /^deck$/im.test(ta.value); if (hasDeck) { const idx = out.findIndex((l) => /^deck$/i.test(l.trim())); out.splice(idx + 1, 0, `1 ${name}`); } else out.push(`1 ${name}`); }
+    setText(out.join('\n').replace(/\n{3,}/g, '\n\n')); toast(`Added ${name}`); };
+  let addT = 0, addSeq = 0;
+  const runAdd = async () => {
+    const q = $('#edAddQ').value.trim(); const box = $('#edAddRes'); if (q.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+    const seq = ++addSeq; const id = identityOf(); const useId = $('#edAddId').checked && id;
+    const full = `${/[:<>=]/.test(q) ? q : `name:${JSON.stringify(q)}`} f:commander${useId ? ` id<=${id}` : ''} -is:digital`;
+    box.hidden = false; box.innerHTML = '<p class="muted small">Searching Scryfall…</p>';
+    let res = []; try { res = await searchCards(full); } catch (e) { if (seq === addSeq) box.innerHTML = `<p class="muted small">Scryfall didn't answer (${esc(e.message)}).</p>`; return; }
+    if (seq !== addSeq) return;
+    const p = parseList(ta.value, $('#edCmd').value, typeOf); const have = new Map(p.main.map((e) => [e.name.toLowerCase(), e.n])); p.cmd.forEach((n) => have.set(n.toLowerCase(), 1));
+    box.innerHTML = res.length ? `<div class="addlist">${res.slice(0, 40).map((c, k) => `<div class="addrow" data-ar="${k}">${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy">` : '<span class="ph"></span>'}<span class="addinfo"><b>${esc(c.name)}</b><small>${esc(c.type)} · ${c.cost ? esc(c.cost.replace(/[{}]/g, '')) : '—'}${c.usd ? ` · $${esc(c.usd)}` : ''}</small></span>${have.has(c.name.toLowerCase()) ? `<span class="chip">in deck ×${have.get(c.name.toLowerCase())}</span>` : ''}<button type="button" class="btn sm" data-add="${k}">+ Add</button></div>`).join('')}</div>${res.length > 40 ? `<p class="muted small">Showing 40 of ${res.length}; type more to narrow it.</p>` : ''}` : `<p class="muted small">No cards match${useId ? ` inside ${id || 'these colors'} — untick "My colors" to widen it` : ''}.</p>`;
+    $$('[data-add]').forEach((b) => { b.onclick = () => addCard(res[+b.dataset.add].name); });
+    $$('[data-ar] img').forEach((im) => { im.onclick = () => { const c = res[+im.closest('[data-ar]').dataset.ar]; const pop = $('#modal2'); pop.innerHTML = `<div class="scrim" data-close2="1"></div><div class="mpanel narrow" role="dialog"><img src="${esc(c.big || c.img)}" alt="${esc(c.name)}" style="width:100%;border-radius:4.75%/3.4%"><p class="muted small" style="margin-top:8px">${esc(c.oracle || '')}</p><div class="row" style="justify-content:flex-end"><button type="button" class="btn" id="addBig">+ Add ${esc(c.name)}</button></div></div>`; pop.hidden = false; pop.querySelector('[data-close2]').onclick = () => { pop.hidden = true; pop.innerHTML = ''; }; $('#addBig').onclick = () => { addCard(c.name); pop.hidden = true; pop.innerHTML = ''; }; }; });
+  };
+  $('#edAddQ').oninput = () => { clearTimeout(addT); addT = setTimeout(runAdd, 350); }; $('#edAddQ').onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); clearTimeout(addT); runAdd(); } if (ev.key === 'Escape') { $('#edAddQ').value = ''; runAdd(); } };
+  $('#edAddId').onchange = runAdd;
+  // ---- stats: curve, colors, types, price, identity and legality checks, playtest hand ----
+  async function statsTab() {
+    const p = parseList(ta.value, $('#edCmd').value, typeOf); const box = $('#edStats');
+    const need = [...new Set([...p.cmd, ...p.main.map((e) => e.name)])].filter((n) => !cached(n) || cached(n).mv === undefined);
+    if (need.length) { box.innerHTML = '<p class="muted small">Loading card data…</p>'; try { await fetchCards(need.slice(0, 200)); } catch { /* offline */ } }
+    const b = deckBreakdown(p, (n) => cached(n)); const st = deckStats(p, typeOf);
+    const maxC = Math.max(1, ...b.curve); const pipTotal = Math.max(1, Object.values(b.colors).reduce((a, x) => a + x, 0));
+    const typeOrder = ['Creature', 'Instant', 'Sorcery', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle', 'Land', 'Other'];
+    box.innerHTML = `<div class="statgrid">
+      <div class="stat"><div class="eyebrow">Mana curve · avg ${b.avgMv.toFixed(2)} (nonland)</div><div class="curve">${b.curve.map((n, mv) => `<div class="bar" title="${n} card${n === 1 ? '' : 's'} at ${mv}${mv === 7 ? '+' : ''}"><i style="height:${Math.round(n / maxC * 100)}%"></i><b>${n || ''}</b><small>${mv}${mv === 7 ? '+' : ''}</small></div>`).join('')}</div></div>
+      <div class="stat"><div class="eyebrow">Color pips</div><div class="pipbars">${['W', 'U', 'B', 'R', 'G', 'C'].filter((k) => b.colors[k]).map((k) => `<div class="pipbar"><i class="ms ms-${k.toLowerCase()} ms-cost"></i><span class="track"><span class="fill c-${k.toLowerCase()}" style="width:${Math.round(b.colors[k] / pipTotal * 100)}%"></span></span><b>${b.colors[k]}</b></div>`).join('') || '<p class="muted small">No colored pips yet.</p>'}</div>
+        <p class="muted small">Identity: ${b.identity ? b.identity.split('').map((k) => `<i class="ms ms-${k.toLowerCase()} ms-cost"></i>`).join(' ') : 'colorless'} · ${b.lands} lands / ${b.nonland} spells</p></div>
+      <div class="stat"><div class="eyebrow">Types</div><ul class="typelist">${typeOrder.filter((t) => b.types[t]).map((t) => `<li><span>${t}</span><b>${b.types[t]}</b></li>`).join('')}</ul></div>
+      <div class="stat"><div class="eyebrow">Price (Scryfall, USD)</div><p class="big">$${b.price.toFixed(0)}</p><p class="muted small">${b.priced} of ${b.total} cards priced${b.unknown ? `; ${b.unknown} unknown` : ''}. Market prices move; treat it as a ballpark.</p></div>
+      <div class="stat wide"><div class="eyebrow">Checks</div><ul class="checks">
+        <li class="${st.total === 100 ? 'ok' : 'bad'}">${st.total === 100 ? '✓' : '✕'} ${st.total} cards</li>
+        <li class="${p.cmd.length ? 'ok' : 'bad'}">${p.cmd.length ? '✓' : '✕'} Commander: ${esc(p.cmd.join(' + ') || 'none')}</li>
+        <li class="${b.offColor.length ? 'bad' : 'ok'}">${b.offColor.length ? `✕ Outside the commander's colors: ${esc(b.offColor.slice(0, 6).join(', '))}${b.offColor.length > 6 ? '…' : ''}` : '✓ Everything is in the commander\'s color identity'}</li>
+        <li class="${b.notLegal.length ? 'bad' : 'ok'}">${b.notLegal.length ? `✕ Not Commander-legal: ${esc(b.notLegal.slice(0, 6).join(', '))}${b.notLegal.length > 6 ? '…' : ''}` : '✓ All cards are Commander-legal'}</li>
+        ${st.issues.filter((i) => !/^No commander|cards \(Commander/.test(i)).map((i) => `<li class="bad">✕ ${esc(i)}</li>`).join('')}
+      </ul></div>
+      <div class="stat wide"><div class="eyebrow">Playtest hand</div><div class="row" style="margin-bottom:8px"><button type="button" class="btn sm" id="ptNew">Draw 7</button><button type="button" class="btn ghost sm" id="ptOne">Draw one more</button><span class="muted small" id="ptNote"></span></div><div class="pthand" id="ptHand"></div></div>
+    </div>`;
+    let pool = [];
+    const shuffle = () => { pool = p.main.flatMap((e) => Array(e.n).fill(e.name)); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; } };
+    const drawTo = (hand) => { const unknownN = hand.filter((n) => !cached(n)); if (unknownN.length) fetchCards(unknownN).then(() => drawTo(hand)).catch(() => {}); $('#ptHand').innerHTML = hand.map((n) => { const c = cached(n); return `<div class="ptcard" title="${esc(n)}">${c && c.img ? `<img src="${esc(c.img)}" alt="${esc(n)}">` : `<span class="ph">${esc(n)}</span>`}</div>`; }).join(''); const lands = hand.filter((n) => /Land/.test((cached(n) || {}).type || '')).length; $('#ptNote').textContent = hand.length ? `${hand.length} cards · ${lands} land${lands === 1 ? '' : 's'}` : ''; };
+    let hand = [];
+    $('#ptNew').onclick = () => { shuffle(); hand = pool.splice(0, 7); drawTo(hand); };
+    $('#ptOne').onclick = () => { if (!pool.length && !hand.length) shuffle(); if (pool.length) { hand.push(pool.shift()); drawTo(hand); } };
+  }
   $('#edArtQ').oninput = artCards;
   if (openTab === 'art' || (openTab === 'auto' && full.list.trim())) $('[data-ed=art]').click();
   $('#edSave').onclick = async () => {

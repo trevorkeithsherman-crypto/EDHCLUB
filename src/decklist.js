@@ -42,3 +42,22 @@ export function deckStats(d, typeOf = () => '') {
 }
 const tag = (e) => (e.set && e.num ? ` (${e.set}) ${e.num}` : '') + (e.foil ? ' *F*' : '') + (e.sfid ? ` [sf=${e.sfid}]` : '');
 export function deckText(d) { return `Commander\n${d.cmd.map((n) => '1 ' + n + tag(d.cmdPrints?.[n] || {})).join('\n')}\n\nDeck\n${d.main.map((e) => e.n + ' ' + e.name + tag(e)).join('\n')}`; }
+
+/** Curve, colors, types, price and identity checks for the Stats tab. `entryOf(name)` returns a cached Scryfall entry or null. */
+export function deckBreakdown(d, entryOf) {
+  const all = [...d.cmd.map((n) => ({ name: n, n: 1, cmdr: true })), ...d.main];
+  const identity = new Set(d.cmd.flatMap((n) => ((entryOf(n) || {}).identity || '').split('')).filter(Boolean));
+  const curve = Array(8).fill(0); const colors = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }; const types = {}; let mvSum = 0, mvN = 0, lands = 0, price = 0, priced = 0, unknown = 0; const offColor = []; const notLegal = [];
+  for (const e of all) {
+    const c = entryOf(e.name); if (!c) { unknown += e.n; continue; }
+    const t = c.type || ''; const isLand = /Land/.test(t);
+    const main = /Creature/.test(t) ? 'Creature' : /Planeswalker/.test(t) ? 'Planeswalker' : /Battle/.test(t) ? 'Battle' : /Instant/.test(t) ? 'Instant' : /Sorcery/.test(t) ? 'Sorcery' : /Artifact/.test(t) ? 'Artifact' : /Enchantment/.test(t) ? 'Enchantment' : isLand ? 'Land' : 'Other';
+    types[main] = (types[main] || 0) + e.n;
+    if (isLand) lands += e.n; else { const mv = Math.min(7, Math.round(c.mv || 0)); curve[mv] += e.n; mvSum += (c.mv || 0) * e.n; mvN += e.n; }
+    for (const m of (c.cost || '').match(/\{[^}]+\}/g) || []) { const v = m.slice(1, -1).toUpperCase(); for (const k of ['W', 'U', 'B', 'R', 'G']) if (v.includes(k)) colors[k] += e.n; if (v === 'C') colors.C += e.n; }
+    if (c.usd) { price += parseFloat(c.usd) * e.n; priced += e.n; }
+    if (!e.cmdr && identity.size && (c.identity || '').split('').some((k) => k && !identity.has(k))) offColor.push(e.name);
+    if (c.legal && c.legal !== 'legal' && c.legal !== 'restricted') notLegal.push(`${e.name} (${c.legal.replace('_', ' ')})`);
+  }
+  return { curve, colors, types, avgMv: mvN ? mvSum / mvN : 0, lands, nonland: mvN, price, priced, unknown, identity: [...identity].join(''), offColor, notLegal, total: all.reduce((a, e) => a + e.n, 0) };
+}

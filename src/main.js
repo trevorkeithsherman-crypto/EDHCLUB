@@ -933,6 +933,13 @@ function matOf(i) {
   return autoMats()[i] || MAT_FALLBACK[i % MAT_FALLBACK.length];
 }
 const others = () => [1, 2, 3].map((k) => (S.view + k) % 4).filter((k) => k < (S.seats || 4));
+// Seats that take space on the table. Before the game starts every seat shows (open ones say "Waiting…" so people
+// can still sit down); once it has started only the players still in it get room, so a 4-pod that loses two becomes
+// a 1v1 split board instead of leaving dead space. A knocked-out seat lingers 2.6s so the crack is seen.
+const OUT_LINGER = 2600;
+function seatShown(k) { const p = P(k); if (!p || k >= (S.seats || 4)) return false; if (!gameStarted()) return true; if (p.empty) return false; if (p.out) return Date.now() - (p.outAt || 0) < OUT_LINGER; return true; }
+const shownOthers = () => others().filter(seatShown);
+let collapseT = 0;
 function avatarHTML(i, big) {
   const p = P(i); const c = commandersOf(i)[0];
   const ring = c ? colorHex(c) : css('--gold');
@@ -975,7 +982,7 @@ function seatHTML(i, full) {
   const mat = matOf(i); const matStyle = mat === 'custom' ? ` style="background-image:url(${customMats[i]})"` : '';
   const labels = full ? '<span class="zl top">Battlefield</span><span class="zl bot">Lands</span>' : '';
   const minis = full ? '' : `<button type="button" class="xp" data-act="expand" data-p="${i}" title="Expand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button><div class="minipiles">${mp('hand', 'Hand', p.zones.hand.length)}${mp('library', 'Lib', p.zones.library.length)}${mp('graveyard', 'GY', p.zones.graveyard.length)}${mp('exile', 'Ex', p.zones.exile.length)}${mp('command', 'Cmd', p.zones.command.length)}</div>`;
-  return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''} ${expandedSeats.has(i) ? 'expanded' : ''} ${targeting && i !== targeting.from && !p.out && i < S.seats ? 'targetable' : ''}" data-seat="${i}" data-mat="${mat}"${matStyle}>${plate}<div class="bf" data-zone="p${i}-battlefield">${labels}${empty}${bf}</div>${minis}${dock}${crack}</div>`;
+  return `<div class="seat ${active ? 'active' : ''} ${p.out ? 'out' : ''} ${expandedSeats.has(i) || (!full && shownOthers().length === 1) ? 'expanded' : ''} ${targeting && i !== targeting.from && !p.out && i < S.seats ? 'targetable' : ''}" data-seat="${i}" data-mat="${mat}"${matStyle}>${plate}<div class="bf" data-zone="p${i}-battlefield">${labels}${empty}${bf}</div>${minis}${dock}${crack}</div>`;
 }
 function renderTurn() { $('#turn').innerHTML = ''; }
 function renderMid() {
@@ -1012,10 +1019,14 @@ function checkSBA() {
 function render() {
   clearTimeout(sbaT); sbaT = setTimeout(checkSBA, 300);
   renderTurn();
-  $('#opps').innerHTML = others().map((i) => seatHTML(i, false)).join('');
+  const vis = shownOthers();
+  $('#opps').innerHTML = vis.map((i) => seatHTML(i, false)).join('');
   $('#me').innerHTML = seatHTML(S.view, true);
   renderMid(); syncTools(); fanHand(); watchHand();
-  $('#opps').style.gridTemplateColumns = `repeat(${Math.max(1, (S.seats || 4) - 1)}, minmax(0, 1fr))`;
+  $('#opps').style.gridTemplateColumns = `repeat(${Math.max(1, vis.length)}, minmax(0, 1fr))`;
+  const tbl = $('#table'); if (tbl && tbl.dataset.opps !== String(vis.length)) { tbl.dataset.opps = vis.length; requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); }
+  // a seat that just went out collapses once its crack has played
+  const lingering = others().some((k) => P(k).out && Date.now() - (P(k).outAt || 0) < OUT_LINGER); if (lingering && !collapseT) collapseT = setTimeout(() => { collapseT = 0; render(); }, OUT_LINGER + 100);
   sizeBattlefields(); Ambient.sync();
   net.queueSync(seatSnap, sharedSnap); queuePersist(); pushListing();
   if (net.active && net.ready && net.seat != null) rememberRoom(ROOM.code, { seat: net.seat, clientId: undefined, ...recallRoom(ROOM.code), mine: net.ownedSeats().map(seatSnap), shared: sharedSnap(), deck: { id: P(net.seat).deckId, name: P(net.seat).deckName } });
@@ -1060,10 +1071,15 @@ function fanHand() {
 }
 // Size battlefield cards so two rows (spells on top, lands below) always fit the mat.
 function sizeBattlefields() {
-  $$('.bf').forEach((el) => {
-    const h = el.clientHeight; if (!h) return;
-    const max = el.closest('.opps') ? Math.round(Math.min(80, Math.max(40, innerWidth * 0.048, innerHeight * 0.075))) : Math.round(Math.min(130, Math.max(56, Math.min(innerWidth * 0.075, innerHeight * 0.13))));
-    el.style.setProperty('--cw', Math.max(30, Math.min(max, Math.floor((h * 0.45) / RATIO))) + 'px');
+  const nOpp = +($('#table')?.dataset.opps || 3);
+  const mineMax = Math.round(Math.min(130, Math.max(56, Math.min(innerWidth * 0.075, innerHeight * 0.13))));
+  const fit = (el, max) => Math.max(30, Math.min(max, Math.floor((el.clientHeight * 0.45) / RATIO)));
+  let myCw = 0; const me = $('.me .bf'); if (me && me.clientHeight) { myCw = fit(me, mineMax); me.style.setProperty('--cw', myCw + 'px'); }
+  $$('.opps .bf').forEach((el) => {
+    if (!el.clientHeight) return;
+    // 1v1 and 1v2: opponents' cards are the same size as mine (a fair split board); 1v3 keeps the compact strip
+    const max = nOpp <= 2 ? (myCw || mineMax) : Math.round(Math.min(80, Math.max(40, innerWidth * 0.048, innerHeight * 0.075)));
+    el.style.setProperty('--cw', fit(el, max) + 'px');
   });
 }
 function drawArrows() {

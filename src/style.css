@@ -56,6 +56,16 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round
 
 /* ---------- Table ---------- */
 .table { display: grid; grid-template-rows: minmax(120px, 28%) auto minmax(0, 1fr); min-height: 0; min-width: 0; background: var(--bg); position: relative; }
+/* The table reshapes to who is actually playing: 1v1 is a split board, 1v2 a wide pair, 1v3 the classic strip. */
+.table[data-opps="1"] { grid-template-rows: minmax(180px, 40%) auto minmax(0, 1fr); }
+.table[data-opps="1"] .opps .bf { margin-top: 70px; }
+.table[data-opps="1"] .opps .avatar { width: 54px; height: 54px; } .table[data-opps="1"] .opps .avatar .init { font-size: 20px; }
+.table[data-opps="1"] .opps .lifebadge { height: 30px; font-size: 18px; right: -18px; } .table[data-opps="1"] .opps .plate { left: 14px; top: 12px; }
+.table[data-opps="1"] .opps .pname { font-size: 15px; } .table[data-opps="1"] .opps .cmdn { font-size: 13px; }
+.table[data-opps="1"] .opps .bf::after { content: "Battlefield"; position: absolute; right: 12px; top: 8px; font: 600 10px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: rgba(255, 255, 255, .22); pointer-events: none; }
+.table[data-opps="2"] { grid-template-rows: minmax(150px, 34%) auto minmax(0, 1fr); }
+.table[data-opps="2"] .opps .bf { margin-top: 62px; }
+.table[data-opps="0"] { grid-template-rows: 0 auto minmax(0, 1fr); } .table[data-opps="0"] .opps { display: none; }
 .opps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); min-height: 0; --cw: 64px; }
 .me { min-height: 0; display: grid; }
 
@@ -370,9 +380,13 @@ body.is-drag, body.is-drag * { cursor: grabbing !important; }
   .rail-sp { display: none; } .rail-btn { width: 44px; height: 40px; padding: 0; justify-content: center; } .rail-btn span { display: none; } 
   .rail-btn svg { width: 22px; height: 22px; }
   .rail-seat { flex-direction: row; gap: 4px; } .rail-seat span { display: none; } .rail-seat select { width: auto; max-width: 96px; }
-  .table { grid-template-rows: var(--opp-h) auto minmax(0, 1fr); }
+  .table, .table[data-opps] { grid-template-rows: var(--opp-h) auto minmax(0, 1fr); }
+  .table[data-opps="1"] { --opp-h: clamp(170px, 32dvh, 320px); } .table[data-opps="2"] { --opp-h: 140px; }
+  .table[data-opps="1"] .opps .seat.expanded { height: var(--opp-h); } .table[data-opps="1"] .xp { display: none; }
+  .table[data-opps="1"] .opps .seat.expanded .bf { margin-top: 52px; }
+  .table[data-opps="0"] { --opp-h: 0px; }
   /* opponents: a strip of tiles; tap the arrow to open one up */
-  .opps { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; --cw: 30px; grid-auto-rows: var(--opp-h); }
+  .opps { --cw: 30px; grid-auto-rows: var(--opp-h); }
   .opps .seat { height: var(--opp-h); }
   .opps .seat.expanded { grid-column: 1 / -1; height: 190px; }
   .table:has(.opps .seat.expanded) { grid-template-rows: auto auto minmax(0, 1fr); }
@@ -429,6 +443,7 @@ body.is-drag, body.is-drag * { cursor: grabbing !important; }
   :root { --rail-h: 40px; --opp-h: 72px; }
   .rail-btn { height: 36px; } .logo .crest { width: 30px; height: 30px; }
   .opps .seat.expanded { height: 108px; }
+  .table[data-opps="1"] { --opp-h: clamp(72px, 22dvh, 100px); } .table[data-opps="2"] { --opp-h: 76px; }
   .opps .plate { top: 4px; } .opps .avatar { width: 26px; height: 26px; } .opps .lifebadge { height: 16px; font-size: 10px; }
   .opps .bf { margin-top: 30px; } .opps .seat.expanded .bf { margin-top: 34px; }
   .turnbar { padding: 3px 8px; } .ph { padding: 5px 8px; min-height: 26px; font-size: 10px; } .midtools .btn { padding: 3px 8px; font-size: 10px; }

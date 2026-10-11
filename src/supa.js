@@ -223,3 +223,42 @@ export async function updateDeckMeta(id, patch) { if (!supa || !id) return; awai
 export async function bumpDeckPlays(id) { if (!supa || !id) return; const d = await getDeck(id); if (d) await supa.from('decks').update({ plays: (d.plays || 0) + 1, last_played_at: new Date().toISOString() }).eq('id', id); }
 export async function setDefaultDeck(id) { setLastDeckId(id); const user = await currentUser(); if (supa && user) await supa.from('profiles').update({ default_deck_id: id || null }).eq('id', user.id); }
 export async function defaultDeckId() { const local = lastDeckId(); if (local) return local; const user = await currentUser(); if (!supa || !user) return ''; const { data } = await supa.from('profiles').select('default_deck_id').eq('id', user.id).maybeSingle(); if (data?.default_deck_id) setLastDeckId(data.default_deck_id); return data?.default_deck_id || ''; }
+
+/* ---------- Game persistence and resume ---------- */
+/** The host saves the whole table (every seat + shared state) so it survives everyone leaving. */
+export async function saveRoomState(code, state, voiceUrl) {
+  if (!supa) return;
+  const u = await currentUser();
+  const row = { code, state, saved_by: u ? u.id : null, updated_at: new Date().toISOString() };
+  if (voiceUrl !== undefined) row.voice_url = voiceUrl || null;
+  const { error } = await supa.from('room_state').upsert(row, { onConflict: 'code' });
+  if (error) throw error;
+}
+export async function loadRoomState(code) {
+  if (!supa) return null;
+  const { data } = await supa.from('room_state').select('*').eq('code', code).maybeSingle();
+  return data || null;
+}
+export async function setRoomVoice(code, voiceUrl) {
+  if (!supa) return;
+  const cur = await loadRoomState(code);
+  if (cur) await supa.from('room_state').update({ voice_url: voiceUrl || null }).eq('code', code);
+  else { const u = await currentUser(); await supa.from('room_state').upsert({ code, state: {}, voice_url: voiceUrl || null, saved_by: u ? u.id : null }, { onConflict: 'code' }); }
+}
+/** Remember that I sat at this table (for "Your tables" on the home page). */
+export async function touchRoomPlayer(code, seat, name) {
+  if (!supa) return;
+  const u = await currentUser(); if (!u) return;
+  await supa.from('room_players').upsert({ code, user_id: u.id, seat, name, last_seen: new Date().toISOString() }, { onConflict: 'code,user_id' });
+}
+export async function leaveRoomPlayer(code) {
+  if (!supa) return; const u = await currentUser(); if (!u) return;
+  await supa.from('room_players').delete().eq('code', code).eq('user_id', u.id);
+}
+/** Tables I sat at in the last week that haven't finished: resume from any device. */
+export async function myTables() {
+  if (!supa) return []; const u = await currentUser(); if (!u) return [];
+  const since = new Date(Date.now() - 7 * 864e5).toISOString();
+  const { data } = await supa.from('room_players').select('code, seat, name, last_seen, room:rooms(code, host_name, seats, bots, bracket, status, created_at)').eq('user_id', u.id).gt('last_seen', since).order('last_seen', { ascending: false }).limit(10);
+  return (data || []).filter((r) => r.room && r.room.status !== 'finished' && r.room.status !== 'ended');
+}

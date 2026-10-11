@@ -8,7 +8,7 @@ import { parseList, deckStats, deckText } from './decklist.js';
 import { parseAbilities, parseEffects, staticGrant, boardRules, castTax, castBlock, spellKind, manaValue } from './effects.js';
 import { deckLink, fetchLinkedDeck } from './deckimport.js';
 import { registerSW, canInstall, install, onInstallable, isIOS, toggleFullscreen, fullscreenOn, fullscreenSupported } from './pwa.js';
-import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId } from './supa.js';
+import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId, saveRoomState, loadRoomState, setRoomVoice, touchRoomPlayer } from './supa.js';
 
 /* ---------- Mode from the URL ---------- */
 const Q = new URLSearchParams(location.search);
@@ -744,9 +744,33 @@ const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'con
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
-  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, kept: p.kept !== false, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: !!p.empty }, zones: p.zones, cards };
+  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, kept: p.kept !== false, away: !!p.away, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: !!p.empty }, zones: p.zones, cards };
 }
-function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, pending: S.pending || null, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40) }; }
+function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, pending: S.pending || null, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40), seatsBy: S.seatsBy || {}, voice: S.voice || '' }; }
+/* ---------- Game persistence ----------
+   The host saves the whole table (every seat's cards and zones, the shared state, who sits where, the voice link)
+   to the server a few seconds after anything changes. If everyone leaves, the first one back restores it and
+   becomes host; a player on a new device finds the table under "Your tables" and gets their own seat back. */
+let persistT = 0, lastSaved = "";
+function tableState() {
+  const seats = Array.from({ length: S.seats }, (_, k) => k).filter((k) => !P(k).empty || P(k).bot).map((k) => seatSnap(k));
+  return { v: 1, seats: S.seats, botList: net.botSeats(), players: seats, shared: sharedSnap(), seatsBy: S.seatsBy || {}, voice: S.voice || '', savedAt: Date.now() };
+}
+function queuePersist() {
+  if (MODE !== 'room' || !net.active || !net.ready || !net.isHost || SPECTATE || !online) return;
+  clearTimeout(persistT);
+  persistT = setTimeout(async () => {
+    try { const st = tableState(); const key = JSON.stringify([st.players, st.shared.turn, st.shared.over, st.seatsBy, st.voice]); if (key === lastSaved) return; lastSaved = key; await saveRoomState(ROOM.code, st, S.voice || ''); } catch (e) { console.warn('save failed', e); }
+  }, 4000);
+}
+function restoreTable(st, mySeat) {
+  if (!st || !st.players) return false;
+  st.players.forEach((snap) => { if (snap.seat == null || snap.seat >= S.seats) return; const p = P(snap.seat); const wasBot = p.bot; Object.assign(p, snap.player); p.zones = snap.zones; if (!net.botSeats().includes(snap.seat)) p.bot = false; else p.bot = true; if (snap.seat === mySeat) { p.empty = false; p.bot = false; } Object.values(S.cards).forEach((c) => { if (c.owner === snap.seat) delete S.cards[c.id]; }); snap.cards.forEach((c) => { S.cards[c.id] = { img: '', big: '', backImg: '', backBig: '', artist: '', ...c }; }); void wasBot; });
+  const sh = st.shared || {}; if (sh.turn) { S.turn = sh.turn; S.stack = sh.stack || []; S.attacks = sh.attacks || []; S.outOrder = sh.outOrder || S.outOrder; S.stats = sh.stats || S.stats; S.over = sh.over || false; if (sh.log && sh.log.length) S.log = sh.log; }
+  S.pending = null; S.seatsBy = st.seatsBy || {}; S.voice = st.voice || '';
+  S.nextId = Math.max(S.nextId, ...Object.keys(S.cards).map((id) => parseInt(id.split('_')[1], 10) + 1).filter((n) => !isNaN(n)));
+  return true;
+}
 function applySeat(snap) {
   const i = snap.seat; if (net.isMine(i)) return;
   const p = P(i); Object.assign(p, snap.player); p.zones = snap.zones;
@@ -768,6 +792,8 @@ function applyPending(inc) {
 function applyShared(sn) {
   const turnChanged = S.turn.active !== sn.turn.active || S.turn.number !== sn.turn.number;
   S.turn = sn.turn; S.stack = sn.stack; S.attacks = sn.attacks; S.outOrder = sn.outOrder; S.stats = sn.stats; applyPending(sn.pending || null);
+  if (sn.seatsBy) { S.seatsBy = { ...(S.seatsBy || {}), ...sn.seatsBy }; if (net.seat != null && S.seatsBy[net.seat] && S.seatsBy[net.seat].cid && S.seatsBy[net.seat].cid !== net.clientId && !net.isMine(net.seat)) { /* someone else claims my seat: keep mine */ } }
+  if (typeof sn.voice === 'string' && sn.voice !== (S.voice || '')) { S.voice = sn.voice; roomBar(); }
   if (turnChanged) { clearDamage(); clearPumps(); clearSick(S.turn.active); }
   botDefend();
   const was = S.over; S.over = sn.over;
@@ -866,7 +892,7 @@ function seatHTML(i, full) {
   const bf = p.zones.battlefield.map((id) => { const c = S.cards[id]; const atk = S.attacks.some((a) => a.id === id); const blk = usedB.has(id); const atkCard = blocking ? S.cards[blocking.attackId] : null; const chosen = blocking && S.attacks.find((x) => x.id === blocking.attackId)?.blockers?.includes(id); const can = blocking && blocking.seat === i && atkCard && Rules.canBlock(c, atkCard) && (!blk || chosen); return cardHTML(c, { cls: `${atk ? 'attacking' : ''} ${blk ? 'blocking' : ''} ${can ? 'canblock' : ''}`, style: `--x:${(c.x * 100).toFixed(2)}%;--y:${(c.y * 100).toFixed(2)}%` }); }).join('');
   const mp = (z, label, n) => `<button type="button" class="mp" data-act="pile" data-zone="p${i}-${z}" data-pile="p${i}-${z}" title="${label}">${label} <b>${n}</b></button>`;
   const plate = `<div class="plate">${avatarHTML(i, full)}<div class="pinfo">
-    <button type="button" class="pname" data-act="seatmenu" data-p="${i}"><span>${esc(p.name)}</span>${identityPips(i)}${p.out ? '<span class="outtag">Out</span>' : ''}${p.empty ? '<span class="chip">Waiting…</span>' : ''}</button>
+    <button type="button" class="pname" data-act="seatmenu" data-p="${i}"><span>${esc(p.name)}</span>${identityPips(i)}${p.out ? '<span class="outtag">Out</span>' : ''}${p.empty ? '<span class="chip">Waiting…</span>' : p.away ? '<span class="chip away" title="Lost connection; their seat and board are kept">Away</span>' : ''}</button>
     <span class="cmdn">${esc(cmdNames)}</span>
     <div class="pstat">${(maxCmd || p.poison || warn) ? `<button type="button" class="chip ${warn ? 'warn' : ''}" data-act="dmg" data-p="${i}">Cmdr ${maxCmd} · Poison ${p.poison}</button>` : ''}<span class="lifectl"><button type="button" data-act="life" data-p="${i}" data-d="-1" title="−1 (shift: −5)">−</button><button type="button" data-act="life" data-p="${i}" data-d="1" title="+1 (shift: +5)">+</button></span></div>
   </div></div>`;
@@ -934,7 +960,7 @@ function render() {
   renderMid(); syncTools(); fanHand(); watchHand();
   $('#opps').style.gridTemplateColumns = `repeat(${Math.max(1, (S.seats || 4) - 1)}, minmax(0, 1fr))`;
   sizeBattlefields(); Ambient.sync();
-  net.queueSync(seatSnap, sharedSnap);
+  net.queueSync(seatSnap, sharedSnap); queuePersist();
   if (net.active && net.ready && net.seat != null) rememberRoom(ROOM.code, { seat: net.seat, clientId: undefined, ...recallRoom(ROOM.code), mine: net.ownedSeats().map(seatSnap), shared: sharedSnap(), deck: { id: P(net.seat).deckId, name: P(net.seat).deckName } });
   maybeBot();
   if (zoomId && !S.cards[zoomId]) hideZoom();
@@ -1707,7 +1733,7 @@ async function kickBot(k) {
   log(`${name} left the table${MODE === 'room' ? '; the seat is open' : ''}`); render();
   if (net.active) await net.setLayout({ botList: net.botList });
 }
-function kickHuman(k) { if (!net.active || !net.isHost) return; const p = P(k); net.send('all', { fn: 'kick', seat: k }); log(`${p.name} was removed by the host`); toast(`${p.name} removed`); }
+function kickHuman(k) { if (!net.active || !net.isHost) return; const p = P(k); net.send('all', { fn: 'kick', seat: k }); log(`${p.name} was removed by the host`); toast(`${p.name} removed`); S.kicked = { ...(S.kicked || {}), [k]: Date.now() }; if (S.seatsBy) delete S.seatsBy[k]; setTimeout(() => { const q = P(k); if (!net.takenSeats().has(k)) { q.away = false; q.empty = true; q.name = SEAT_NAMES[k]; purgeOwner(k); q.zones = emptyZones(); render(); } }, 1200); }
 async function setSeatCount(n) {
   n = clamp(n, 2, 4); if (n === S.seats) return;
   if (n < S.seats) { for (let k = n; k < S.seats; k++) { if (P(k).bot) { P(k).bot = false; net.botList = net.botList.filter((x) => x !== k); purgeOwner(k); P(k).zones = emptyZones(); } if (MODE === 'room' && net.takenSeats().has(k)) { toast('Someone is sitting in that seat'); return; } P(k).out = true; P(k).empty = false; } }
@@ -2337,10 +2363,24 @@ function roomBar() {
   const t = $('#roomBar'); if (!t) return;
   const humans = new Set(Object.values(net.peers).filter((p) => p.seat != null && !net.botSeats().includes(p.seat)).map((p) => p.seat)).size;
   const watching = net.spectators().length;
-  t.innerHTML = `<span class="code">${esc(ROOM.code)}</span>${SPECTATE ? '<span class="watching" title="You are watching this table">Watching</span>' : '<button type="button" class="btn ghost sm" id="copyInvite" title="Copy invite link">Invite</button>'}<button type="button" class="btn ghost sm" id="copyWatch" title="Copy a watch-only link">Watch link</button><span>${humans}/${net.humanSeats().length}</span>${watching ? `<span class="eye" title="${watching} watching">👁 ${watching}</span>` : ''}`;
+  const voice = S && S.voice;
+  t.innerHTML = `<span class="code">${esc(ROOM.code)}</span>${SPECTATE ? '<span class="watching" title="You are watching this table">Watching</span>' : '<button type="button" class="btn ghost sm" id="copyInvite" title="Copy invite link">Invite</button>'}<button type="button" class="btn ghost sm" id="copyWatch" title="Copy a watch-only link">Watch link</button>${voice ? `<a class="btn sm voice on" id="voiceBtn" href="${esc(voice)}" target="_blank" rel="noopener" title="Open the table's voice chat">🔊 Voice</a>` : SPECTATE ? '' : `<button type="button" class="btn ghost sm voice" id="voiceBtn" title="Link a Discord voice channel for this table">🔊 Add voice</button>`}<span>${humans}/${net.humanSeats().length}</span>${watching ? `<span class="eye" title="${watching} watching">👁 ${watching}</span>` : ''}${net.isHost && !SPECTATE ? '<span class="hosttag" title="You are hosting: bots and saving run on your device">Host</span>' : ''}`;
   const copy = async (link, what) => { try { await navigator.clipboard.writeText(link); toast(`${what} copied`); } catch { toast(link, 8000); } };
   if ($('#copyInvite')) $('#copyInvite').onclick = () => copy(`${location.origin}/?join=${ROOM.code}`, 'Invite link');
   $('#copyWatch').onclick = () => copy(`${location.origin}/?watch=${ROOM.code}`, 'Watch link');
+  const vb = $('#voiceBtn');
+  if (vb && !voice) vb.onclick = () => voiceModal();
+  if (vb && voice && !SPECTATE) vb.oncontextmenu = (e) => { e.preventDefault(); voiceModal(); };
+}
+// Voice: a Discord voice channel (or any call link) attached to the table. Anyone seated can set it; everyone sees the button.
+function voiceModal() {
+  let last = ''; try { last = localStorage.getItem('edhclub-voice') || ''; } catch { /* ignore */ }
+  openModal(`<h2>Voice for this table</h2><p>Paste a Discord voice channel link (right-click the channel → Copy Link) or a server invite. Everyone at the table gets a 🔊 Voice button that opens it.</p>
+  <label>Link<input id="voiceUrl" type="url" placeholder="https://discord.com/channels/…" value="${esc(S.voice || last)}" autocomplete="off" data-autofocus></label>
+  <div class="row" style="justify-content:space-between"><span>${S.voice ? '<button type="button" class="btn ghost" id="voiceClear">Remove</button>' : ''}</span><span class="row"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn primary" id="voiceSave">Save</button></span></div>`, { cls: 'narrow' });
+  const ok = (u) => /^https:\/\/(discord\.gg|discord\.com|discordapp\.com|meet\.google\.com|zoom\.us|[a-z0-9.-]+\.zoom\.us|teams\.microsoft\.com)\//i.test(u);
+  $('#voiceSave').onclick = async () => { const u = $('#voiceUrl').value.trim(); if (!ok(u)) { toast('Use a Discord link (discord.com/channels/… or discord.gg/…), or a Meet/Zoom/Teams link'); return; } S.voice = u; try { localStorage.setItem('edhclub-voice', u); } catch { /* ignore */ } closeModal(); log(`${P(net.seat).name} linked voice chat for the table`); roomBar(); render(); try { await setRoomVoice(ROOM.code, u); } catch { /* offline */ } };
+  const cl = $('#voiceClear'); if (cl) cl.onclick = async () => { S.voice = ''; closeModal(); roomBar(); render(); try { await setRoomVoice(ROOM.code, ''); } catch { /* offline */ } };
 }
 let seatRestored = false;
 async function boot() {
@@ -2351,11 +2391,26 @@ async function boot() {
     try {
       if (online) { const u = await currentUser(); if (!u) { const { signInGuest } = await import('./supa.js'); await signInGuest(ROOM.name); } }
       if (!ROOM.host && online) { try { const { getRoom } = await import('./supa.js'); const row = await getRoom(ROOM.code); if (row) { ROOM.seats = row.seats; ROOM.bots = row.bots || 0; } } catch { /* fall back to presence */ } }
-      const seat = await net.join({ code: ROOM.code, name: ROOM.name, isHost: ROOM.host && !SPECTATE, seats: ROOM.seats, bots: ROOM.bots, spectate: SPECTATE });
+      // A saved table? Find the seat that was mine (by account, then by name) so a new device gets it back.
+      let saved = null; let me = null; let claim = null;
+      if (online && !SPECTATE) { try { me = await currentUser(); const row = await loadRoomState(ROOM.code); if (row && row.state && row.state.players) { saved = row.state; if (row.voice_url && !saved.voice) saved.voice = row.voice_url; } else if (row && row.voice_url) saved = { voice: row.voice_url }; } catch { /* no saved state */ } }
+      if (saved && saved.seatsBy && me) { const mine = Object.entries(saved.seatsBy).filter(([, v]) => v && v.uid === me.id); const byName = mine.find(([, v]) => v.name === ROOM.name); claim = +(byName || mine[0] || [null])[0]; if (isNaN(claim)) claim = null; }
+      if (saved && saved.seats && !ROOM.host) { ROOM.seats = saved.seats; ROOM.bots = (saved.botList || []).length; }
+      const reserved = saved && saved.seatsBy ? Object.entries(saved.seatsBy).filter(([k, v]) => v && +k !== claim && !(me && v.uid === me.id && v.name === ROOM.name)).map(([k]) => +k) : [];
+      const seat = await net.join({ code: ROOM.code, name: ROOM.name, isHost: ROOM.host && !SPECTATE, seats: ROOM.seats, bots: ROOM.bots, botList: saved && saved.botList && !ROOM.host ? saved.botList : undefined, spectate: SPECTATE, claimSeat: claim, reserved });
       ROOM.seats = net.seats; ROOM.bots = net.bots;
       S = null; newGame(false); S.view = seat ?? 0; if (seat != null) P(seat).avatar = localAvatar();
+      const alone = !Object.keys(net.peers).some((k) => k !== net.clientId);
+      let serverRestored = false;
+      if (seat != null && saved && saved.players) {
+        if (alone) { serverRestored = restoreTable(saved, seat); if (serverRestored) { if (saved.botList) applyLayout(saved.seats || S.seats, saved.botList); toast('Table restored. Everyone else can rejoin with the same code.', 6000); log(`${ROOM.name} reopened the table`); } }
+        else { const by = saved.seatsBy && saved.seatsBy[seat]; const mineSnap = by && me && by.uid === me.id && by.name === ROOM.name ? saved.players.find((x) => x.seat === seat && !x.player.bot) : null; if (mineSnap && !recallRoom(ROOM.code)?.mine) { restoreTable({ ...saved, players: [mineSnap], shared: null, seatsBy: saved.seatsBy, voice: saved.voice }, seat); serverRestored = true; toast('Welcome back. Your seat was restored.'); } }
+      }
+      if (saved && saved.voice && !S.voice) S.voice = saved.voice;
+      if (seat != null) { S.seatsBy = { ...(S.seatsBy || {}), [seat]: { uid: me ? me.id : null, name: ROOM.name, cid: net.clientId } }; if (online) touchRoomPlayer(ROOM.code, seat, ROOM.name).catch(() => {}); }
       if (SPECTATE) { document.body.classList.add('spectator'); S.players.forEach((p, k) => { if (k < S.seats) p.empty = !net.botSeats().includes(k); }); }
       const prior = SPECTATE ? null : recallRoom(ROOM.code);
+      if (serverRestored) seatRestored = true;
       if (prior && prior.mine && prior.mine.some((m) => m.seat === seat)) {
         seatRestored = true;
         prior.mine.forEach((snap) => { if (!net.isMine(snap.seat)) return; const p = P(snap.seat); Object.assign(p, snap.player); p.zones = snap.zones; Object.values(S.cards).forEach((c) => { if (c.owner === snap.seat) delete S.cards[c.id]; }); snap.cards.forEach((c) => { S.cards[c.id] = { img: '', big: '', backImg: '', backBig: '', artist: '', ...c }; }); });
@@ -2368,12 +2423,17 @@ async function boot() {
       net.on('req', ({ fn, to, args }) => { if (REQ[fn]) REQ[fn](to, ...args); });
       net.on('all', ({ fn, kind, cardId, seat, id, on, key, paid, nth, type, n }) => { if (fn === 'cast') { if (net.isHost) { const cc = S.cards[cardId] || { name: '?', controller: seat, type: type || '' }; fireEvent('opponentCasts', { caster: seat, card: cc, nth: nth || 1 }); } return; } if (fn === 'drew') { if (net.isHost) fireEvent('opponentDraws', { drawer: seat, n: n || 1 }); return; } if (fn === 'answer') { if (asks[key]) { asks[key](paid); delete asks[key]; } return; } if (fn === 'ack' || fn === 'hold' || fn === 'counter') { if (S.pending && net.isMine(S.pending.by)) respond(fn, id, seat, on); return; } if (fn === 'wipe') ALL.wipe(kind); else if (fn === 'newGame') ALL.newGame(); else if (fn === 'attackEnd') ALL.attackEnd(cardId); else if (fn === 'kick' && seat === net.seat) { toast('The host removed you from this table', 6000); net.leave(); setTimeout(() => { location.href = '/'; }, 1500); } });
       net.on('peers', (peers) => {
-        const host = Object.values(peers).find((pr) => pr.isHost && pr.seats);
+        // Host handoff: if the host is gone, the longest-seated player takes over bots and saving.
+        const el = net.electHost();
+        if (el === 'took') { log(`${P(net.seat).name} is now hosting the table`); toast('You are hosting now: the bots and the table save run from here.', 5000); if (S.pending && P(S.pending.by).bot) { const top = S.stack[S.stack.length - 1]; S.pending = null; if (top && S.cards[top]) resolveTop(); } lastSaved = ''; }
+        else if (el === 'gave') { log(`${P(net.seat).name} handed hosting back`); }
+        const host = Object.values(peers).find((pr) => pr.isHost && pr.seats && pr.clientId !== net.clientId);
         if (host && !net.isHost) applyLayout(host.seats, host.botList || []);
-        Object.values(peers).forEach((pr) => { if (pr.spectator) return; if (pr.seat != null && pr.seat < S.seats && !net.isMine(pr.seat)) { const p = P(pr.seat); p.empty = false; if (p.name === SEAT_NAMES[pr.seat] || p.bot) { p.name = pr.name; p.bot = false; } } });
-        // seats with no peer and no bot are open
+        Object.values(peers).forEach((pr) => { if (pr.spectator) return; if (pr.seat != null && pr.seat < S.seats && !net.isMine(pr.seat)) { const p = P(pr.seat); if (p.away) log(`${p.name} is back`); p.empty = false; p.away = false; if (pr.name && p.name !== pr.name) p.name = pr.name; p.bot = false; } });
+        // Seats with no peer and no bot: a player who had a board is "away" (their cards stay, they can come back);
+        // a seat nobody ever sat in is open.
         const seated = new Set(Object.values(peers).map((pr) => pr.seat));
-        S.players.forEach((p, k) => { if (k < S.seats && k !== net.seat && !net.botSeats().includes(k) && !seated.has(k)) { if (!p.empty) { p.empty = true; purgeOwner(k); } } });
+        S.players.forEach((p, k) => { if (k < S.seats && k !== net.seat && !net.botSeats().includes(k) && !seated.has(k) && !p.empty && !p.away) { const hasBoard = Object.values(S.cards).some((c) => c.owner === k) && !(S.kicked && Date.now() - (S.kicked[k] || 0) < 10000); if (hasBoard) { p.away = true; log(`${p.name} lost connection; their seat is kept`); } else { p.empty = true; purgeOwner(k); } } });
         roomBar(); render();
       });
       net.on('chat', (m) => { if (m && typeof m.text === 'string') addChat({ seat: typeof m.seat === 'number' ? m.seat : -1, name: String(m.name || 'Someone').slice(0, 40), text: String(m.text).slice(0, 300), t: Date.now() }); });

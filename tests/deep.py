@@ -31,8 +31,27 @@ def collection(route):
     route.fulfill(status=200, content_type='application/json', body=json.dumps({'data': data, 'not_found': []}))
 
 FAKE_USER = {'id': '11111111-1111-4111-8111-111111111111', 'aud': 'authenticated', 'role': 'authenticated', 'is_anonymous': True, 'user_metadata': {'display_name': 'Tester'}, 'app_metadata': {}, 'created_at': '2026-10-08T00:00:00Z'}
+# In-memory server tables for persistence tests: room_state (one row per room) and room_players.
+STORE = {'room_state': {}, 'room_players': {}}
+def _q(url, key):
+    import urllib.parse as up; qs = up.parse_qs(up.urlparse(url).query); v = qs.get(key, [None])[0]; return v.split('.', 1)[1] if v and '.' in v else v
 def supabase_mock(route):
     url = route.request.url; m = route.request.method
+    if '/rest/v1/room_state' in url:
+        code = _q(url, 'code')
+        if m == 'GET': row = STORE['room_state'].get(code); route.fulfill(status=200, content_type='application/json', body=json.dumps([row] if row else [])); return
+        body = json.loads(route.request.post_data or '{}'); rows = body if isinstance(body, list) else [body]
+        for r in rows:
+            c = r.get('code') or code; cur = STORE['room_state'].get(c, {'code': c, 'state': {}, 'voice_url': None}); cur.update({k: v for k, v in r.items()}); STORE['room_state'][c] = cur
+        route.fulfill(status=201, content_type='application/json', body='[]'); return
+    if '/rest/v1/room_players' in url:
+        if m == 'GET':
+            uid = _q(url, 'user_id'); rows = [dict(v, room={'code': v['code'], 'host_name': 'Host', 'seats': 3, 'bots': 1, 'bracket': 3, 'status': 'open', 'created_at': '2026-10-10T00:00:00Z'}) for v in STORE['room_players'].values() if not uid or v['user_id'] == uid]
+            route.fulfill(status=200, content_type='application/json', body=json.dumps(rows)); return
+        if m == 'DELETE': STORE['room_players'] = {k: v for k, v in STORE['room_players'].items() if not (v['code'] == _q(url, 'code') and v['user_id'] == _q(url, 'user_id'))}; route.fulfill(status=204, body=''); return
+        body = json.loads(route.request.post_data or '{}'); rows = body if isinstance(body, list) else [body]
+        for r in rows: STORE['room_players'][r['code'] + '|' + r['user_id']] = r
+        route.fulfill(status=201, content_type='application/json', body='[]'); return
     if '/auth/v1/signup' in url or '/auth/v1/token' in url:
         route.fulfill(status=200, content_type='application/json', body=json.dumps({'access_token': 'x.y.z', 'token_type': 'bearer', 'expires_in': 3600, 'expires_at': int(time.time()) + 3600, 'refresh_token': 'r', 'user': FAKE_USER})); return
     if '/auth/v1/user' in url: route.fulfill(status=200, content_type='application/json', body=json.dumps(FAKE_USER)); return

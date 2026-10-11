@@ -104,7 +104,8 @@ with sync_playwright() as p:
     host.click('#tableBtn'); host.wait_for_timeout(200); host.click('.tm-row [data-tm=kick][data-k="3"]'); host.wait_for_timeout(900); host.keyboard.press('Escape')
     g2.goto(BASE + '/table.html?room=TBL01&name=Second'); g2.wait_for_timeout(3000)
     check('second friend takes seat 3', state(g2)['view'] == 3)
-    check('friend 1 sees friend 2 arrive (not a bot, not open)', not state(g1)['players'][3]['bot'] and not state(g1)['players'][3]['empty'] and 'Second' in g1.locator('.seat[data-seat="3"] .pname').text_content())
+    s3 = state(g1)['players'][3]
+    check('friend 1 sees friend 2 arrive (not a bot, not open)', not s3['bot'] and not s3['empty'] and 'Second' in g1.locator('.seat[data-seat="3"] .pname').text_content(), f"{ {k: s3.get(k) for k in ('name','bot','empty','away')} } | {g1.locator('.seat[data-seat=\"3\"] .pname').text_content()} | peers {g1.evaluate('JSON.stringify(Object.values(__edhApi().net.peers).map(p=>[p.seat,p.name]))')}")
     host.click('#tableBtn'); host.wait_for_timeout(200); host.click('.tm-row [data-tm=kickh][data-k="3"]'); host.wait_for_timeout(200); host.click('#okBtn'); g2.wait_for_timeout(2500)
     check('removed player is sent back to the lobby', g2.url.rstrip('/') == BASE.rstrip('/') or 'table.html' not in g2.url)
     host.wait_for_timeout(1500); host.keyboard.press('Escape'); host.wait_for_timeout(200)

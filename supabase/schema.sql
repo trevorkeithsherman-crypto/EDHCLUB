@@ -85,3 +85,38 @@ begin
   return new;
 end $$;
 create trigger decks_limit before insert on public.decks for each row execute function public.enforce_deck_limit();
+
+-- Game persistence: the current host saves the whole table here; whoever comes back first restores it.
+create table if not exists public.room_state (
+  code text primary key references public.rooms(code) on delete cascade,
+  state jsonb not null,
+  voice_url text,
+  saved_by uuid,
+  updated_at timestamptz not null default now()
+);
+alter table public.room_state enable row level security;
+create policy "room state readable" on public.room_state for select using (true);
+create policy "seated users write room state" on public.room_state for insert with check (auth.uid() is not null);
+create policy "seated users update room state" on public.room_state for update using (auth.uid() is not null);
+
+-- Who sat where: lets a player find and resume their tables from any device.
+create table if not exists public.room_players (
+  code text not null references public.rooms(code) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  seat int not null,
+  name text,
+  last_seen timestamptz not null default now(),
+  primary key (code, user_id)
+);
+alter table public.room_players enable row level security;
+create policy "room players readable" on public.room_players for select using (true);
+create policy "own room player row insert" on public.room_players for insert with check (auth.uid() = user_id);
+create policy "own room player row update" on public.room_players for update using (auth.uid() = user_id);
+create policy "own room player row delete" on public.room_players for delete using (auth.uid() = user_id);
+create index if not exists room_players_user_idx on public.room_players(user_id, last_seen desc);
+
+-- Any seated player may update the room's status (host handoff), not only its creator.
+drop policy if exists "host updates room" on public.rooms;
+create policy "seated players update room" on public.rooms for update using (
+  auth.uid() = host_id or exists (select 1 from public.room_players rp where rp.code = rooms.code and rp.user_id = auth.uid())
+);

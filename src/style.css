@@ -660,3 +660,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 
 /* Touch: menu rows and pile labels are finger-sized */
 @media (hover: none) and (pointer: coarse) { .mi { padding: 11px 12px; font-size: 14px; } .mh { padding: 9px 12px 8px; } .handbar .btn.sm { padding: 6px 10px; font-size: 11px; } }
+
+.voice.on { background: linear-gradient(180deg, #5865f2, #3b47c9); border-color: rgba(120, 130, 255, .7); color: #fff; text-decoration: none; }
+.hosttag { font: 700 9px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); border: 1px solid rgba(226, 182, 89, .5); border-radius: 999px; padding: 2px 7px; }
+.chip.away { color: #ffb86b; border-color: rgba(255, 184, 107, .5); }

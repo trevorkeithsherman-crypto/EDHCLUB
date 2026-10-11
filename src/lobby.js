@@ -1,4 +1,4 @@
-import { supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest, myProfile, uploadAvatar, removeAvatar, localAvatar } from './supa.js';
+import { myTables, supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest, myProfile, uploadAvatar, removeAvatar, localAvatar } from './supa.js';
 import { startHero } from './hero.js';
 import { fetchCards, cached, CARD_BACK } from './scryfall.js';
 import { registerSW, install, onInstallable, isIOS } from './pwa.js';
@@ -18,7 +18,16 @@ async function refreshAccount() {
   nav.innerHTML = user
     ? `${navLinks()}<span class="who">${av ? `<img class="pfp" src="${esc(av)}" alt="">` : `<span class="pfp init">${esc(name[0] || '?')}</span>`}${esc(name)}${user.is_anonymous ? ' (guest)' : ''}</span><button type="button" class="btn ghost sm" data-go="signin">Account</button>`
     : `<button type="button" class="btn ghost" data-go="signin">Sign in</button><button type="button" class="btn" data-go="signup">Create account</button>`;
-  renderClubs(); renderDecks(); renderPage();
+  renderClubs(); renderDecks(); renderPage(); renderMineTables();
+}
+// Home: tables I sat at recently that are still going — one tap puts me back in my seat, from any device.
+async function renderMineTables() {
+  const box = $('#mineTablesBody'); const sec = $('#mineTables'); if (!box || !sec) return;
+  if (!online || !user) { sec.hidden = true; return; }
+  let rows = []; try { rows = await myTables(); } catch { rows = []; }
+  if (!rows.length) { sec.hidden = true; return; }
+  sec.hidden = false;
+  box.innerHTML = `<ul class="list">${rows.map((r) => `<li><span><b>Table ${esc(r.code)}</b> <small>· ${esc(r.room.host_name || 'A planeswalker')}'s table · seat ${r.seat + 1} · ${r.room.seats} seats${r.room.bots ? ` · ${r.room.bots} bot${r.room.bots > 1 ? 's' : ''}` : ''} · last played ${timeAgo(r.last_seen)}</small></span><span class="row"><a class="btn sm" href="/table.html?room=${esc(r.code)}&name=${encodeURIComponent(r.name || name)}">Resume</a></span></li>`).join('')}</ul>`;
 }
 // Page-specific chrome: the landing swaps its CTAs once you're signed in; the home page greets you.
 function renderPage() {

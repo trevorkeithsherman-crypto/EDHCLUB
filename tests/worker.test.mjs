@@ -38,4 +38,32 @@ r = await worker.fetch(new Request('https://edhclub.com/api/moxfield/private1'),
 r = await worker.fetch(new Request('https://edhclub.com/api/moxfield/bad id!'), env); check('bad moxfield id rejected', r.status === 404 || r.status === 400);
 r = await worker.fetch(new Request('https://edhclub.com/api/nope'), env); check('unknown api 404', r.status === 404);
 r = await worker.fetch(new Request('https://edhclub.com/table.html'), env); check('everything else goes to assets', await r.text() === 'asset');
+
+// ---- Discord announcements ----
+{
+  const posts = []; const patches = [];
+  const envD = { ...env, SUPABASE_URL: 'https://sb.test', SUPABASE_SERVICE_KEY: 'svc', DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/x' };
+  const room = { code: 'ABCDE', host_name: 'Mira', seats: 4, bots: 1, seated: 1, open_seats: 2, bracket: 3, status: 'open', is_public: true, locked: false, announced_at: null, club_id: 'c1', created_at: '2026-10-11T12:00:00Z', has_voice: true };
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { const u = String(url);
+    if (u.startsWith('https://discord.com/api/webhooks')) { posts.push([u, JSON.parse(init.body)]); return new Response(null, { status: 204 }); }
+    if (u.includes('/rest/v1/rooms') && init && init.method === 'PATCH') { patches.push(JSON.parse(init.body)); return new Response('[]', { status: 200 }); }
+    if (u.includes('/rest/v1/rooms')) return new Response(JSON.stringify([room]), { status: 200 });
+    if (u.includes('/rest/v1/clubs')) return new Response(JSON.stringify([{ discord_webhook: 'https://discord.com/api/webhooks/2/club' }]), { status: 200 });
+    return prevFetch(url, init); };
+  let r = await worker.fetch(new Request('https://edhclub.com/api/announce/ABCDE', { method: 'POST' }), envD); let j = await r.json();
+  check('announce posts to the global webhook and the club webhook, then stamps announced_at', r.status === 200 && j.posted === 2 && posts.length === 2 && patches.length === 1 && patches[0].announced_at, JSON.stringify(j));
+  const e = posts[0][1].embeds[0];
+  check('embed: title, open seats, bracket, bots, voice, join and watch links with the code', /Mira/.test(e.title) && /2 seats open/.test(e.description) && /bracket 3/.test(e.description) && /1 bot/.test(e.description) && /voice/.test(e.description) && e.url.includes('join=ABCDE') && e.fields[1].value.includes('watch=ABCDE'));
+  room.announced_at = new Date().toISOString();
+  r = await worker.fetch(new Request('https://edhclub.com/api/announce/ABCDE', { method: 'POST' }), envD); j = await r.json();
+  check('announcing again within 10 minutes is a no-op', j.posted === 0 && /already/.test(j.note));
+  r = await worker.fetch(new Request('https://edhclub.com/api/announce/ABCDE', { method: 'POST' }), env); j = await r.json();
+  check('without service credentials the endpoint fails clearly', r.status === 502 && /not configured/.test(j.error));
+  room.announced_at = null; posts.length = 0;
+  await worker.scheduled({}, envD, { waitUntil: (p) => p });
+  await new Promise((res) => setTimeout(res, 50));
+  check('the 5-minute sweep announces unannounced open tables', posts.length >= 1);
+  globalThis.fetch = prevFetch;
+}
 console.log(fails ? `\n${fails} failed` : '\nall worker checks passed'); process.exit(fails ? 1 : 0);

@@ -120,3 +120,54 @@ drop policy if exists "host updates room" on public.rooms;
 create policy "seated players update room" on public.rooms for update using (
   auth.uid() = host_id or exists (select 1 from public.room_players rp where rp.code = rooms.code and rp.user_id = auth.uid())
 );
+
+-- Live occupancy and lock for open-table listings; Discord announcement bookkeeping.
+alter table public.rooms add column if not exists seated int not null default 0;
+alter table public.rooms add column if not exists open_seats int;
+alter table public.rooms add column if not exists locked boolean not null default false;
+alter table public.rooms add column if not exists announced_at timestamptz;
+alter table public.rooms add column if not exists has_voice boolean not null default false;
+alter table public.rooms add column if not exists title text;
+create index if not exists rooms_open_idx on public.rooms(status, is_public, created_at desc);
+
+-- Clubs may point a Discord webhook at their channel: club tables get announced there.
+alter table public.clubs add column if not exists discord_webhook text;
+drop policy if exists "owner updates club" on public.clubs;
+create policy "owner updates club" on public.clubs for update using (auth.uid() = owner_id);
+
+-- Blocks: hide a player's chat and keep them out of tables you host.
+create table if not exists public.blocks (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  blocked_id uuid not null references auth.users(id) on delete cascade,
+  blocked_name text,
+  created_at timestamptz not null default now(),
+  primary key (user_id, blocked_id)
+);
+alter table public.blocks enable row level security;
+create policy "own blocks readable" on public.blocks for select using (auth.uid() = user_id);
+create policy "own blocks insert" on public.blocks for insert with check (auth.uid() = user_id);
+create policy "own blocks delete" on public.blocks for delete using (auth.uid() = user_id);
+
+-- Reports: reviewed by hand; the reporter can write, nobody reads through the API.
+create table if not exists public.reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid references auth.users(id) on delete set null,
+  reported_id uuid,
+  reported_name text,
+  room_code text,
+  reason text not null,
+  details text,
+  log jsonb,
+  created_at timestamptz not null default now()
+);
+alter table public.reports enable row level security;
+create policy "signed-in users file reports" on public.reports for insert with check (auth.uid() = reporter_id);
+
+-- Delete my own account (profile, decks, memberships cascade from auth.users).
+create or replace function public.delete_me() returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'not signed in'; end if;
+  delete from auth.users where id = auth.uid();
+end $$;
+revoke all on function public.delete_me() from public;
+grant execute on function public.delete_me() to authenticated;

@@ -37,7 +37,7 @@ export const net = {
     if (seats) this.seats = seats; if (botList) this.botList = botList.filter((k) => k < this.seats);
     await this.track();
   },
-  async track() { if (this.channel && this.ready && !this.spectator) await this.channel.track({ seat: this.seat, name: this.name, isHost: this.isHost, clientId, rank: this.rank, seats: this.seats, botList: this.botList, ts: Date.now() }); },
+  async track() { if (this.channel && this.ready && !this.spectator) await this.channel.track({ seat: this.seat, name: this.name, isHost: this.isHost, clientId, rank: this.rank, uid: this.uid || null, seats: this.seats, botList: this.botList, ts: Date.now() }); },
   /** Who should be hosting right now: the lowest-ranked seated peer (the creator while present, else first arrival). */
   leader() {
     const seated = Object.values(this.peers).filter((p) => !p.spectator && p.seat != null && p.rank != null);

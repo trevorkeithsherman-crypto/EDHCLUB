@@ -40,3 +40,18 @@ never cropped, with Scryfall credited in the footer.
 
 EDH Club is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed by
 Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC.
+
+
+## Discord announcements (open tables)
+
+The worker can post new public tables to Discord: on demand (host → Table → **Post to Discord**) and by a sweep
+every 5 minutes (`triggers.crons` in `wrangler.jsonc`). It needs three secrets on the Worker:
+
+```bash
+npx wrangler secret put SUPABASE_URL            # https://<project>.supabase.co
+npx wrangler secret put SUPABASE_SERVICE_KEY    # the service_role key (server only, never in the client)
+npx wrangler secret put DISCORD_WEBHOOK_URL     # optional: a global #open-tables channel webhook
+```
+
+Clubs can add their own webhook from the club panel on the home page (Channel settings → Integrations → Webhooks);
+club tables are posted there as well. Tables are announced once; locked or private tables never are.

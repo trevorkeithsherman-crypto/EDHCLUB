@@ -8,7 +8,7 @@ import { parseList, deckStats, deckText } from './decklist.js';
 import { parseAbilities, parseEffects, staticGrant, boardRules, castTax, castBlock, spellKind, manaValue } from './effects.js';
 import { deckLink, fetchLinkedDeck } from './deckimport.js';
 import { registerSW, canInstall, install, onInstallable, isIOS, toggleFullscreen, fullscreenOn, fullscreenSupported } from './pwa.js';
-import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId, saveRoomState, loadRoomState, setRoomVoice, touchRoomPlayer } from './supa.js';
+import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId, saveRoomState, loadRoomState, setRoomVoice, touchRoomPlayer, updateRoomLive, myBlocks, blockUser, unblockUser, fileReport } from './supa.js';
 
 /* ---------- Mode from the URL ---------- */
 const Q = new URLSearchParams(location.search);
@@ -746,7 +746,7 @@ function seatSnap(i) {
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
   return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, kept: p.kept !== false, away: !!p.away, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: !!p.empty }, zones: p.zones, cards };
 }
-function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, pending: S.pending || null, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40), seatsBy: S.seatsBy || {}, voice: S.voice || '' }; }
+function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, pending: S.pending || null, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40), seatsBy: S.seatsBy || {}, voice: S.voice || '', locked: !!S.locked }; }
 /* ---------- Game persistence ----------
    The host saves the whole table (every seat's cards and zones, the shared state, who sits where, the voice link)
    to the server a few seconds after anything changes. If everyone leaves, the first one back restores it and
@@ -762,6 +762,17 @@ function queuePersist() {
   persistT = setTimeout(async () => {
     try { const st = tableState(); const key = JSON.stringify([st.players, st.shared.turn, st.shared.over, st.seatsBy, st.voice]); if (key === lastSaved) return; lastSaved = key; await saveRoomState(ROOM.code, st, S.voice || ''); } catch (e) { console.warn('save failed', e); }
   }, 4000);
+}
+let listT = 0, lastListing = '';
+function pushListing(now) {
+  if (MODE !== 'room' || !net.active || !net.ready || !net.isHost || SPECTATE || !online) return;
+  clearTimeout(listT);
+  listT = setTimeout(() => {
+    const humans = new Set(Object.values(net.peers).filter((p) => !p.spectator && p.seat != null && !net.botSeats().includes(p.seat)).map((p) => p.seat)).size;
+    const openSeats = Math.max(0, net.humanSeats().length - humans);
+    const patch = { seated: humans, open_seats: openSeats, locked: !!S.locked, has_voice: !!S.voice, bots: net.botSeats().length, seats: S.seats, status: S.over ? 'finished' : openSeats > 0 && !S.locked ? 'open' : 'live' };
+    const key = JSON.stringify(patch); if (key === lastListing) return; lastListing = key; updateRoomLive(ROOM.code, patch);
+  }, now ? 0 : 1500);
 }
 function restoreTable(st, mySeat) {
   if (!st || !st.players) return false;
@@ -794,6 +805,7 @@ function applyShared(sn) {
   S.turn = sn.turn; S.stack = sn.stack; S.attacks = sn.attacks; S.outOrder = sn.outOrder; S.stats = sn.stats; applyPending(sn.pending || null);
   if (sn.seatsBy) { S.seatsBy = { ...(S.seatsBy || {}), ...sn.seatsBy }; if (net.seat != null && S.seatsBy[net.seat] && S.seatsBy[net.seat].cid && S.seatsBy[net.seat].cid !== net.clientId && !net.isMine(net.seat)) { /* someone else claims my seat: keep mine */ } }
   if (typeof sn.voice === 'string' && sn.voice !== (S.voice || '')) { S.voice = sn.voice; roomBar(); }
+  if (typeof sn.locked === 'boolean') S.locked = sn.locked;
   if (turnChanged) { clearDamage(); clearPumps(); clearSick(S.turn.active); }
   botDefend();
   const was = S.over; S.over = sn.over;
@@ -960,7 +972,7 @@ function render() {
   renderMid(); syncTools(); fanHand(); watchHand();
   $('#opps').style.gridTemplateColumns = `repeat(${Math.max(1, (S.seats || 4) - 1)}, minmax(0, 1fr))`;
   sizeBattlefields(); Ambient.sync();
-  net.queueSync(seatSnap, sharedSnap); queuePersist();
+  net.queueSync(seatSnap, sharedSnap); queuePersist(); pushListing();
   if (net.active && net.ready && net.seat != null) rememberRoom(ROOM.code, { seat: net.seat, clientId: undefined, ...recallRoom(ROOM.code), mine: net.ownedSeats().map(seatSnap), shared: sharedSnap(), deck: { id: P(net.seat).deckId, name: P(net.seat).deckName } });
   maybeBot();
   if (zoomId && !S.cards[zoomId]) hideZoom();
@@ -1757,7 +1769,10 @@ function tableModal() {
   openModal(`<h2>Table</h2><p>${MODE === 'room' ? 'Open seats can be taken by anyone with the invite code. Kick a bot to make room for a friend, or add one when a seat stays empty. Bots keep the same turn order as the seat they sit in.' : 'Add or remove practice bots and pick what they play. A removed seat sits out until you fill it again.'}</p>
   <div class="tm-head"><span>Seats</span><span class="seg">${[2, 3, 4].map((n) => `<button type="button" class="${S.seats === n ? 'on' : ''}" data-tm="seats" data-k="${n}">${n}</button>`).join('')}</span></div>
   <ul class="tm-list">${rows}</ul>
+  ${MODE === 'room' ? `<div class="tm-foot"><label class="chk"><input type="checkbox" id="tmLock" ${S.locked ? 'checked' : ''}> Lock the table (no new players; it leaves the open-tables list)</label><button type="button" class="btn ghost sm" id="tmAnnounce" title="Post this table to the connected Discord channel">Post to Discord</button></div>` : ''}
   <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="close">Done</button></div>`);
+  const lk = $('#tmLock'); if (lk) lk.onchange = () => { S.locked = lk.checked; log(lk.checked ? 'The host locked the table' : 'The host unlocked the table'); render(); pushListing(true); };
+  const an = $('#tmAnnounce'); if (an) an.onclick = async () => { an.disabled = true; an.textContent = 'Posting…'; try { const r = await fetch(`/api/announce/${ROOM.code}`, { method: 'POST' }); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.statusText); toast(j.posted ? `Posted to ${j.posted} Discord channel${j.posted > 1 ? 's' : ''}` : (j.note || 'Nothing posted'), 6000); } catch (e) { toast(`Couldn't post: ${e.message}`, 6000); } an.disabled = false; an.textContent = 'Post to Discord'; };
   $('#modal .mpanel').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-tm]'); if (!b) return; const k = +b.dataset.k; const act = b.dataset.tm;
     if (act === 'add') { await addBot(k); tableModal(); }
@@ -1770,7 +1785,10 @@ function tableModal() {
 }
 function seatMenu(pi, x, y) {
   const p = P(pi);
-  if (!net.isMine(pi)) { openMenu([{ label: `${p.name}'s seat`, fn: () => {} }, ...(canManage() ? [{ sep: true }, { label: p.empty ? 'Add a bot here' : 'Manage table…', fn: () => (p.empty ? addBot(pi).then(() => render()) : tableModal()) }] : [])], x, y, p.name); return; }
+  if (!net.isMine(pi)) {
+    const human = MODE === 'room' && !p.bot && !p.empty; const uid = S.seatsBy && S.seatsBy[pi] && S.seatsBy[pi].uid; const blocked = uid && blockedIds.has(uid);
+    openMenu([{ label: `${p.name}'s seat`, fn: () => {} }, ...(canManage() ? [{ sep: true }, { label: p.empty ? 'Add a bot here' : 'Manage table…', fn: () => (p.empty ? addBot(pi).then(() => render()) : tableModal()) }] : []),
+      ...(human && online ? [{ sep: true }, { label: blocked ? `Unblock ${p.name}` : `Block ${p.name}`, fn: () => toggleBlock(pi) }, { label: `Report ${p.name}…`, fn: () => reportModal(pi) }, ...(net.isHost ? [{ label: `Remove ${p.name} from the table`, fn: () => confirmModal(`Remove ${p.name} from the table?`, 'Remove player', () => kickHuman(pi)) }] : [])] : [])], x, y, p.name); return; }
   openMenu([
     ...(MODE === 'hotseat' && pi !== S.view ? [{ label: `Play as ${p.name}`, fn: () => { S.view = pi; S.sel = null; render(); }, hot: true }] : []),
     { label: 'Choose playmat', fn: () => matModal(pi) },
@@ -1780,6 +1798,27 @@ function seatMenu(pi, x, y) {
     { label: 'Reset life to 40', fn: () => { p.life = 40; render(); } },
     { label: p.out ? 'Rejoin the game' : 'Concede', fn: () => { if (p.out) { p.out = false; S.outOrder = S.outOrder.filter((o) => o.i !== pi); log(`${p.name} rejoined`); render(); } else eliminate(pi, 'conceded'); } },
   ], x, y, p.name);
+}
+/* ---------- Safety: block and report ----------
+   Blocking hides that player's chat for you and, when you host, keeps them out of your tables. Reports go to a table
+   only you can read from the dashboard, with the last 60 log lines attached. */
+let blockedIds = new Set();
+async function loadBlocks() { try { blockedIds = new Set((await myBlocks()).map((b) => b.blocked_id)); } catch { blockedIds = new Set(); } }
+async function toggleBlock(pi) {
+  const p = P(pi); const uid = S.seatsBy && S.seatsBy[pi] && S.seatsBy[pi].uid; if (!uid) { toast("Can't identify that player yet"); return; }
+  try {
+    if (blockedIds.has(uid)) { await unblockUser(uid); blockedIds.delete(uid); toast(`${p.name} unblocked`); }
+    else { await blockUser(uid, p.name); blockedIds.add(uid); toast(`${p.name} blocked: their chat is hidden for you and they can't join tables you host`, 6000); if (net.isHost) { S.seatsBy[pi] = S.seatsBy[pi] || {}; kickHuman(pi); } }
+    renderChat();
+  } catch (e) { toast(e.message, 5000); }
+}
+function reportModal(pi) {
+  const p = P(pi); const uid = S.seatsBy && S.seatsBy[pi] && S.seatsBy[pi].uid;
+  openModal(`<h2>Report ${esc(p.name)}</h2><p>Tell us what happened. The last 60 lines of the game log go with the report; nothing else from your table is shared.</p>
+  <label>Reason<select id="rpReason"><option value="harassment">Harassment or abuse in chat</option><option value="cheating">Cheating or manipulating the board</option><option value="name">Offensive name or picture</option><option value="other">Something else</option></select></label>
+  <label>Details (optional)<textarea id="rpDetails" rows="4" maxlength="1000" placeholder="What happened?"></textarea></label>
+  <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-act="close">Cancel</button><button type="button" class="btn primary" id="rpSend">Send report</button></div>`, { cls: 'narrow' });
+  $('#rpSend').onclick = async () => { try { await fileReport({ reportedId: uid || null, reportedName: p.name, roomCode: ROOM.code, reason: $('#rpReason').value, details: $('#rpDetails').value.trim(), log: S.log.slice(0, 60).map((l) => l.text) }); closeModal(); toast('Report sent. Thank you.', 5000); } catch (e) { toast(e.message, 5000); } };
 }
 // The full menu for a pile (what right-click gives on desktop): library actions, zone views, commander menu.
 function pileMenu(zs, x, y) {
@@ -2396,6 +2435,7 @@ async function boot() {
       if (online && !SPECTATE) { try { me = await currentUser(); const row = await loadRoomState(ROOM.code); if (row && row.state && row.state.players) { saved = row.state; if (row.voice_url && !saved.voice) saved.voice = row.voice_url; } else if (row && row.voice_url) saved = { voice: row.voice_url }; } catch { /* no saved state */ } }
       if (saved && saved.seatsBy && me) { const mine = Object.entries(saved.seatsBy).filter(([, v]) => v && v.uid === me.id); const byName = mine.find(([, v]) => v.name === ROOM.name); claim = +(byName || mine[0] || [null])[0]; if (isNaN(claim)) claim = null; }
       if (saved && saved.seats && !ROOM.host) { ROOM.seats = saved.seats; ROOM.bots = (saved.botList || []).length; }
+      if (!ROOM.host && online && claim == null && !recallRoom(ROOM.code)) { try { const { getRoom } = await import('./supa.js'); const row = await getRoom(ROOM.code); if (row && row.locked) throw new Error('This table is locked by the host. Ask them for a seat.'); } catch (e) { if (/locked/.test(e.message)) throw e; } }
       const reserved = saved && saved.seatsBy ? Object.entries(saved.seatsBy).filter(([k, v]) => v && +k !== claim && !(me && v.uid === me.id && v.name === ROOM.name)).map(([k]) => +k) : [];
       const seat = await net.join({ code: ROOM.code, name: ROOM.name, isHost: ROOM.host && !SPECTATE, seats: ROOM.seats, bots: ROOM.bots, botList: saved && saved.botList && !ROOM.host ? saved.botList : undefined, spectate: SPECTATE, claimSeat: claim, reserved });
       ROOM.seats = net.seats; ROOM.bots = net.bots;
@@ -2408,6 +2448,7 @@ async function boot() {
       }
       if (saved && saved.voice && !S.voice) S.voice = saved.voice;
       if (seat != null) { S.seatsBy = { ...(S.seatsBy || {}), [seat]: { uid: me ? me.id : null, name: ROOM.name, cid: net.clientId } }; if (online) touchRoomPlayer(ROOM.code, seat, ROOM.name).catch(() => {}); }
+      if (online) { net.uid = me ? me.id : null; await loadBlocks(); net.track(); }
       if (SPECTATE) { document.body.classList.add('spectator'); S.players.forEach((p, k) => { if (k < S.seats) p.empty = !net.botSeats().includes(k); }); }
       const prior = SPECTATE ? null : recallRoom(ROOM.code);
       if (serverRestored) seatRestored = true;
@@ -2429,14 +2470,14 @@ async function boot() {
         else if (el === 'gave') { log(`${P(net.seat).name} handed hosting back`); }
         const host = Object.values(peers).find((pr) => pr.isHost && pr.seats && pr.clientId !== net.clientId);
         if (host && !net.isHost) applyLayout(host.seats, host.botList || []);
-        Object.values(peers).forEach((pr) => { if (pr.spectator) return; if (pr.seat != null && pr.seat < S.seats && !net.isMine(pr.seat)) { const p = P(pr.seat); if (p.away) log(`${p.name} is back`); p.empty = false; p.away = false; if (pr.name && p.name !== pr.name) p.name = pr.name; p.bot = false; } });
+        Object.values(peers).forEach((pr) => { if (pr.spectator) return; if (pr.seat != null && pr.seat < S.seats && !net.isMine(pr.seat)) { const p = P(pr.seat); if (net.isHost && pr.uid && blockedIds.has(pr.uid) && !(S.kicked && Date.now() - (S.kicked[pr.seat] || 0) < 10000)) { log(`${pr.name} is blocked and was removed`); kickHuman(pr.seat); return; } if (p.away) log(`${p.name} is back`); p.empty = false; p.away = false; if (pr.name && p.name !== pr.name) p.name = pr.name; p.bot = false; } });
         // Seats with no peer and no bot: a player who had a board is "away" (their cards stay, they can come back);
         // a seat nobody ever sat in is open.
         const seated = new Set(Object.values(peers).map((pr) => pr.seat));
         S.players.forEach((p, k) => { if (k < S.seats && k !== net.seat && !net.botSeats().includes(k) && !seated.has(k) && !p.empty && !p.away) { const hasBoard = Object.values(S.cards).some((c) => c.owner === k) && !(S.kicked && Date.now() - (S.kicked[k] || 0) < 10000); if (hasBoard) { p.away = true; log(`${p.name} lost connection; their seat is kept`); } else { p.empty = true; purgeOwner(k); } } });
         roomBar(); render();
       });
-      net.on('chat', (m) => { if (m && typeof m.text === 'string') addChat({ seat: typeof m.seat === 'number' ? m.seat : -1, name: String(m.name || 'Someone').slice(0, 40), text: String(m.text).slice(0, 300), t: Date.now() }); });
+      net.on('chat', (m) => { if (m && typeof m.seat === 'number' && S.seatsBy && S.seatsBy[m.seat] && blockedIds.has(S.seatsBy[m.seat].uid)) return; if (m && typeof m.text === 'string') addChat({ seat: typeof m.seat === 'number' ? m.seat : -1, name: String(m.name || 'Someone').slice(0, 40), text: String(m.text).slice(0, 300), t: Date.now() }); });
       net.on('resend', () => { net.queueSync(seatSnap, sharedSnap); });
       let lastWatch = new Set();
       const watchNote = () => { const now = new Set(net.spectators().map((p) => p.name + '|' + (p.clientId || ''))); if (!SPECTATE && net.isHost) { [...now].filter((k) => !lastWatch.has(k)).forEach((k) => log(`${k.split('|')[0]} is watching`)); [...lastWatch].filter((k) => !now.has(k)).forEach((k) => log(`${k.split('|')[0]} stopped watching`)); } lastWatch = now; };

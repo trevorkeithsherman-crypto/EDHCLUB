@@ -4,6 +4,8 @@
   "name": "edhclub",
   "main": "worker.js",
   "compatibility_date": "2026-09-05",
+  // Every 5 minutes: announce new open public tables to Discord (needs the secrets described in worker.js).
+  "triggers": { "crons": ["*/5 * * * *"] },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

@@ -342,3 +342,8 @@ h1 .count { font: 700 16px var(--f-ui); color: var(--muted); margin-left: 12px; 
 .ptcard img, .ptcard .ph { width: 100%; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 5px; display: block; background: #15110d; }
 .ptcard .ph { display: grid; place-items: center; font: 600 10px var(--f-ui); color: var(--muted); padding: 6px; text-align: center; }
 @media (max-width: 560px) { .addbar { flex-wrap: wrap; } .curve { height: 90px; } }
+
+.tfilters { margin: 0 0 14px; } .tfilters .chk { color: var(--muted); } .tfilters .notify { margin-left: auto; }
+.list li.full { opacity: .6; } .seatsopen { color: #7fd58a; }
+
+.btn.ghost.danger { background: transparent; color: var(--red); border-color: rgba(255, 83, 73, .5); box-shadow: none; }

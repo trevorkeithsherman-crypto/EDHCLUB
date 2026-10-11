@@ -1,4 +1,4 @@
-import { myTables, supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest, myProfile, uploadAvatar, removeAvatar, localAvatar } from './supa.js';
+import { myTables, setClubWebhook, updateEmail, deleteAccount, myBlocks, unblockUser, supa, online, currentUser, signInGuest, signInEmail, signInDiscord, signOut, displayNameFor, localName, setLocalName, createRoom, openRooms, myClubs, createClub, joinClub, clubDetail, upsertProfile, listDecks, deleteDeck, lastDeckId, setLastDeckId, signUpEmail, signInPassword, resetPassword, updatePassword, upgradeGuest, myProfile, uploadAvatar, removeAvatar, localAvatar } from './supa.js';
 import { startHero } from './hero.js';
 import { fetchCards, cached, CARD_BACK } from './scryfall.js';
 import { registerSW, install, onInstallable, isIOS } from './pwa.js';
@@ -121,7 +121,14 @@ function viewAccount() {
   ${nameField()}<div class="row"><button type="button" class="btn" id="saveName">Save name</button><button type="button" class="btn ghost" id="out">Sign out</button></div>
   ${guest ? `<hr style="border:0;border-top:1px solid rgba(36,28,18,.25);margin:18px 0"><h3 style="font:400 20px var(--f-display);margin:0 0 6px">Make this account permanent</h3><p>You\u2019re playing as a guest. Add an email and password to keep your decks, clubs and history on any device.</p>
   <div class="grid2"><label>Email<input id="em" type="email" autocomplete="email" placeholder="you@example.com"></label><label>Password<input id="pw" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"></label></div>
-  <div class="row"><button type="button" class="btn" id="upgrade">Create my account</button></div>` : `<hr style="border:0;border-top:1px solid rgba(36,28,18,.25);margin:18px 0"><h3 style="font:400 20px var(--f-display);margin:0 0 6px">Change password</h3><div class="grid2"><label>New password<input id="pw" type="password" autocomplete="new-password" minlength="8"></label></div><div class="row"><button type="button" class="btn ghost" id="chpw">Update password</button></div>`}`);
+  <div class="row"><button type="button" class="btn" id="upgrade">Create my account</button></div>` : `<hr style="border:0;border-top:1px solid rgba(36,28,18,.25);margin:18px 0"><h3 style="font:400 20px var(--f-display);margin:0 0 6px">Change password</h3><div class="grid2"><label>New password<input id="pw" type="password" autocomplete="new-password" minlength="8"></label></div><div class="row"><button type="button" class="btn ghost" id="chpw">Update password</button></div>
+  <h3 style="font:400 20px var(--f-display);margin:18px 0 6px">Email</h3><p class="muted">Signed in as <b>${esc(user.email || '(no email)')}</b>. Changing it sends a confirmation to the new address.</p><div class="grid2"><label>New email<input id="newEm" type="email" autocomplete="email" placeholder="you@example.com"></label></div><div class="row"><button type="button" class="btn ghost" id="chem">Change email</button></div>`}
+  <h3 style="font:400 20px var(--f-display);margin:18px 0 6px">Blocked players</h3><div id="blockList" class="muted">Loading…</div>
+  <hr style="border:0;border-top:1px solid rgba(36,28,18,.25);margin:18px 0"><h3 style="font:400 20px var(--f-display);margin:0 0 6px">Delete account</h3><p class="muted">Removes your profile, decks and club memberships for good. Games you played stay in club history under your name.</p><div class="row"><button type="button" class="btn ghost danger" id="delAcct">Delete my account…</button></div>`);
+  const ce = $('#chem'); if (ce) ce.onclick = async () => { const e = ($('#newEm').value || '').trim().toLowerCase(); if (!emailOk(e)) { toast('Enter a valid email address'); return; } try { await updateEmail(e); toast(`Check ${e} for a confirmation link; your email changes once you open it.`, 8000); } catch (err) { toast(friendlyAuthError(err), 6000); } };
+  const renderBlocks = async () => { const box = $('#blockList'); if (!box) return; let rows = []; try { rows = await myBlocks(); } catch { rows = []; } box.innerHTML = rows.length ? `<ul class="list">${rows.map((b) => `<li><span><b>${esc(b.blocked_name || 'Player')}</b> <small>· blocked ${new Date(b.created_at).toLocaleDateString()}</small></span><button type="button" class="btn ghost sm" data-unblock="${esc(b.blocked_id)}">Unblock</button></li>`).join('')}</ul>` : '<p class="muted">Nobody blocked. Block a player from their seat menu at a table: their chat is hidden for you and they can\u2019t join tables you host.</p>'; box.querySelectorAll('[data-unblock]').forEach((b) => { b.onclick = async () => { await unblockUser(b.dataset.unblock); toast('Unblocked'); renderBlocks(); }; }); };
+  renderBlocks();
+  $('#delAcct').onclick = () => { show('Delete your account', `<p>This removes your profile, your decks and your club memberships. It can\u2019t be undone.</p><label>Type <b>DELETE</b> to confirm<input id="delWord" autocomplete="off" placeholder="DELETE"></label><div class="row"><button type="button" class="btn ghost" id="delBack">Keep my account</button><button type="button" class="btn danger" id="delGo" disabled>Delete everything</button></div>`); $('#delWord').oninput = () => { $('#delGo').disabled = $('#delWord').value.trim() !== 'DELETE'; }; $('#delBack').onclick = () => viewAccount(); $('#delGo').onclick = async () => { try { await deleteAccount(); user = null; name = ''; toast('Your account has been deleted.', 6000); setTimeout(() => { location.href = '/'; }, 1200); } catch (err) { toast(friendlyAuthError(err), 6000); } }; };
   $('#saveName').onclick = async () => { const n = takeName(); await upsertProfile(user, n); await refreshAccount(); toast('Name saved'); };
   $('#pfpUp').onclick = () => $('#pfpFile').click();
   $('#pfpFile').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 8 * 1024 * 1024) { toast('That image is over 8 MB; pick a smaller one'); return; } try { await uploadAvatar(f); await refreshAccount(); viewAccount(); toast('Profile picture updated'); } catch (err) { toast(friendlyAuthError(err), 6000); } };
@@ -139,7 +146,8 @@ function viewCreate() {
   show('Host a table', `${nameField()}<div class="grid2"><label>Seats<select id="seats"><option value="4">4 players</option><option value="3">3 players</option><option value="2">2 players</option></select></label>
   <label>Fill empty seats with bots<select id="bots"><option value="0">No bots</option><option value="1">1 bot</option><option value="2">2 bots</option><option value="3">3 bots</option></select></label>
   <label>Bracket<select id="bracket"><option value="1">1 · Exhibition</option><option value="2">2 · Core</option><option value="3" selected>3 · Upgraded</option><option value="4">4 · Optimized</option><option value="5">5 · cEDH</option></select></label>
-  <label>Listing<select id="pub"><option value="1">Public, anyone can join</option><option value="0">Private, code only</option></select></label></div>
+  <label>Listing<select id="pub"><option value="1">Public, anyone can join</option><option value="0">Private, code only</option></select></label>
+  <label>Table name (optional)<input id="ttl" maxlength="60" placeholder="Tuesday night pod · casual"></label></div>
   <p class="muted">${online ? (user ? '' : 'You’ll be seated as a guest. Sign in first to attach the game to a club.') : 'Online tables need the service; this build will seat bots only.'}</p>
   <div class="row"><button type="button" class="btn big" id="go">Open the table</button></div>`);
   $('#go').onclick = async () => {
@@ -147,7 +155,7 @@ function viewCreate() {
     if (!online) { location.href = `/table.html?mode=bots&name=${encodeURIComponent(n)}&seats=${seats}&bots=${Math.max(1, bots)}`; return; }
     try {
       if (!user) { await signInGuest(n); await refreshAccount(); }
-      const code = await createRoom({ hostId: user.id, hostName: n, seats, bots, bracket });
+      const code = await createRoom({ hostId: user.id, hostName: n, seats, bots, bracket, title: ($('#ttl')?.value || '').trim() });
       if (!isPublic) await supa.from('rooms').update({ is_public: false }).eq('code', code);
       location.href = `/table.html?room=${code}&host=1&name=${encodeURIComponent(n)}&seats=${seats}&bots=${bots}`;
     } catch (e) { toast('Could not open a table: ' + e.message, 6000); }
@@ -173,29 +181,44 @@ async function renderClubs() {
   $('#mkClub').onclick = async () => { const n = $('#clubName').value.trim(); if (!n) return; try { await createClub(user.id, n); toast('Club created'); renderClubs(); } catch (e) { toast(e.message); } };
   $('#jnClub').onclick = async () => { try { const c = await joinClub(user.id, $('#clubCode').value.trim()); toast(`Joined ${c.name}`); renderClubs(); } catch (e) { toast(e.message); } };
   body.querySelectorAll('[data-club]').forEach((b) => { b.onclick = async () => {
-    const d = await clubDetail(b.dataset.club);
+    const d = await clubDetail(b.dataset.club); const club = clubs.find((c) => c.id === b.dataset.club) || {}; const owner = club.owner_id === user.id;
     const wins = {}; d.games.forEach((g) => { if (g.winner_name) wins[g.winner_name] = (wins[g.winner_name] || 0) + 1; });
     $('#clubDetail').innerHTML = `<h3 style="font:400 18px var(--f-display);margin:16px 0 6px">Members</h3><p>${d.members.map((m) => esc(m.profile?.display_name || 'Planeswalker') + (m.role === 'owner' ? ' (owner)' : '')).join(', ') || 'Nobody yet'}</p>
     <h3 style="font:400 18px var(--f-display);margin:12px 0 6px">Win board</h3>${Object.keys(wins).length ? `<table class="tbl"><tr><th>Player</th><th>Wins</th></tr>${Object.entries(wins).sort((a, b) => b[1] - a[1]).map(([n, w]) => `<tr><td>${esc(n)}</td><td>${w}</td></tr>`).join('')}</table>` : '<p class="muted">No games recorded yet. Finish a club table and it lands here.</p>'}
+    ${owner ? `<h3 style="font:400 18px var(--f-display);margin:16px 0 6px">Discord announcements</h3><p class="muted">Paste a Discord webhook URL for your club's channel (Channel settings → Integrations → Webhooks → New Webhook → Copy URL). Club tables are posted there when they open.</p><div class="row"><input id="clubHook" type="url" placeholder="https://discord.com/api/webhooks/…" value="${esc(club.discord_webhook || '')}" style="flex:1 1 320px"><button type="button" class="btn ghost" id="clubHookSave">Save</button></div>` : ''}
     ${d.games.length ? `<h3 style="font:400 18px var(--f-display);margin:12px 0 6px">Recent games</h3><table class="tbl"><tr><th>When</th><th>Winner</th><th>Players</th><th>Rounds</th></tr>${d.games.map((g) => `<tr><td>${new Date(g.ended_at).toLocaleDateString()}</td><td>${esc(g.winner_name)}</td><td>${esc((g.players || []).map((p) => p.name).join(', '))}</td><td>${g.rounds ?? ''}</td></tr>`).join('')}</table>` : ''}`;
+    const hs = $('#clubHookSave'); if (hs) hs.onclick = async () => { const u = $('#clubHook').value.trim(); if (u && !/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\//.test(u)) { toast('That is not a Discord webhook URL'); return; } try { await setClubWebhook(club.id, u); club.discord_webhook = u; toast(u ? 'Club tables will be announced in Discord' : 'Discord announcements off'); } catch (e) { toast(e.message); } };
   }; });
   body.querySelectorAll('[data-club-table]').forEach((b) => { b.onclick = async () => {
     try { const code = await createRoom({ hostId: user.id, hostName: name, seats: 4, bots: 0, bracket: 3 }); await supa.from('rooms').update({ club_id: b.dataset.clubTable }).eq('code', code); location.href = `/table.html?room=${code}&host=1&name=${encodeURIComponent(name)}&seats=4&bots=0&club=${b.dataset.clubTable}`; } catch (e) { toast(e.message); }
   }; });
 }
 
+let seenCodes = null;
+const filters = { bracket: '', open: true, bots: '', voice: false };
+function openSeatsOf(r) { return r.open_seats != null ? r.open_seats : Math.max(0, r.seats - (r.bots || 0) - (r.seated || 1)); }
 async function renderOpen() {
   const body = $('#openBody'); if (!body) return;
   if (!online) { body.innerHTML = '<p class="muted">Open tables appear here once the online service is connected.</p>'; return; }
-  const all = await openRooms(); const rooms = PAGE === 'home' ? all.slice(0, 4) : all;
-  const meta = $('#openMeta'); if (meta) meta.textContent = all.length ? `${all.length} table${all.length > 1 ? 's' : ''} · refreshes every 20 s` : '';
-  body.innerHTML = rooms.length ? `<ul class="list">${rooms.map((r) => `<li><span><b>${esc(r.host_name || 'A planeswalker')}'s table</b> <small>· ${r.seats} seats · bracket ${r.bracket}${r.bots ? ` · ${r.bots} bot${r.bots > 1 ? 's' : ''}` : ''} · ${timeAgo(r.created_at)}</small></span><span class="row"><button type="button" class="btn ghost sm" data-watch="${esc(r.code)}">Watch</button><button type="button" class="btn sm" data-join="${esc(r.code)}">Join</button></span></li>`).join('')}</ul>` : `<p class="muted">No open tables right now. <button type="button" class="link" data-go="create">Host one</button> and share the code.</p>`;
+  const all = await openRooms();
+  // new table since last look? (tables page, when the person asked to be told)
+  if (PAGE === 'tables') { if (seenCodes) { const fresh = all.filter((r) => !seenCodes.has(r.code)); if (fresh.length && $('#notifyMe')?.checked && 'Notification' in window && Notification.permission === 'granted') { try { new Notification('A table opened on EDH Club', { body: `${fresh[0].host_name || 'A planeswalker'}'s table · ${openSeatsOf(fresh[0])} seat${openSeatsOf(fresh[0]) === 1 ? '' : 's'} open · bracket ${fresh[0].bracket}`, icon: '/icons/icon-192.png' }); } catch { /* ignore */ } } } seenCodes = new Set(all.map((r) => r.code)); }
+  const f = PAGE === 'tables' ? all.filter((r) => (!filters.bracket || String(r.bracket) === filters.bracket) && (!filters.open || openSeatsOf(r) > 0) && (filters.bots === '' || (filters.bots === 'no' ? !r.bots : !!r.bots)) && (!filters.voice || r.has_voice)) : all;
+  const rooms = PAGE === 'home' ? all.slice(0, 4) : f;
+  const meta = $('#openMeta'); if (meta) meta.textContent = all.length ? `${f.length === all.length ? all.length : `${f.length} of ${all.length}`} table${all.length > 1 ? 's' : ''} · refreshes every 20 s` : '';
+  const row = (r) => { const open = openSeatsOf(r); return `<li class="${open ? '' : 'full'}"><span><b>${esc(r.title || `${r.host_name || 'A planeswalker'}'s table`)}</b> <small>· ${r.title ? `${esc(r.host_name || 'host')} · ` : ''}<b class="${open ? 'seatsopen' : ''}">${open ? `${open} seat${open === 1 ? '' : 's'} open` : 'full'}</b> · ${r.seats} players · bracket ${r.bracket}${r.bots ? ` · ${r.bots} bot${r.bots > 1 ? 's' : ''}` : ''}${r.has_voice ? ' · 🔊 voice' : ''} · ${timeAgo(r.created_at)}</small></span><span class="row"><button type="button" class="btn ghost sm" data-watch="${esc(r.code)}">Watch</button>${open ? `<button type="button" class="btn sm" data-join="${esc(r.code)}">Join</button>` : ''}</span></li>`; };
+  body.innerHTML = rooms.length ? `<ul class="list">${rooms.map(row).join('')}</ul>` : all.length ? '<p class="muted">No tables match these filters.</p>' : `<p class="muted">No open tables right now. <button type="button" class="link" data-go="create">Host one</button> and share the code.</p>`;
   if (PAGE === 'home' && all.length > rooms.length) body.insertAdjacentHTML('beforeend', `<p class="muted" style="margin-top:10px"><a href="/tables.html">See all ${all.length} open tables →</a></p>`);
   body.querySelectorAll('[data-join]').forEach((b) => { b.onclick = () => { go('join'); $('#code').value = b.dataset.join; }; });
   body.querySelectorAll('[data-watch]').forEach((b) => { b.onclick = () => { const n = takeName(); location.href = `/table.html?room=${b.dataset.watch}&spectate=1&name=${encodeURIComponent(n)}`; }; });
 }
 const timeAgo = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
 
+function bindFilters() {
+  const bar = $('#tableFilters'); if (!bar) return;
+  bar.querySelectorAll('[data-f]').forEach((el) => { el.onchange = () => { const k = el.dataset.f; filters[k] = el.type === 'checkbox' ? el.checked : el.value; renderOpen(); }; });
+  const nm = $('#notifyMe'); if (nm) { if (!('Notification' in window)) nm.closest('label').hidden = true; nm.onchange = async () => { if (nm.checked && Notification.permission !== 'granted') { const p = await Notification.requestPermission(); if (p !== 'granted') { nm.checked = false; toast('Notifications are blocked for this site'); return; } } toast(nm.checked ? 'You\u2019ll get a notification when a new table opens while this page is open' : 'Notifications off'); }; }
+}
 function go(where) {
   if (where === 'home') { $('#lobby').hidden = true; return; }
   if (where === 'signin') return viewSignIn('signin');
@@ -210,7 +233,7 @@ document.addEventListener('click', (e) => { const b = e.target.closest('[data-go
   const sn = $('#svcNote'); if (sn) sn.textContent = online ? '' : 'This build isn’t connected to the online service yet, so friends can’t join; bots work.';
   if (supa) supa.auth.onAuthStateChange(() => refreshAccount());
   await refreshAccount();
-  renderOpen(); if (PAGE === 'tables') setInterval(renderOpen, 20000);
+  renderOpen(); if (PAGE === 'tables') { setInterval(renderOpen, 20000); bindFilters(); }
   if (PAGE === 'landing' && user && new URLSearchParams(location.search).get('source') === 'pwa') { location.replace('/home.html'); return; }
   if (PAGE === 'home' && !user && online) viewSignIn('signin');
   const q = new URLSearchParams(location.search);

@@ -46,6 +46,13 @@
 
     <section class="panel" id="openTables">
       <div class="panel-h"><h2>Waiting for players</h2><span class="muted small" id="openMeta"></span></div>
+      <div class="filters tfilters" id="tableFilters">
+        <select data-f="bracket" aria-label="Bracket"><option value="">Any bracket</option><option value="1">1 · Exhibition</option><option value="2">2 · Core</option><option value="3">3 · Upgraded</option><option value="4">4 · Optimized</option><option value="5">5 · cEDH</option></select>
+        <select data-f="bots" aria-label="Bots"><option value="">Bots or not</option><option value="no">No bots</option><option value="yes">With bots</option></select>
+        <label class="chk"><input type="checkbox" data-f="open" checked> Seats open</label>
+        <label class="chk"><input type="checkbox" data-f="voice"> 🔊 Voice linked</label>
+        <label class="chk notify"><input type="checkbox" id="notifyMe"> Notify me when a table opens</label>
+      </div>
       <div id="openBody"><p class="muted">Loading…</p></div>
     </section>
   </main>

@@ -84,9 +84,57 @@ async function moxfieldText(request, id) {
   });
 }
 
+/* ---------- Discord: announce open tables ----------
+   Secrets (wrangler secret put …): SUPABASE_URL, SUPABASE_SERVICE_KEY, DISCORD_WEBHOOK_URL (optional global channel).
+   Clubs can add their own webhook (clubs.discord_webhook); a club table is posted there too. */
+async function sb(env, path, init = {}) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) throw new Error('Supabase service credentials are not configured');
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, { ...init, headers: { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`, 'content-type': 'application/json', Prefer: 'return=representation', ...(init.headers || {}) } });
+  if (!r.ok) throw new Error(`Supabase ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  return r.status === 204 ? null : r.json();
+}
+const BRACKETS = { 1: 'Exhibition', 2: 'Core', 3: 'Upgraded', 4: 'Optimized', 5: 'cEDH' };
+function tableEmbed(room, origin) {
+  const open = room.open_seats ?? Math.max(0, room.seats - (room.bots || 0) - (room.seated || 0));
+  return {
+    username: 'EDH Club', avatar_url: `${origin}/icons/icon-192.png`,
+    embeds: [{ title: room.title || `${room.host_name || 'A planeswalker'}'s table is open`, url: `${origin}/?join=${room.code}`, color: 0x4fc3ff,
+      description: `**${open} seat${open === 1 ? '' : 's'} open** · ${room.seats} players · bracket ${room.bracket} (${BRACKETS[room.bracket] || ''})${room.bots ? ` · ${room.bots} bot${room.bots > 1 ? 's' : ''}` : ''}${room.has_voice ? ' · 🔊 voice linked' : ''}`,
+      fields: [{ name: 'Join', value: `[Sit down](${origin}/?join=${room.code}) · code **${room.code}**`, inline: true }, { name: 'Watch', value: `[Spectate](${origin}/?watch=${room.code})`, inline: true }],
+      footer: { text: 'EDH Club · free Commander in your browser' }, timestamp: room.created_at }],
+  };
+}
+async function postWebhook(url, payload) { if (!url) return false; const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }); return r.ok; }
+async function announceRoom(env, room, origin) {
+  const payload = tableEmbed(room, origin); let posted = 0;
+  if (env.DISCORD_WEBHOOK_URL && (await postWebhook(env.DISCORD_WEBHOOK_URL, payload))) posted++;
+  if (room.club_id) { try { const [club] = await sb(env, `clubs?id=eq.${room.club_id}&select=discord_webhook`); if (club && club.discord_webhook && (await postWebhook(club.discord_webhook, payload))) posted++; } catch { /* no club webhook */ } }
+  await sb(env, `rooms?code=eq.${encodeURIComponent(room.code)}`, { method: 'PATCH', body: JSON.stringify({ announced_at: new Date().toISOString() }) });
+  return posted;
+}
+async function announce(request, env, code) {
+  if (!/^[A-Z0-9]{5}$/.test(code)) return reply({ error: 'bad code' }, 400);
+  try {
+    const [room] = await sb(env, `rooms?code=eq.${code}&select=*`);
+    if (!room) return reply({ error: 'no such table' }, 404);
+    if (room.status !== 'open' || !room.is_public || room.locked) return reply({ error: 'Only open, public, unlocked tables can be announced' }, 400);
+    if (room.announced_at && Date.now() - new Date(room.announced_at).getTime() < 10 * 60 * 1000) return reply({ ok: true, posted: 0, note: 'already announced in the last 10 minutes' });
+    const posted = await announceRoom(env, room, new URL(request.url).origin);
+    return reply({ ok: true, posted, note: posted ? '' : 'No Discord channel is connected yet (set DISCORD_WEBHOOK_URL, or add a webhook to your club).' });
+  } catch (e) { return reply({ error: e.message }, 502); }
+}
+async function sweep(env, origin) {
+  const since = new Date(Date.now() - 90 * 60 * 1000).toISOString();
+  const rooms = await sb(env, `rooms?status=eq.open&is_public=eq.true&locked=eq.false&announced_at=is.null&created_at=gt.${since}&select=*`);
+  let n = 0; for (const room of rooms || []) { try { n += await announceRoom(env, room, origin); } catch (e) { console.warn('announce failed', room.code, e.message); } }
+  return n;
+}
+
 export default {
+  async scheduled(event, env, ctx) { ctx.waitUntil(sweep(env, 'https://edhclub.com').catch((e) => console.warn('sweep', e.message))); },
   async fetch(request, env) {
     const url = new URL(request.url);
+    const an = url.pathname.match(/^\/api\/announce\/([A-Z0-9]{5})$/i); if (an && request.method === 'POST') return announce(request, env, an[1].toUpperCase());
     if (url.pathname === '/api/top-decks') return topDecks(request);
     const m = url.pathname.match(/^\/api\/deck\/(\d+)$/); if (m) return deckText(request, m[1]);
     const mx = url.pathname.match(/^\/api\/moxfield\/([A-Za-z0-9_-]+)$/); if (mx) return moxfieldText(request, mx[1]);

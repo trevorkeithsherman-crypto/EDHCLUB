@@ -107,10 +107,10 @@ export async function displayNameFor(user) {
 export const roomCode = () => Array.from({ length: 5 }, () => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 31)]).join('');
 
 /* ---------- Rooms ---------- */
-export async function createRoom({ hostId, hostName, seats, bots, bracket }) {
+export async function createRoom({ hostId, hostName, seats, bots, bracket, title }) {
   const code = roomCode();
   if (supa && hostId) {
-    const { error } = await supa.from('rooms').insert({ code, host_id: hostId, host_name: hostName, seats, bots, bracket, status: 'open' });
+    const { error } = await supa.from('rooms').insert({ code, host_id: hostId, host_name: hostName, seats, bots, bracket, status: 'open', title: title || null, open_seats: Math.max(0, seats - (bots || 0) - 1), seated: 1 });
     if (error) throw error;
   }
   return code;
@@ -123,7 +123,7 @@ export async function getRoom(code) {
 export async function openRooms() {
   if (!supa) return [];
   const since = new Date(Date.now() - 1000 * 60 * 90).toISOString();
-  const { data } = await supa.from('rooms').select('*').eq('status', 'open').eq('is_public', true).gt('created_at', since).order('created_at', { ascending: false }).limit(20);
+  const { data } = await supa.from('rooms').select('*').eq('status', 'open').eq('is_public', true).eq('locked', false).gt('created_at', since).order('created_at', { ascending: false }).limit(40);
   return data || [];
 }
 export async function setRoomStatus(code, status) { if (supa) await supa.from('rooms').update({ status }).eq('code', code); }
@@ -131,7 +131,7 @@ export async function setRoomStatus(code, status) { if (supa) await supa.from('r
 /* ---------- Clubs ---------- */
 export async function myClubs(userId) {
   if (!supa || !userId) return [];
-  const { data } = await supa.from('club_members').select('club:clubs(id, name, code, created_at)').eq('user_id', userId);
+  const { data } = await supa.from('club_members').select('club:clubs(id, name, code, created_at, owner_id, discord_webhook)').eq('user_id', userId);
   return (data || []).map((r) => r.club).filter(Boolean);
 }
 export async function createClub(userId, name) {
@@ -262,3 +262,16 @@ export async function myTables() {
   const { data } = await supa.from('room_players').select('code, seat, name, last_seen, room:rooms(code, host_name, seats, bots, bracket, status, created_at)').eq('user_id', u.id).gt('last_seen', since).order('last_seen', { ascending: false }).limit(10);
   return (data || []).filter((r) => r.room && r.room.status !== 'finished' && r.room.status !== 'ended');
 }
+
+/* ---------- Matchmaking ---------- */
+/** Host keeps the listing current: how many humans are seated, how many seats are open, whether it's locked. */
+export async function updateRoomLive(code, patch) { if (!supa) return; try { await supa.from('rooms').update(patch).eq('code', code); } catch { /* best effort */ } }
+export async function setClubWebhook(clubId, url) { if (!supa) return; const { error } = await supa.from('clubs').update({ discord_webhook: url || null }).eq('id', clubId); if (error) throw error; }
+
+/* ---------- Account and safety ---------- */
+export async function updateEmail(email) { const { error } = await supa.auth.updateUser({ email }); if (error) throw error; }
+export async function deleteAccount() { const { error } = await supa.rpc('delete_me'); if (error) throw error; try { await supa.auth.signOut(); } catch { /* already gone */ } try { ['edhclub-name', 'edhclub-avatar', 'edhclub-last-deck', 'edhclub-default-deck'].forEach((k) => localStorage.removeItem(k)); } catch { /* ignore */ } }
+export async function myBlocks() { if (!supa) return []; const u = await currentUser(); if (!u) return []; const { data } = await supa.from('blocks').select('blocked_id, blocked_name, created_at').eq('user_id', u.id); return data || []; }
+export async function blockUser(blockedId, blockedName) { const u = await currentUser(); if (!u) throw new Error('Sign in first'); if (blockedId === u.id) throw new Error("You can't block yourself"); const { error } = await supa.from('blocks').upsert({ user_id: u.id, blocked_id: blockedId, blocked_name: blockedName }, { onConflict: 'user_id,blocked_id' }); if (error) throw error; }
+export async function unblockUser(blockedId) { const u = await currentUser(); if (!u) return; await supa.from('blocks').delete().eq('user_id', u.id).eq('blocked_id', blockedId); }
+export async function fileReport({ reportedId, reportedName, roomCode, reason, details, log }) { const u = await currentUser(); if (!u) throw new Error('Sign in first'); const { error } = await supa.from('reports').insert({ reporter_id: u.id, reported_id: reportedId || null, reported_name: reportedName, room_code: roomCode || null, reason, details: details || null, log: log || null }); if (error) throw error; }

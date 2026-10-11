@@ -32,11 +32,23 @@ def collection(route):
 
 FAKE_USER = {'id': '11111111-1111-4111-8111-111111111111', 'aud': 'authenticated', 'role': 'authenticated', 'is_anonymous': True, 'user_metadata': {'display_name': 'Tester'}, 'app_metadata': {}, 'created_at': '2026-10-08T00:00:00Z'}
 # In-memory server tables for persistence tests: room_state (one row per room) and room_players.
-STORE = {'room_state': {}, 'room_players': {}}
+STORE = {'room_state': {}, 'room_players': {}, 'blocks': [], 'reports': [], 'room_patches': [], 'club_patches': [], 'deleted': 0, 'email_changes': []}
 def _q(url, key):
     import urllib.parse as up; qs = up.parse_qs(up.urlparse(url).query); v = qs.get(key, [None])[0]; return v.split('.', 1)[1] if v and '.' in v else v
 def supabase_mock(route):
     url = route.request.url; m = route.request.method
+    if '/rest/v1/blocks' in url:
+        if m == 'GET': route.fulfill(status=200, content_type='application/json', body=json.dumps(STORE['blocks'])); return
+        if m == 'DELETE': bid = _q(url, 'blocked_id'); STORE['blocks'] = [b for b in STORE['blocks'] if b['blocked_id'] != bid]; route.fulfill(status=204, body=''); return
+        body = json.loads(route.request.post_data or '{}'); rows = body if isinstance(body, list) else [body]
+        for r in rows:
+            if not any(b['blocked_id'] == r['blocked_id'] for b in STORE['blocks']): STORE['blocks'].append({'blocked_id': r['blocked_id'], 'blocked_name': r.get('blocked_name'), 'created_at': '2026-10-11T00:00:00Z'})
+        route.fulfill(status=201, content_type='application/json', body='[]'); return
+    if '/rest/v1/reports' in url: STORE['reports'].append(json.loads(route.request.post_data or '{}')); route.fulfill(status=201, content_type='application/json', body='[]'); return
+    if '/rest/v1/rpc/delete_me' in url: STORE['deleted'] += 1; route.fulfill(status=204, body=''); return
+    if '/auth/v1/user' in url and m == 'PUT': STORE['email_changes'].append(json.loads(route.request.post_data or '{}')); route.fulfill(status=200, content_type='application/json', body=json.dumps(FAKE_USER)); return
+    if '/rest/v1/rooms' in url and m == 'PATCH': STORE['room_patches'].append((_q(url, 'code'), json.loads(route.request.post_data or '{}'))); route.fulfill(status=204, body=''); return
+    if '/rest/v1/clubs' in url and m == 'PATCH': STORE['club_patches'].append(json.loads(route.request.post_data or '{}')); route.fulfill(status=204, body=''); return
     if '/rest/v1/room_state' in url:
         code = _q(url, 'code')
         if m == 'GET': row = STORE['room_state'].get(code); route.fulfill(status=200, content_type='application/json', body=json.dumps([row] if row else [])); return
@@ -59,11 +71,14 @@ def supabase_mock(route):
     if '/rest/v1/profiles' in url:
         route.fulfill(status=200, content_type='application/json', body=json.dumps([{'id': FAKE_USER['id'], 'display_name': 'Tester'}]) if m == 'GET' else '[]'); return
     if '/rest/v1/club_members' in url and m == 'GET':
-        route.fulfill(status=200, content_type='application/json', body=json.dumps([{'club': {'id': 'c1', 'name': 'Tuesday Pod', 'code': 'TUESD', 'created_at': '2026-10-01'}}] if 'club:' in url or 'select=club' in url else [{'role': 'owner', 'profile': {'display_name': 'Tester'}}])); return
+        route.fulfill(status=200, content_type='application/json', body=json.dumps([{'club': {'id': 'c1', 'name': 'Tuesday Pod', 'code': 'TUESD', 'created_at': '2026-10-01', 'owner_id': FAKE_USER['id'], 'discord_webhook': ''}}] if 'club:' in url or 'select=club' in url else [{'role': 'owner', 'profile': {'display_name': 'Tester'}}])); return
     if '/rest/v1/games' in url and m == 'GET':
         route.fulfill(status=200, content_type='application/json', body=json.dumps([{'ended_at': '2026-10-07T20:00:00Z', 'winner_name': 'Tester', 'players': [{'name': 'Tester'}, {'name': 'Mira'}], 'rounds': 9}])); return
     if '/rest/v1/rooms' in url and m == 'GET':
-        route.fulfill(status=200, content_type='application/json', body=json.dumps([{'code': 'ABCDE', 'host_name': 'Mira', 'seats': 4, 'bots': 1, 'bracket': 3, 'created_at': '2026-10-08T22:00:00Z'}])); return
+        rows = [{'code': 'ABCDE', 'host_name': 'Mira', 'seats': 4, 'bots': 1, 'bracket': 3, 'seated': 1, 'open_seats': 2, 'has_voice': True, 'locked': False, 'status': 'open', 'is_public': True, 'created_at': '2026-10-08T22:00:00Z'},
+                {'code': 'FULL1', 'host_name': 'Owen', 'seats': 3, 'bots': 0, 'bracket': 5, 'seated': 3, 'open_seats': 0, 'has_voice': False, 'locked': False, 'status': 'open', 'is_public': True, 'title': 'cEDH grinders', 'created_at': '2026-10-08T22:10:00Z'}]
+        if 'code=eq.' in url: rows = [r for r in rows if r['code'] == _q(url, 'code')]
+        route.fulfill(status=200, content_type='application/json', body=json.dumps(rows)); return
     if '/rest/v1/decks' in url:
         if m == 'GET': route.fulfill(status=200, content_type='application/json', body=json.dumps([{'id': 'd1', 'user_id': FAKE_USER['id'], 'name': 'Krenko Goblins', 'commander': 'Krenko, Mob Boss', 'colors': 'R', 'card_count': 100, 'mat': 'ember', 'list': 'Commander\n1 Krenko, Mob Boss\n\nDeck\n1 Goblin Chieftain\n98 Mountain', 'updated_at': '2026-10-08T00:00:00Z'}] if 'id=eq.d1' in url or True else [])); return
         if m == 'POST': route.fulfill(status=201, content_type='application/json', body=json.dumps({'id': 'd2', 'name': 'Saved Deck'})); return

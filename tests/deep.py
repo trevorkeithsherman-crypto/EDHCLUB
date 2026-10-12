@@ -327,7 +327,7 @@ with sync_playwright() as p:
     pg.select_option('#viewSel', '0'); pg.wait_for_timeout(400)
     # settings menu
     pg.click('#settingsBtn'); pg.wait_for_timeout(200); pg.click('.mi:has-text("Playmat effects")'); pg.wait_for_timeout(300); check('settings: effects toggle', state(pg)['fx'] is False)
-    pg.click('#settingsBtn'); pg.wait_for_timeout(200); pg.click('.mi:has-text("Sound")'); pg.wait_for_timeout(300); check('settings: sound toggle', state(pg)['sound'] is True)
+    check('sound is on by default', state(pg)['sound'] is True); pg.click('#settingsBtn'); pg.wait_for_timeout(200); pg.click('.mi:has-text("Sound: on")'); pg.wait_for_timeout(300); check('settings: sound toggle', state(pg)['sound'] is False); pg.click('#settingsBtn'); pg.wait_for_timeout(200); pg.click('.mi:has-text("Sound: off")'); pg.wait_for_timeout(300); check('…and back on', state(pg)['sound'] is True)
     pg.click('#settingsBtn'); pg.wait_for_timeout(200); pg.click('.mi:has-text("Card motion")'); pg.wait_for_timeout(300); check('settings: motion cycles', state(pg)['motion'] == 'reduced')
     pg.click('#settingsBtn'); pg.wait_for_timeout(200); pg.click('.mi:has-text("Game log")'); pg.wait_for_timeout(300); check('game log opens with entries', pg.locator('.loglist li').count() > 5); pg.keyboard.press('Escape')
     pg.click('[data-act=d20]'); pg.wait_for_timeout(200); check('d20 roll', 'd20' in pg.locator('#toasts').text_content())

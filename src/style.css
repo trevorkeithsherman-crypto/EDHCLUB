@@ -642,6 +642,11 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 #sideBtn { position: relative; } #sideBtn .badge { position: absolute; top: 4px; right: 6px; margin: 0; }
 .spectator .chatform { display: flex; }
 
+.snd-list { list-style: none; margin: 4px 0 12px; padding: 0; display: grid; gap: 4px; max-height: 46vh; overflow: auto; }
+.snd-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 4px 6px; border-bottom: 1px solid rgba(255, 255, 255, .05); font: 500 13px var(--f-ui); }
+.snd-row .btn { min-width: 40px; }
+#sndVol { width: 100%; accent-color: var(--blue); }
+
 /* ---------- Opening hand ---------- */
 .opening { position: fixed; inset: 0; z-index: 58; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); background: radial-gradient(ellipse at 50% 55%, rgba(18, 26, 44, .82), rgba(5, 7, 11, .96) 70%); backdrop-filter: blur(6px); overflow: auto; animation: opIn .35s ease-out; }
 @keyframes opIn { from { opacity: 0; } }

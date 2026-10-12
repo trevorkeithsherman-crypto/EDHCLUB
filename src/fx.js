@@ -74,33 +74,90 @@ export const FX = {
   bounce(el) { if (!el || !mul()) return; el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.5)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 320, easing: 'ease-out' }); },
 };
 
+/* ---------- Sound: a sample engine over the designed palette in /public/sfx ----------
+   Every cue is a real audio file (48 kHz stereo, built by tools/sfx/build.py or dropped in by hand), played through a
+   master bus with a gentle compressor. Cues that repeat (cards, taps, hits) have round-robin variants and a touch of
+   random pitch so twenty taps never sound like one tap twenty times. Legacy names (whoosh, thud, chime…) still work. */
+const LEGACY = { whoosh: 'card_slide', thud: 'card_set', chime: 'cast', fanfare: 'commander', charge: 'attack', hit: 'hit', heal: 'heal', shatter: 'counter', pop: 'token', tick: 'card_tap', gong: 'eliminated', victory: 'victory', shuffle: 'shuffle', tap: 'card_tap', ui: 'ui_tick', flip: 'card_flip', block: 'block', message: 'message', turn: 'your_turn', draw: 'card_slide', land: 'card_set' };
+const MUSICAL = new Set(['cast', 'commander', 'victory', 'heal', 'your_turn', 'eliminated', 'token', 'message']);
 export const SFX = {
-  ctx: null, master: null,
-  init() { try { if (!this.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; this.ctx = new AC(); this.master = this.ctx.createGain(); this.master.gain.value = 0.55; this.master.connect(this.ctx.destination); } if (this.ctx.state === 'suspended') this.ctx.resume(); } catch { /* no audio */ } },
-  tone(f, dur, type, vol, at, to) { const c = this.ctx, t = c.currentTime + (at || 0); const o = c.createOscillator(), g = c.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(f, t); if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.15, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.05); },
-  noise(dur, vol, freq, ft, to, at) { const c = this.ctx, t = c.currentTime + (at || 0); const len = Math.max(1, Math.floor(c.sampleRate * dur)); const buf = c.createBuffer(1, len, c.sampleRate); const d = buf.getChannelData(0); for (let k = 0; k < len; k++) d[k] = Math.random() * 2 - 1; const s = c.createBufferSource(); s.buffer = buf; const f = c.createBiquadFilter(); f.type = ft || 'bandpass'; f.frequency.setValueAtTime(freq, t); if (to) f.frequency.exponentialRampToValueAtTime(to, t + dur); f.Q.value = 1.1; const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); s.connect(f); f.connect(g); g.connect(this.master); s.start(t); s.stop(t + dur + 0.05); },
-  play(n, arg) {
-    if (!S || !S.sound || !this.ctx) return;
+  ctx: null, master: null, comp: null, buffers: {}, gains: {}, rr: {}, last: {}, state: 'idle', vol: 0.8,
+  init() {
     try {
-      switch (n) {
-        case 'whoosh': this.noise(0.3, 0.16, 500, 'bandpass', 2600); break;
-        case 'thud': this.tone(120, 0.3, 'sine', 0.45, 0, 42); this.noise(0.14, 0.2, 380, 'lowpass'); break;
-        case 'chime': { const f = { W: 988, U: 784, B: 523, R: 880, G: 659, C: 698 }[arg] || 784; this.noise(0.26, 0.08, 900, 'bandpass', 3200); this.tone(f, 0.7, 'triangle', 0.13, 0.05); this.tone(f * 1.5, 0.6, 'sine', 0.05, 0.09); break; }
-        case 'fanfare': [523, 659, 784, 1047].forEach((f, k) => this.tone(f, 0.45, 'sawtooth', 0.05, k * 0.08)); this.tone(1047, 1.3, 'triangle', 0.11, 0.32); this.noise(0.6, 0.1, 400, 'bandpass', 4000); break;
-        case 'charge': this.noise(0.42, 0.2, 300, 'bandpass', 1700); this.tone(196, 0.3, 'square', 0.04, 0, 392); break;
-        case 'hit': this.tone(160, 0.18, 'square', 0.1, 0, 60); this.noise(0.12, 0.22, 1800, 'highpass'); break;
-        case 'heal': this.tone(660, 0.35, 'sine', 0.12, 0, 990); break;
-        case 'shatter': this.noise(0.6, 0.32, 2500, 'highpass'); for (let k = 0; k < 6; k++) this.tone(1800 + Math.random() * 2400, 0.25, 'triangle', 0.035, k * 0.04); break;
-        case 'pop': this.tone(420, 0.12, 'sine', 0.16, 0, 900); break;
-        case 'tick': this.tone(1400, 0.05, 'square', 0.035); break;
-        case 'gong': this.tone(98, 2.2, 'sine', 0.35); this.tone(147.5, 1.8, 'sine', 0.12); this.tone(231, 1.4, 'sine', 0.06); break;
-        case 'victory': [523, 659, 784, 659, 784, 1047].forEach((f, k) => this.tone(f, 0.4, 'triangle', 0.11, k * 0.14)); this.tone(1047, 1.6, 'sine', 0.11, 0.84); break;
-        case 'shuffle': for (let k = 0; k < 8; k++) this.noise(0.06, 0.12, 2000, 'bandpass', null, k * 0.05); break;
-        default: break;
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+        this.ctx = new AC(); try { this.vol = Math.min(1, Math.max(0, parseFloat(localStorage.getItem('edhclub-vol') ?? '0.8'))); } catch { /* default */ }
+        this.master = this.ctx.createGain(); this.master.gain.value = this.vol;
+        this.comp = this.ctx.createDynamicsCompressor(); this.comp.threshold.value = -14; this.comp.knee.value = 12; this.comp.ratio.value = 3; this.comp.attack.value = 0.004; this.comp.release.value = 0.2;
+        this.master.connect(this.comp); this.comp.connect(this.ctx.destination);
+        this.load();
       }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch { /* no audio */ }
+  },
+  setVolume(v) { this.vol = Math.min(1, Math.max(0, v)); if (this.master) this.master.gain.setTargetAtTime(this.vol, this.ctx.currentTime, 0.02); try { localStorage.setItem('edhclub-vol', String(this.vol)); } catch { /* ignore */ } },
+  ext() { const a = document.createElement('audio'); return a.canPlayType && a.canPlayType('audio/ogg; codecs=vorbis') ? 'ogg' : 'mp3'; },
+  async load() {
+    if (this.state !== 'idle') return; this.state = 'loading';
+    try {
+      const man = await (await fetch('/sfx/manifest.json', { cache: 'force-cache' })).json(); const ext = this.ext();
+      const jobs = Object.entries(man.cues).map(async ([cue, { files, gain }]) => {
+        this.gains[cue] = gain ?? 1;
+        const bufs = await Promise.all(files.map(async (f) => { try { const ab = await (await fetch(`/sfx/${f}.${ext}`, { cache: 'force-cache' })).arrayBuffer(); return await this.ctx.decodeAudioData(ab); } catch { return null; } }));
+        this.buffers[cue] = bufs.filter(Boolean);
+      });
+      await Promise.all(jobs); this.state = 'ready';
+    } catch { this.state = 'failed'; }
+  },
+  ready(cue) { return !!(this.buffers[cue] && this.buffers[cue].length); },
+  resolve(n, arg) { const base = LEGACY[n] || n; if (base === 'cast') { const c = { W: 'W', U: 'U', B: 'B', R: 'R', G: 'G' }[arg] || 'C'; return `cast_${c}`; } return base; },
+  play(n, arg, o = {}) {
+    if (!S || !S.sound || !this.ctx) return false;
+    const cue = this.resolve(n, arg); const now = performance.now();
+    // the same cue inside 45 ms is one event (untap-all, a board wipe): play it once
+    if (!o.force && now - (this.last[cue] || 0) < 45) return false; this.last[cue] = now;
+    try {
+      if (this.ready(cue)) {
+        const list = this.buffers[cue]; const k = (this.rr[cue] = ((this.rr[cue] ?? -1) + 1) % list.length); const buf = list[k];
+        const src = this.ctx.createBufferSource(); src.buffer = buf;
+        const musical = MUSICAL.has(cue.replace(/_[WUBRGC]$/, '')); src.playbackRate.value = musical ? 1 + (Math.random() - 0.5) * 0.01 : 1 + (Math.random() - 0.5) * 0.07;
+        const g = this.ctx.createGain(); g.gain.value = (this.gains[cue] ?? 1) * (o.gain ?? 1);
+        src.connect(g); g.connect(this.master); src.start(); return true;
+      }
+      if (this.state === 'failed') { this.legacy(n, arg); return true; }
     } catch { /* ignore */ }
+    return false;
+  },
+  // the old oscillator cues: only used if the sample files cannot be fetched at all (offline before first cache)
+  tone(f, dur, type, vol, at, to) { const c = this.ctx, t = c.currentTime + (at || 0); const o = c.createOscillator(), g = c.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(f, t); if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.15, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.02); },
+  noise(dur, vol, freq, ft, to, at) { const c = this.ctx, t = c.currentTime + (at || 0); const len = Math.max(1, Math.floor(c.sampleRate * dur)); const buf = c.createBuffer(1, len, c.sampleRate); const d = buf.getChannelData(0); for (let k = 0; k < len; k++) d[k] = Math.random() * 2 - 1; const s = c.createBufferSource(); s.buffer = buf; const f = c.createBiquadFilter(); f.type = ft || 'bandpass'; f.frequency.setValueAtTime(freq || 1000, t); if (to) f.frequency.exponentialRampToValueAtTime(to, t + dur); const g = c.createGain(); g.gain.setValueAtTime(vol || 0.1, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); s.connect(f); f.connect(g); g.connect(this.master); s.start(t); },
+  legacy(n, arg) {
+    switch (LEGACY[n] ? n : Object.keys(LEGACY).find((k) => LEGACY[k] === n) || n) {
+      case 'whoosh': case 'draw': case 'flip': this.noise(0.3, 0.16, 500, 'bandpass', 2600); break;
+      case 'thud': case 'land': case 'block': this.tone(120, 0.3, 'sine', 0.45, 0, 42); this.noise(0.14, 0.2, 380, 'lowpass'); break;
+      case 'chime': { const f = { W: 988, U: 784, B: 523, R: 880, G: 659, C: 698 }[arg] || 784; this.tone(f, 0.7, 'triangle', 0.13, 0.05); break; }
+      case 'fanfare': [523, 659, 784, 1047].forEach((f, k) => this.tone(f, 0.45, 'sawtooth', 0.05, k * 0.08)); break;
+      case 'charge': this.noise(0.42, 0.2, 300, 'bandpass', 1700); break;
+      case 'hit': this.tone(160, 0.18, 'square', 0.1, 0, 60); this.noise(0.12, 0.22, 1800, 'highpass'); break;
+      case 'heal': this.tone(660, 0.35, 'sine', 0.12, 0, 990); break;
+      case 'shatter': this.noise(0.6, 0.32, 2500, 'highpass'); break;
+      case 'pop': this.tone(420, 0.12, 'sine', 0.16, 0, 900); break;
+      case 'tick': case 'tap': case 'ui': case 'message': this.tone(1400, 0.05, 'square', 0.035); break;
+      case 'gong': this.tone(98, 2.2, 'sine', 0.35); break;
+      case 'victory': [523, 659, 784, 659, 784, 1047].forEach((f, k) => this.tone(f, 0.4, 'triangle', 0.11, k * 0.14)); break;
+      case 'shuffle': for (let k = 0; k < 8; k++) this.noise(0.06, 0.12, 2000, 'bandpass', null, k * 0.05); break;
+      case 'turn': this.tone(220, 0.4, 'sine', 0.2); break;
+      default: break;
+    }
   },
 };
+// what each cue is for: the Sound check panel reads this
+export const CUES = [
+  ['card_slide', 'Card drawn / moved'], ['card_set', 'Permanent set down'], ['card_tap', 'Tap / untap'], ['shuffle', 'Shuffle'], ['card_flip', 'Transform / face down'], ['token', 'Token created'],
+  ['cast_W', 'Cast — white'], ['cast_U', 'Cast — blue'], ['cast_B', 'Cast — black'], ['cast_R', 'Cast — red'], ['cast_G', 'Cast — green'], ['cast_C', 'Cast — colorless'],
+  ['counter', 'Spell countered'], ['commander', 'Commander arrives'], ['attack', 'Attack declared'], ['block', 'Blocked'], ['hit', 'Damage taken'], ['heal', 'Life gained'],
+  ['your_turn', 'Your turn'], ['message', 'Chat message'], ['ui_tick', 'Counters / controls'], ['eliminated', 'Player eliminated'], ['victory', 'Victory'],
+];
 
 /* ---------- Ambient worlds: one small canvas per playmat ---------- */
 const R = (a, b) => a + Math.random() * (b - a);

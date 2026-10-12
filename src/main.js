@@ -1,6 +1,6 @@
 import { fetchCards, fetchToken, fetchPrintings, cached, CARD_BACK } from './scryfall.js';
 import { DB, buildSample } from './decks.js';
-import { FX, SFX, Ambient, setFxState, setLite } from './fx.js';
+import { FX, SFX, CUES, Ambient, setFxState, setLite } from './fx.js';
 import { net, rememberRoom, recallRoom } from './net.js';
 import { makeBot } from './bots.js';
 import * as Rules from './combat.js';
@@ -74,7 +74,7 @@ function freshState() {
   return {
     v: 2, seats: n,
     players: [0, 1, 2, 3].map((i) => ({ name: SEAT_NAMES[i], life: 40, poison: 0, cmdDmg: {}, out: i >= n, outAt: 0, mulls: 0, deckText: buildSample(i), mat: 'auto', zones: emptyZones(), bot: MODE !== 'hotseat' && i < n && net.botSeats().includes(i), empty: MODE === 'room' && i < n && !net.botSeats().includes(i) })),
-    cards: {}, stack: [], turn: { active: 0, phase: 1, number: 1 }, view: 0, motion: defaultMotion(), sound: false, nextId: 1,
+    cards: {}, stack: [], turn: { active: 0, phase: 1, number: 1 }, view: 0, motion: defaultMotion(), sound: true, nextId: 1,
     log: [], attacks: [], outOrder: [], stats: { casts: {}, big: null }, over: false, sel: null, fx: true,
   };
 }
@@ -546,8 +546,8 @@ function renderOpening() {
   };
   setTimeout(() => ov.querySelector('[data-op=keep]:not([disabled])')?.focus({ preventScroll: true }), 30);
 }
-function toggleTap(c) { c.tapped = !c.tapped; if (MODE !== 'hotseat' && c.zone === 'battlefield') setTimeout(() => fireEvent(c.tapped ? 'becomesTapped' : 'becomesUntapped', { card: c }), 30); const el = cardEl(c.id); if (el) el.classList.toggle('tapped', c.tapped); SFX.play('tick'); queueSave(); requestAnimationFrame(drawArrows); }
-function counter(c, key, d) { c[key] = key === 'ctr' ? Math.max(0, (c[key] || 0) + d) : (c[key] || 0) + d; render(); FX.bounce(cardEl(c.id)?.querySelector(key === 'ctr' ? '.bc' : '.bp')); SFX.play('tick'); }
+function toggleTap(c) { c.tapped = !c.tapped; if (MODE !== 'hotseat' && c.zone === 'battlefield') setTimeout(() => fireEvent(c.tapped ? 'becomesTapped' : 'becomesUntapped', { card: c }), 30); const el = cardEl(c.id); if (el) el.classList.toggle('tapped', c.tapped); SFX.play('tap'); queueSave(); requestAnimationFrame(drawArrows); }
+function counter(c, key, d) { c[key] = key === 'ctr' ? Math.max(0, (c[key] || 0) + d) : (c[key] || 0) + d; render(); FX.bounce(cardEl(c.id)?.querySelector(key === 'ctr' ? '.bc' : '.bp')); SFX.play('ui'); }
 /* ---------- Counters of every kind ----------
    p1 = net +1/+1 (negative = -1/-1), ctr = the card's main named counter (loyalty, lore, level, charge…), cn = any
    other named counters { stun: 1 }, kwc = keyword counters (flying, first strike…). Kinds come from the card's text. */
@@ -581,7 +581,7 @@ function counterPanel(c, opt = {}) {
   openModal(`<h2>Counters on ${esc(c.name)}</h2><p>${opt.x ? `<b>${esc(c.name)} enters with X counters.</b> Set X now — nothing happens to it until you press Done.` : 'Press − or + on any kind. Cards that enter with counters already have them; bots add theirs from the card text.'}</p><div class="dmgrows" id="cpBody">${body()}</div><div class="row" style="justify-content:space-between;align-items:center">${pt()}<button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'narrow', onClose: () => { c.ctrPending = false; const after = counterSummary(c); if (after !== before) log(`${P(c.controller).name}: ${c.name} counters — ${after || 'none'}`); render(); } });
   const m = $('#modal');
   const refresh = () => { $('#cpBody').innerHTML = body(); const p = $('#cpPt'); if (p && c.pt) p.textContent = `Now ${ptOf(c)}`; render(); };
-  m.addEventListener('click', (e) => { const b = e.target.closest('[data-cp]'); if (!b) return; addCounter(c, b.dataset.cp, +b.dataset.d); SFX.play('tick'); refresh(); FX.bounce(cardEl(c.id)?.querySelector('.bp, .bc, .bn')); });
+  m.addEventListener('click', (e) => { const b = e.target.closest('[data-cp]'); if (!b) return; addCounter(c, b.dataset.cp, +b.dataset.d); SFX.play('ui'); refresh(); FX.bounce(cardEl(c.id)?.querySelector('.bp, .bc, .bn')); });
   m.addEventListener('change', (e) => { if (e.target.id !== 'cpOther') return; let k = e.target.value; if (k === '__custom') k = (prompt('Counter name (e.g. "verse"):') || '').trim().toLowerCase().replace(/ counters?$/, ''); if (!k) { e.target.value = ''; return; } extra.push(k); addCounter(c, k, 1); refresh(); });
 }
 // "Enters with N counters": applied for everyone when the card arrives (it's printed on the card); X is set by hand.
@@ -630,7 +630,7 @@ function setBlock(a, blockerId) {
   if (!Rules.canBlock(b, atk)) { toast(Rules.blockLegal(atk, [b]).why || `${b.name} can't block that`); return; }
   a.blockers = a.blockers || [];
   if (a.blockers.includes(blockerId)) a.blockers = a.blockers.filter((x) => x !== blockerId);
-  else { a.blockers = [...a.blockers, blockerId]; FX.slam(cardEl(blockerId), 1.1); SFX.play('whoosh'); }
+  else { a.blockers = [...a.blockers, blockerId]; FX.slam(cardEl(blockerId), 1.1); SFX.play('block'); }
   a.ok = false; render();
 }
 function finishBlock(a) {
@@ -764,7 +764,8 @@ function passTurn() {
       if (stay.length) { if (p.bot) { stay.forEach((c) => { c.tapped = true; }); log(`${p.name} untaps only ${allow.length} permanent${allow.length === 1 ? '' : 's'} (${r.untap.src})`); } else if (net.isMine(n) && S.reminders !== false) toast(`${r.untap.src}: you may untap only ${r.untap.lands !== Infinity ? `${r.untap.lands + (r.untap.plusUpkeep || 0)} land${r.untap.lands === 1 ? '' : 's'}` : `${r.untap.permanents} permanents`} this turn`, 7000); }
     }
   }
-  if (tapped.length) SFX.play('tick');
+  if (tapped.length) SFX.play('tap');
+  if (net.isMine(n) && !p.bot && MODE !== 'hotseat') SFX.play('turn');
   log(`${p.name}'s turn`);
   banner(`${p.name}'s turn`, `Round ${S.turn.number}`, n);
   if (MODE !== 'hotseat') setTimeout(() => { fireEvent('upkeep', { seat: n }); if (net.isMine(n)) sagaStep(n); }, 400);
@@ -1118,7 +1119,7 @@ function addChat(m, mine = false) {
   const side = $('#side'); const shown = side && getComputedStyle(side).display !== 'none';
   const open = sideTab === 'chat' && shown;
   if (!mine && !open) chatUnread++;
-  renderChat(); if (!mine && !open) SFX.play('tick');
+  renderChat(); if (!mine && !open) SFX.play('message');
 }
 function renderChat() {
   const list = $('#chatList'); if (!list) return;
@@ -1281,7 +1282,7 @@ function cardMenu(c, x, y) {
   if (c.zone === 'battlefield' && /Planeswalker/.test(c.type) && net.isMine(c.controller)) { parseAbilities(c).filter((a) => a.kind === 'loyalty').forEach((a) => add(`${a.cost >= 0 ? '+' : ''}${a.cost}: ${a.text.replace(/^[^:]+: /, '').slice(0, 48)}`, () => { c.ctr = (c.ctr || 0) + a.cost; log(`${P(c.controller).name} activates ${c.name} (${a.cost >= 0 ? '+' : ''}${a.cost}, loyalty ${c.ctr})`); render(); })); sep(); }
   if (c.zone === 'battlefield') {
     add(c.tapped ? 'Untap' : 'Tap', () => toggleTap(c));
-    if (c.backImg) add(c.flipped ? 'Transform to front' : 'Transform', () => { c.flipped = !c.flipped; render(); FX.slam(cardEl(c.id), 1.08); SFX.play('whoosh'); });
+    if (c.backImg) add(c.flipped ? 'Transform to front' : 'Transform', () => { c.flipped = !c.flipped; render(); FX.slam(cardEl(c.id), 1.08); SFX.play('flip'); });
     if (!/Creature/.test(c.type) && isPerm(c)) {
       const auto = Rules.stationThreshold(c) > 0 && (c.ctr || 0) >= Rules.stationThreshold(c);
       if (c.anim) add('It\'s not a creature anymore', () => { c.anim = false; render(); log(`${c.name} stops being a creature`); });
@@ -2358,7 +2359,7 @@ function onKey(e) {
     case 'g': if (!c.isCmdr || c.zone !== 'command') act(() => { moveLog(c, 'graveyard'); moveCard(c.id, c.owner, 'graveyard'); }); return;
     case 'x': act(() => { moveLog(c, 'exile'); moveCard(c.id, c.owner, 'exile'); }); return;
     case 'h': if (c.zone !== 'hand') act(() => { moveLog(c, 'hand'); moveCard(c.id, c.controller, 'hand'); }); return;
-    case 'f': if (c.zone === 'battlefield') act(() => { if (c.backImg) c.flipped = !c.flipped; else c.faceDown = !c.faceDown; render(); SFX.play('whoosh'); }); return;
+    case 'f': if (c.zone === 'battlefield') act(() => { if (c.backImg) c.flipped = !c.flipped; else c.faceDown = !c.faceDown; render(); SFX.play('flip'); }); return;
     case 'l': if (canSee(c)) act(() => closerModal(c)); return;
     case '1': if (c.zone === 'battlefield') act(() => counter(c, 'p1', 1)); return;
     case '2': if (c.zone === 'battlefield') act(() => counter(c, 'p1', -1)); return;
@@ -2370,6 +2371,19 @@ function shortcutsModal() {
   openModal(`<h2>Keyboard shortcuts</h2><p>Hover a card (or click it once to select it), then press a key. Shortcuts are off while you type.</p>
   <div class="kgrid">${groups.map((g) => `<section><h3>${g}</h3>${SHORTCUTS.filter((x) => x.group === g).map((x) => `<div class="krow"><span class="keys">${x.keys.map((kk) => `<kbd>${kk}</kbd>`).join('<i>/</i>')}</span><span>${x.label}</span></div>`).join('')}</section>`).join('')}</div>
   <div class="row" style="justify-content:space-between;align-items:center"><span class="muted small">Mouse: double-click plays or taps · right-click for the full menu · drag between zones.</span><button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'wide' });
+}
+/* ---------- Sound check: hear every cue, set the volume ---------- */
+function soundModal() {
+  if (!S.sound) { S.sound = true; render(); } SFX.init();
+  const rows = CUES.map(([cue, label]) => `<li class="snd-row"><button type="button" class="btn ghost sm" data-snd="${cue}">▶</button><span>${esc(label)}</span><span class="muted small">${esc(cue)}</span></li>`).join('');
+  openModal(`<h2>Sound check</h2><p>Every table cue, as it plays in a game. Volume applies to all of them and is remembered on this device.</p>
+  <label>Volume <input type="range" id="sndVol" min="0" max="1" step="0.02" value="${SFX.vol}"></label>
+  <ul class="snd-list">${rows}</ul>
+  <div class="row" style="justify-content:space-between;align-items:center"><span class="muted small" id="sndState">${SFX.state === 'ready' ? 'Sounds loaded' : 'Loading sounds…'}</span><button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'narrow' });
+  const m = $('#modal');
+  m.addEventListener('input', (e) => { if (e.target.id === 'sndVol') SFX.setVolume(parseFloat(e.target.value)); });
+  m.addEventListener('click', (e) => { const b = e.target.closest('[data-snd]'); if (!b) return; const cue = b.dataset.snd; SFX.play(cue.startsWith('cast_') ? 'cast' : cue, cue.startsWith('cast_') ? cue.slice(5) : undefined, { force: true }); });
+  const tick = setInterval(() => { const st = $('#sndState'); if (!st) { clearInterval(tick); return; } st.textContent = SFX.state === 'ready' ? 'Sounds loaded' : SFX.state === 'failed' ? 'Sound files could not be loaded — using fallback tones' : 'Loading sounds…'; }, 400);
 }
 async function doFullscreen() {
   if (!fullscreenSupported()) { toast(isIOS() ? 'On iPhone, add EDH Club to your Home Screen for a full-screen table.' : 'Full screen isn’t available in this browser.', 5000); return; }
@@ -2397,6 +2411,7 @@ function bindUI() {
       { label: perfLabel(), fn: () => { setPerf({ auto: 'full', full: 'lite', lite: 'auto' }[perf.mode] || 'auto'); toast(liteOn() ? 'Performance mode: lighter effects for smoother play' : 'Full effects'); } },
       { label: `Playmat effects: ${S.fx ? 'on' : 'off'}`, fn: () => $('#fxBtn').click() },
       { label: `Sound: ${S.sound ? 'on' : 'off'}`, fn: () => $('#soundBtn').click() },
+      { label: 'Sound check & volume…', fn: soundModal },
       { label: `Bot pace: ${{ relaxed: 'relaxed', normal: 'normal', fast: 'fast' }[S.botSpeed || 'normal']}`, fn: () => { S.botSpeed = { relaxed: 'normal', normal: 'fast', fast: 'relaxed' }[S.botSpeed || 'normal']; render(); toast(`Bots play at a ${S.botSpeed} pace`); } },
       { label: reminderSettingLabel(), fn: () => { S.reminders = S.reminders === false; render(); toast(S.reminders === false ? 'Trigger reminders off' : 'Trigger reminders on'); } },
       { label: `Foil effects: ${S.foilFx === false ? 'off' : 'on'}`, fn: () => { S.foilFx = S.foilFx === false; render(); toast(S.foilFx === false ? 'Foil effects off' : 'Foil effects on'); } },
@@ -2409,7 +2424,7 @@ function bindUI() {
       { label: 'Game log', fn: logModal },
     ], r.left, r.bottom + 4, 'Settings');
   };
-  $('#soundBtn').onclick = () => { S.sound = !S.sound; if (S.sound) { SFX.init(); SFX.play('chime', 'U'); } render(); };
+  $('#soundBtn').onclick = () => { S.sound = !S.sound; if (S.sound) { SFX.init(); setTimeout(() => SFX.play('chime', 'U'), SFX.state === 'ready' ? 0 : 400); } render(); };
   $('#chatForm').onsubmit = (e) => { e.preventDefault(); const inp = $('#chatInput'); sendChat(inp.value); inp.value = ''; inp.focus(); };
   renderChat();
   $('#importBtn').onclick = () => { if (SPECTATE) { toast('Spectators don\'t bring a deck. Join with the table code to play.'); return; } importModal(S.view); };
@@ -2581,4 +2596,5 @@ boot();
 // Read-only hook for the test suite.
 window.__edhState = () => S;
 window.__edhMut = (fn) => { fn(S); render(); };
+window.__edhSfx = () => SFX;
 window.__edhApi = () => ({ cast: castToStack, resolveCombat, fire: fireEvent, runEffects, parseEffects, parseAbilities, moveCard, activate: botActivate, spectate: SPECTATE, net, rulesFor, draw, Rules, perf, setPerf, liteOn, loadDeck, ensureArt, allNames, kick: () => bot && Promise.resolve(bot.takeTurn(S.turn.active)).catch((e) => { S.botError = `${e && e.message} @ ${S.botStep}`; console.error(e); passTurn(); }), botBusy: () => !!(bot && bot.busy), cached });

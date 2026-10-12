@@ -1,0 +1,158 @@
+{
+ "format": [
+  "ogg",
+  "mp3"
+ ],
+ "cues": {
+  "card_slide": {
+   "files": [
+    "card_slide1",
+    "card_slide2",
+    "card_slide3"
+   ],
+   "gain": 1.0
+  },
+  "card_set": {
+   "files": [
+    "card_set1",
+    "card_set2"
+   ],
+   "gain": 1.0
+  },
+  "card_tap": {
+   "files": [
+    "card_tap1",
+    "card_tap2",
+    "card_tap3"
+   ],
+   "gain": 1.0
+  },
+  "shuffle": {
+   "files": [
+    "shuffle1",
+    "shuffle2"
+   ],
+   "gain": 1.0
+  },
+  "card_flip": {
+   "files": [
+    "card_flip1",
+    "card_flip2"
+   ],
+   "gain": 1.0
+  },
+  "token": {
+   "files": [
+    "token1",
+    "token2"
+   ],
+   "gain": 1.0
+  },
+  "cast_W": {
+   "files": [
+    "cast_W"
+   ],
+   "gain": 1.0
+  },
+  "cast_U": {
+   "files": [
+    "cast_U"
+   ],
+   "gain": 1.0
+  },
+  "cast_B": {
+   "files": [
+    "cast_B"
+   ],
+   "gain": 1.0
+  },
+  "cast_R": {
+   "files": [
+    "cast_R"
+   ],
+   "gain": 1.0
+  },
+  "cast_G": {
+   "files": [
+    "cast_G"
+   ],
+   "gain": 1.0
+  },
+  "cast_C": {
+   "files": [
+    "cast_C"
+   ],
+   "gain": 1.0
+  },
+  "counter": {
+   "files": [
+    "counter"
+   ],
+   "gain": 1.0
+  },
+  "commander": {
+   "files": [
+    "commander"
+   ],
+   "gain": 1.0
+  },
+  "attack": {
+   "files": [
+    "attack1",
+    "attack2"
+   ],
+   "gain": 1.0
+  },
+  "block": {
+   "files": [
+    "block1",
+    "block2"
+   ],
+   "gain": 1.0
+  },
+  "hit": {
+   "files": [
+    "hit1",
+    "hit2"
+   ],
+   "gain": 1.0
+  },
+  "heal": {
+   "files": [
+    "heal"
+   ],
+   "gain": 1.0
+  },
+  "eliminated": {
+   "files": [
+    "eliminated"
+   ],
+   "gain": 1.0
+  },
+  "victory": {
+   "files": [
+    "victory"
+   ],
+   "gain": 1.0
+  },
+  "message": {
+   "files": [
+    "message"
+   ],
+   "gain": 1.0
+  },
+  "ui_tick": {
+   "files": [
+    "ui_tick1",
+    "ui_tick2"
+   ],
+   "gain": 1.0
+  },
+  "your_turn": {
+   "files": [
+    "your_turn"
+   ],
+   "gain": 1.0
+  }
+ }
+}

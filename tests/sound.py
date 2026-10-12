@@ -45,6 +45,16 @@ with sync_playwright() as p:
     log = pg.evaluate("__edhSfx()._log")
     check('playing a land and tapping a card use the card sounds (set down, tap)', 'card_set' in log and 'card_tap' in log, str(log))
     check('no JS errors', not errs, str(errs)[:300])
+    # sound is a device preference: a saved table that had it off no longer silences the device; turning it off is remembered
+    pg.goto(BASE + '/table.html?mode=hotseat'); pg.wait_for_timeout(1200)
+    pg.evaluate("() => { const k = Object.keys(localStorage).find((x) => x.startsWith('edhclub') && localStorage.getItem(x).includes('\"cards\"')); const st = JSON.parse(localStorage.getItem(k)); st.sound = false; localStorage.setItem(k, JSON.stringify(st)); }")
+    pg.reload(); pg.wait_for_timeout(1200)
+    check('a saved table with sound off still opens with sound on (device default is on)', pg.evaluate("__edhState().sound") is True)
+    pg.click('#settingsBtn'); pg.wait_for_timeout(200); pg.click('.mi:has-text("Sound: on")'); pg.wait_for_timeout(200)
+    pg.reload(); pg.wait_for_timeout(1200)
+    check('turning it off is remembered on this device', pg.evaluate("__edhState().sound") is False and pg.evaluate("localStorage.getItem('edhclub-sound')") == 'off')
+    pg.click('#settingsBtn'); pg.wait_for_timeout(200); pg.click('.mi:has-text("Sound: off")'); pg.wait_for_timeout(200)
+    check('…and back on', pg.evaluate("__edhState().sound") is True and pg.evaluate("localStorage.getItem('edhclub-sound')") == 'on')
     browser.close()
 fails = [r for r in results if not r[1]]
 print(f'\n{len(results) - len(fails)}/{len(results)} passed')

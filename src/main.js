@@ -69,12 +69,15 @@ const mouse = { x: 0, y: 0 };
 let backOk = true; // falls back to the EDH Club back if Scryfall's card back can't load
 const defaultMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'full'; } catch { return 'full'; } };
 const emptyZones = () => ({ library: [], hand: [], battlefield: [], graveyard: [], exile: [], command: [] });
+// Sound is a device preference (on unless this device turned it off), never something a saved table decides.
+const soundPref = () => { try { return localStorage.getItem('edhclub-sound') !== 'off'; } catch { return true; } };
+const setSoundPref = (on) => { try { localStorage.setItem('edhclub-sound', on ? 'on' : 'off'); } catch { /* ignore */ } };
 function freshState() {
   const n = MODE === 'hotseat' ? 4 : ROOM.seats;
   return {
     v: 2, seats: n,
     players: [0, 1, 2, 3].map((i) => ({ name: SEAT_NAMES[i], life: 40, poison: 0, cmdDmg: {}, out: i >= n, outAt: 0, mulls: 0, deckText: buildSample(i), mat: 'auto', zones: emptyZones(), bot: MODE !== 'hotseat' && i < n && net.botSeats().includes(i), empty: MODE === 'room' && i < n && !net.botSeats().includes(i) })),
-    cards: {}, stack: [], turn: { active: 0, phase: 1, number: 1 }, view: 0, motion: defaultMotion(), sound: true, nextId: 1,
+    cards: {}, stack: [], turn: { active: 0, phase: 1, number: 1 }, view: 0, motion: defaultMotion(), sound: soundPref(), nextId: 1,
     log: [], attacks: [], outOrder: [], stats: { casts: {}, big: null }, over: false, sel: null, fx: true,
   };
 }
@@ -2374,7 +2377,7 @@ function shortcutsModal() {
 }
 /* ---------- Sound check: hear every cue, set the volume ---------- */
 function soundModal() {
-  if (!S.sound) { S.sound = true; render(); } SFX.init();
+  if (!S.sound) { S.sound = true; setSoundPref(true); render(); } SFX.init();
   const rows = CUES.map(([cue, label]) => `<li class="snd-row"><button type="button" class="btn ghost sm" data-snd="${cue}">▶</button><span>${esc(label)}</span><span class="muted small">${esc(cue)}</span></li>`).join('');
   openModal(`<h2>Sound check</h2><p>Every table cue, as it plays in a game. Volume applies to all of them and is remembered on this device.</p>
   <label>Volume <input type="range" id="sndVol" min="0" max="1" step="0.02" value="${SFX.vol}"></label>
@@ -2424,7 +2427,7 @@ function bindUI() {
       { label: 'Game log', fn: logModal },
     ], r.left, r.bottom + 4, 'Settings');
   };
-  $('#soundBtn').onclick = () => { S.sound = !S.sound; if (S.sound) { SFX.init(); setTimeout(() => SFX.play('chime', 'U'), SFX.state === 'ready' ? 0 : 400); } render(); };
+  $('#soundBtn').onclick = () => { S.sound = !S.sound; setSoundPref(S.sound); if (S.sound) { SFX.init(); setTimeout(() => SFX.play('chime', 'U'), SFX.state === 'ready' ? 0 : 400); } render(); };
   $('#chatForm').onsubmit = (e) => { e.preventDefault(); const inp = $('#chatInput'); sendChat(inp.value); inp.value = ''; inp.focus(); };
   renderChat();
   $('#importBtn').onclick = () => { if (SPECTATE) { toast('Spectators don\'t bring a deck. Join with the table code to play.'); return; } importModal(S.view); };
@@ -2504,7 +2507,7 @@ let seatRestored = false;
 async function boot() {
   let restored = null;
   if (MODE === 'hotseat') { try { const raw = localStorage.getItem(KEY); if (raw) restored = JSON.parse(raw); } catch { /* ignore */ } }
-  if (restored && restored.v === 2 && restored.players && restored.cards) { S = restored; if (S.fx == null) S.fx = true; if (!S.seats) S.seats = 4; S.players.forEach((p) => { if (!p.mat) p.mat = 'auto'; }); setFxState(S); }
+  if (restored && restored.v === 2 && restored.players && restored.cards) { S = restored; S.sound = soundPref(); if (S.fx == null) S.fx = true; if (!S.seats) S.seats = 4; S.players.forEach((p) => { if (!p.mat) p.mat = 'auto'; }); setFxState(S); }
   if (MODE === 'room') {
     try {
       if (online) { const u = await currentUser(); if (!u) { const { signInGuest } = await import('./supa.js'); await signInGuest(ROOM.name); } }

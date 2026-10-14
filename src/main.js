@@ -8,7 +8,7 @@ import { parseList, deckStats, deckText } from './decklist.js';
 import { parseAbilities, parseEffects, staticGrant, boardRules, castTax, castBlock, spellKind, manaValue, counterKinds, entersWith, KW_COUNTERS } from './effects.js';
 import { deckLink, fetchLinkedDeck } from './deckimport.js';
 import { registerSW, canInstall, install, onInstallable, isIOS, toggleFullscreen, fullscreenOn, fullscreenSupported } from './pwa.js';
-import { online, currentUser, recordGame, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId, saveRoomState, loadRoomState, setRoomVoice, touchRoomPlayer, updateRoomLive, myBlocks, blockUser, unblockUser, fileReport } from './supa.js';
+import { online, currentUser, recordGame, recordFullGame, setWinMethod, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId, saveRoomState, loadRoomState, setRoomVoice, touchRoomPlayer, updateRoomLive, myBlocks, blockUser, unblockUser, fileReport } from './supa.js';
 
 /* ---------- Mode from the URL ---------- */
 const Q = new URLSearchParams(location.search);
@@ -78,7 +78,7 @@ function freshState() {
     v: 2, seats: n,
     players: [0, 1, 2, 3].map((i) => ({ name: SEAT_NAMES[i], life: 40, poison: 0, cmdDmg: {}, out: i >= n, outAt: 0, mulls: 0, deckText: buildSample(i), mat: 'auto', zones: emptyZones(), bot: MODE !== 'hotseat' && i < n && net.botSeats().includes(i), empty: MODE === 'room' && i < n && !net.botSeats().includes(i) })),
     cards: {}, stack: [], turn: { active: 0, phase: 1, number: 1 }, view: 0, motion: defaultMotion(), sound: soundPref(), nextId: 1,
-    log: [], attacks: [], outOrder: [], stats: { casts: {}, big: null }, over: false, sel: null, fx: true,
+    log: [], attacks: [], outOrder: [], stats: { casts: {}, big: null }, over: false, t0: Date.now(), gameId: null, sel: null, fx: true,
   };
 }
 const motionMul = () => (liteOn() ? 0 : ({ full: 1, reduced: 0.5, off: 0 }[S.motion] ?? 1));
@@ -164,7 +164,7 @@ function purgeOwner(i) {
 function loadDeck(i, text, cmdName) {
   const p = P(i); const d = parseDeck(text, cmdName);
   purgeOwner(i);
-  Object.assign(p, { deckText: text, life: 40, poison: 0, cmdDmg: {}, out: false, outAt: 0, mulls: 0, kept: !!p.bot, zones: emptyZones() });
+  Object.assign(p, { deckText: text, life: 40, poison: 0, cmdDmg: {}, out: false, outAt: 0, mulls: 0, kept: !!p.bot, zones: emptyZones(), takenFrom: {}, cmdTakenFrom: {}, lastHit: null, outBy: null, outHow: null, outTurn: null });
   if (opening && opening.seat === i) opening = null;
   d.cmd.forEach((n) => { const pr = d.cmdPrints?.[n] || {}; const c = makeCard({ ...lookup(n, pr.set, pr.num), name: n, set: pr.set || '', num: pr.num || '', foil: !!pr.foil, sfid: pr.sfid || '' }, i); c.isCmdr = true; c.zone = 'command'; p.zones.command.push(c.id); });
   d.main.forEach((e) => { const def = { ...lookup(e.name, e.set, e.num), name: e.name, set: e.set || '', num: e.num || '', foil: !!e.foil, sfid: e.sfid || '' }; for (let k = 0; k < e.n; k++) { const c = makeCard(def, i); p.zones.library.push(c.id); } });
@@ -709,6 +709,8 @@ function changeLife(i, d, o = {}) {
   if (d > 0 && MODE !== 'hotseat' && S.turn.number >= 1 && !o.silent) setTimeout(() => fireEvent('gainLife', { seat: i, amount: d }), 30);
   const p = P(i); if (!d) return; p.life += d;
   const amt = Math.abs(d);
+  // stats: who dealt it and how (the owner of the damaged seat keeps the book; the host reads it at game end)
+  if (d < 0) { const from = o.src ? o.src.controller : null; const how = o.how || (o.src ? (o.src.isCmdr ? 'commander' : 'burn') : 'life'); if (from != null && from !== i) { p.takenFrom = { ...(p.takenFrom || {}) }; p.takenFrom[from] = (p.takenFrom[from] || 0) + amt; if (how === 'commander') { p.cmdTakenFrom = { ...(p.cmdTakenFrom || {}) }; p.cmdTakenFrom[from] = (p.cmdTakenFrom[from] || 0) + amt; } } if (from != null && from !== i) p.lastHit = { seat: from, how }; else if (how !== 'life') p.lastHit = { seat: p.lastHit?.seat ?? null, how }; }
   if (!o.manual && amt > (S.stats.big?.amt || 0)) S.stats.big = { amt, text: o.src ? `${o.src.name} hit ${p.name} for ${amt}` : `${p.name} ${d < 0 ? 'lost' : 'gained'} ${amt} life at once` };
   render();
   FX.floatNum(lifeEl(i), d);
@@ -724,6 +726,7 @@ function checkOut(i) {
 }
 function eliminate(i, why) {
   const p = P(i); p.out = true; p.outAt = Date.now();
+  p.outTurn = S.turn.number; p.outHow = /poison/.test(why) ? 'poison' : /commander/.test(why) ? 'commander' : /conced/.test(why) ? 'concede' : (p.lastHit?.how === 'combat' ? 'combat' : p.lastHit?.how === 'commander' ? 'commander' : p.lastHit?.how === 'burn' ? 'burn' : 'life'); p.outBy = p.lastHit && p.lastHit.seat != null && p.lastHit.seat !== i ? p.lastHit.seat : null;
   S.outOrder.push({ i, why, round: S.turn.number });
   S.attacks = S.attacks.filter((a) => a.target !== i);
   log(`${p.name} is out: ${why}`); SFX.play('gong'); render(); FX.shake(seatEl(i), true);
@@ -731,10 +734,40 @@ function eliminate(i, why) {
   if (alive.length === 1) setTimeout(() => win(alive[0]), motionMul() ? 1100 : 0);
   else if (S.turn.active === i) passTurn();
 }
+/* ---------- Stats: write the finished game for every seat (host in a room, the player vs bots) ---------- */
+function detectWinMethod(w) {
+  // the blow that ended the game decides it; otherwise whatever the winner used on anyone
+  const last = S.outOrder.length ? P(S.outOrder[S.outOrder.length - 1].i) : null;
+  const hows = (last && last.outBy === w ? [last.outHow] : []).concat(S.players.filter((q, k) => k !== w && k < S.seats && q.out && q.outBy === w).map((q) => q.outHow));
+  const pick = hows.find((h) => ['poison', 'commander', 'combat', 'burn'].includes(h)); return pick === 'burn' ? 'other' : (pick || 'other');
+}
+async function recordStats(w) {
+  if (!online || S.gameId) return;
+  const me = await currentUser(); if (!me) return;
+  const seats = S.players.map((q, k) => k).filter((k) => k < S.seats && !P(k).empty);
+  const uidOf = (k) => (net.active ? (S.seatsBy && S.seatsBy[k] && S.seatsBy[k].uid) || (k === net.seat ? me.id : null) : (k === 0 ? me.id : null));
+  const outRank = {}; S.outOrder.forEach((o, idx) => { outRank[o.i] = idx; });
+  const n = seats.length; const first = S.firstSeat || 0;
+  const players = seats.map((k) => {
+    const q = P(k); const cm = commandersOf(k);
+    const placement = k === w ? 1 : (outRank[k] != null ? n - outRank[k] : 2);
+    const kills = seats.filter((j) => j !== k && P(j).out && P(j).outBy === k).length;
+    const dealt = seats.reduce((a, j) => a + ((P(j).takenFrom || {})[k] || 0), 0); const cmdDealt = seats.reduce((a, j) => a + ((P(j).cmdTakenFrom || {})[k] || 0), 0);
+    return { user_id: q.bot ? null : uidOf(k), name: q.name, bot: !!q.bot, seat: k, turn_order: ((k - first + n) % n) + 1, deck_id: q.deckId || null, deck_name: q.deckName || null, commander: cm.map((c) => c.name).join(' + ') || null, colors: cm.map((c) => c.colors || '').join('') || null, placement, eliminated_turn: q.outTurn ?? null, eliminated_by_seat: q.outBy ?? null, eliminated_how: q.outHow || null, kills, mulligans: q.mulls || 0, cmd_dmg_dealt: cmdDealt, dmg_dealt: dealt, life_end: q.life };
+  });
+  const method = S.winMethod || detectWinMethod(w);
+  const game = { room_code: net.active ? ROOM.code : null, club_id: ROOM.club || null, winner_name: P(w).name, players: players.map((pl) => ({ name: pl.name, commander: pl.commander, bot: pl.bot })), rounds: S.turn.number,
+    mode: MODE, seats: n, turns: S.turn.number, winner_id: P(w).bot ? null : uidOf(w), winner_deck_id: P(w).deckId || null, win_method: method, started_at: S.t0 ? new Date(S.t0).toISOString() : null, duration_s: S.t0 ? Math.round((Date.now() - S.t0) / 1000) : null, bracket: ROOM.bracket || null, vs_bots: players.some((pl) => pl.bot), recorded_by: me.id };
+  try { S.gameId = await recordFullGame(game, players); } catch (e) { console.warn('stats not recorded', e); }
+}
+const WIN_METHODS = [['combat', 'Combat damage'], ['commander', 'Commander damage'], ['combo', 'Combo'], ['poison', 'Poison / infect'], ['alt', 'Alternate win condition'], ['other', 'Other / mill / burn'], ['concede', 'Opponents conceded']];
 function win(i, fromRemote) {
   if (S.over && !fromRemote) return;
   S.over = true;
-  if (net.active && net.isHost && !fromRemote) { setRoomStatus(ROOM.code, 'finished'); recordGame({ code: ROOM.code, clubId: ROOM.club, winnerName: P(i).name, players: S.players.slice(0, S.seats).map((p, k) => ({ name: p.name, commander: commandersOf(k).map((c) => c.name).join(' + '), bot: !!p.bot })), rounds: S.turn.number }); } const cols = []; commandersOf(i).forEach((c) => colorsHex(c).forEach((h) => cols.push(h))); cols.push(css('--candle'), css('--parch'));
+  if (net.active && net.isHost && !fromRemote) setRoomStatus(ROOM.code, 'finished');
+  if (!fromRemote) S.winMethod = detectWinMethod(i);
+  if (!fromRemote && ((net.active && net.isHost) || MODE === 'bots')) recordStats(i).catch(() => {});
+  const cols = []; commandersOf(i).forEach((c) => colorsHex(c).forEach((h) => cols.push(h))); cols.push(css('--candle'), css('--parch'));
   FX.confetti(cols); SFX.play('victory'); log(`${P(i).name} wins the game`); render();
   const total = Object.values(S.stats.casts).reduce((a, b) => a + b, 0);
   const ccasts = S.players.map((p, k) => `${esc(p.name)} ${commandersOf(k).reduce((a, c) => a + (c.casts || 0), 0)}`).join(' · ');
@@ -743,7 +776,9 @@ function win(i, fromRemote) {
   ${cm && cm.img ? `<div class="closer" style="margin:6px 0 12px"><img src="${esc(cm.big || cm.img)}" alt="${esc(cm.name)}" style="width:min(220px,60%)"></div>` : ''}
   <dl class="stats"><div><dt>Biggest swing</dt><dd>${esc(S.stats.big?.text || 'No big hits this game')}</dd></div><div><dt>Spells cast</dt><dd>${total}</dd></div><div><dt>Commander casts</dt><dd>${ccasts}</dd></div></dl>
   <div class="eyebrow">Knocked out</div><ol class="outs">${S.outOrder.map((o) => `<li><b>${esc(P(o.i).name)}</b>, ${esc(o.why)}, round ${o.round}</li>`).join('')}</ol>
+  ${(!fromRemote && ((net.active && net.isHost) || MODE === 'bots') && online) ? `<label class="winhow">How was it won? <select id="winHow">${WIN_METHODS.map(([k, l]) => `<option value="${k}" ${k === (S.winMethod || 'other') ? 'selected' : ''}>${l}</option>`).join('')}</select><span class="muted small">Saved to everyone's stats</span></label>` : ''}
   <div class="row"><button type="button" class="btn ghost" data-act="close">Look at the board</button><button type="button" class="btn" data-act="again">Play again</button></div></div>`);
+  const sel = $('#winHow'); if (sel) sel.onchange = async () => { S.winMethod = sel.value; const t0 = Date.now(); while (!S.gameId && Date.now() - t0 < 8000) await new Promise((r) => setTimeout(r, 200)); if (S.gameId) setWinMethod(S.gameId, sel.value).catch(() => {}); };
 }
 function passTurn() {
   S.attacks = []; clearDamage(); clearPumps();
@@ -793,7 +828,7 @@ const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'con
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
-  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, kept: p.kept !== false, away: !!p.away, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: !!p.empty }, zones: p.zones, cards };
+  return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, kept: p.kept !== false, away: !!p.away, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: !!p.empty, takenFrom: p.takenFrom || {}, cmdTakenFrom: p.cmdTakenFrom || {}, outBy: p.outBy ?? null, outHow: p.outHow || null, outTurn: p.outTurn ?? null, deckId: p.deckId || '', deckName: p.deckName || '' }, zones: p.zones, cards };
 }
 function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, pending: S.pending || null, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40), seatsBy: S.seatsBy || {}, voice: S.voice || '', locked: !!S.locked }; }
 /* ---------- Game persistence ----------
@@ -871,8 +906,8 @@ function request(to, fn, ...args) {
 }
 const REQ = {
   changeLife: (to, d, src) => changeLife(to, d, { src: src ? S.cards[src] : null }),
-  poison: (to, d) => { const p = P(to); p.poison = Math.max(0, p.poison + d); render(); if (d > 0) { SFX.play('hit'); FX.shake(seatEl(to)); } checkOut(to); },
-  cmdDmg: (to, cardId, d) => { const p = P(to); const cur = p.cmdDmg[cardId] || 0; const nv = Math.max(0, cur + d); if (nv !== cur) { p.cmdDmg[cardId] = nv; changeLife(to, -(nv - cur), { src: S.cards[cardId] }); } },
+  poison: (to, d, fromSeat) => { const p = P(to); p.poison = Math.max(0, p.poison + d); if (d > 0) p.lastHit = { seat: fromSeat ?? (p.lastHit?.seat ?? null), how: 'poison' }; render(); if (d > 0) { SFX.play('hit'); FX.shake(seatEl(to)); } checkOut(to); },
+  cmdDmg: (to, cardId, d) => { const p = P(to); const cur = p.cmdDmg[cardId] || 0; const nv = Math.max(0, cur + d); if (nv !== cur) { p.cmdDmg[cardId] = nv; changeLife(to, -(nv - cur), { src: S.cards[cardId], how: 'commander' }); } },
   draw: (to, n) => draw(to, n),
   token: (to, def, n) => createTokens(to, def, n),
   mill: (to, n) => { const p = P(to); const ids = p.zones.library.splice(0, n); ids.forEach((id) => { S.cards[id].zone = 'graveyard'; p.zones.graveyard.push(id); }); log(`${p.name} milled ${ids.length}`); render(); },
@@ -888,7 +923,7 @@ const REQ = {
     if (dies) { c._dying = true; log(`${c.name} was destroyed`); setTimeout(() => { if (S.cards[cardId] && S.cards[cardId].zone === 'battlefield') { moveCard(cardId, c.owner, 'graveyard'); FX.puff(cardEl(cardId) || seatEl(to), colorHex(c)); } }, 450); }
     render();
   },
-  combat: (to, cardId) => { const c = S.cards[cardId]; if (!c) return; const n = powerOf(c); if (n <= 0) return; const p = P(to); if (c.isCmdr) p.cmdDmg[c.id] = (p.cmdDmg[c.id] || 0) + n; log(`${c.name} dealt ${n} damage to ${p.name}`); changeLife(to, -n, { src: c }); },
+  combat: (to, cardId) => { const c = S.cards[cardId]; if (!c) return; const n = powerOf(c); if (n <= 0) return; const p = P(to); if (c.isCmdr) p.cmdDmg[c.id] = (p.cmdDmg[c.id] || 0) + n; log(`${c.name} dealt ${n} damage to ${p.name}`); changeLife(to, -n, { src: c, how: c.isCmdr ? 'commander' : 'combat' }); },
 };
 const ALL = {
   wipe: (kind) => wipeLocal(kind),
@@ -2600,4 +2635,4 @@ boot();
 window.__edhState = () => S;
 window.__edhMut = (fn) => { fn(S); render(); };
 window.__edhSfx = () => SFX;
-window.__edhApi = () => ({ cast: castToStack, resolveCombat, fire: fireEvent, runEffects, parseEffects, parseAbilities, moveCard, activate: botActivate, spectate: SPECTATE, net, rulesFor, draw, Rules, perf, setPerf, liteOn, loadDeck, ensureArt, allNames, kick: () => bot && Promise.resolve(bot.takeTurn(S.turn.active)).catch((e) => { S.botError = `${e && e.message} @ ${S.botStep}`; console.error(e); passTurn(); }), botBusy: () => !!(bot && bot.busy), cached });
+window.__edhApi = () => ({ cast: castToStack, req: REQ, request, resolveCombat, fire: fireEvent, runEffects, parseEffects, parseAbilities, moveCard, activate: botActivate, spectate: SPECTATE, net, rulesFor, draw, Rules, perf, setPerf, liteOn, loadDeck, ensureArt, allNames, kick: () => bot && Promise.resolve(bot.takeTurn(S.turn.active)).catch((e) => { S.botError = `${e && e.message} @ ${S.botStep}`; console.error(e); passTurn(); }), botBusy: () => !!(bot && bot.busy), cached });

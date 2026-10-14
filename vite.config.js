@@ -10,6 +10,8 @@ export default defineConfig({
         decks: resolve(__dirname, 'decks.html'),
         home: resolve(__dirname, 'home.html'),
         tables: resolve(__dirname, 'tables.html'),
+        profile: resolve(__dirname, 'profile.html'),
+        tournaments: resolve(__dirname, 'tournaments.html'),
       },
     },
   },

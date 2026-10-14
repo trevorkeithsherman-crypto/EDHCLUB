@@ -9,15 +9,15 @@ function toast(text, ms = 3200) { const t = document.createElement('div'); t.cla
 
 let user = null; let name = localName();
 const PAGE = document.body.dataset.page || 'landing';
-const navLinks = () => `<a class="navlink ${PAGE === 'home' ? 'on' : ''}" href="/home.html">Home</a><a class="navlink ${PAGE === 'tables' ? 'on' : ''}" href="/tables.html">Tables</a><a class="navlink" href="/decks.html">Decks</a>`;
+const navLinks = () => `<a class="navlink ${PAGE === 'home' ? 'on' : ''}" href="/home.html">Home</a><a class="navlink ${PAGE === 'tables' ? 'on' : ''}" href="/tables.html">Tables</a><a class="navlink" href="/decks.html">Decks</a><a class="navlink ${PAGE === 'tournaments' ? 'on' : ''}" href="/tournaments.html">Tournaments</a>`;
 
 async function refreshAccount() {
   user = await currentUser();
   if (user) { name = await displayNameFor(user); setLocalName(name); await myProfile(); }
   const nav = $('#account'); const av = localAvatar();
   nav.innerHTML = user
-    ? `${navLinks()}<span class="who">${av ? `<img class="pfp" src="${esc(av)}" alt="">` : `<span class="pfp init">${esc(name[0] || '?')}</span>`}${esc(name)}${user.is_anonymous ? ' (guest)' : ''}</span><button type="button" class="btn ghost sm" data-go="signin">Account</button>`
-    : `<button type="button" class="btn ghost" data-go="signin">Sign in</button><button type="button" class="btn" data-go="signup">Create account</button>`;
+    ? `${navLinks()}<a class="who ${PAGE === 'profile' ? 'on' : ''}" href="/profile.html" title="Your profile and stats">${av ? `<img class="pfp" src="${esc(av)}" alt="">` : `<span class="pfp init">${esc(name[0] || '?')}</span>`}${esc(name)}${user.is_anonymous ? ' (guest)' : ''}</a><button type="button" class="btn ghost sm" data-go="signin">Account</button>`
+    : `${PAGE !== 'landing' ? `<a class="navlink ${PAGE === 'tournaments' ? 'on' : ''}" href="/tournaments.html">Tournaments</a>` : ''}<button type="button" class="btn ghost" data-go="signin">Sign in</button><button type="button" class="btn" data-go="signup">Create account</button>`;
   renderClubs(); renderDecks(); renderPage(); renderMineTables();
 }
 // Home: tables I sat at recently that are still going — one tap puts me back in my seat, from any device.
@@ -36,6 +36,8 @@ function renderPage() {
     if (inn && out) { inn.hidden = !user; out.hidden = !!user; }
     if (note) note.hidden = !!user;
   }
+  if (PAGE === 'profile') import('./profile-page.js').then((m) => m.render(user, name)).catch((e) => { const r = $('#statsRoot'); if (r) r.innerHTML = `<p class="muted">Stats are unavailable right now (${esc(e.message)}).</p>`; });
+  if (PAGE === 'tournaments') import('./tournaments-page.js').then((m) => m.render(user, name)).catch((e) => { const r = $('#tournRoot'); if (r) r.innerHTML = `<p class="muted">Tournaments are unavailable right now (${esc(e.message)}).</p>`; });
   if (PAGE === 'home') {
     const t = $('#greetTitle'), l = $('#greetLead');
     if (t) t.textContent = user ? `Welcome back, ${name}.` : 'Welcome to EDH Club.';

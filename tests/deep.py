@@ -32,7 +32,7 @@ def collection(route):
 
 FAKE_USER = {'id': '11111111-1111-4111-8111-111111111111', 'aud': 'authenticated', 'role': 'authenticated', 'is_anonymous': True, 'user_metadata': {'display_name': 'Tester'}, 'app_metadata': {}, 'created_at': '2026-10-08T00:00:00Z'}
 # In-memory server tables for persistence tests: room_state (one row per room) and room_players.
-STORE = {'room_state': {}, 'room_players': {}, 'blocks': [], 'reports': [], 'room_patches': [], 'club_patches': [], 'deleted': 0, 'email_changes': []}
+STORE = {'room_state': {}, 'room_players': {}, 'blocks': [], 'reports': [], 'room_patches': [], 'club_patches': [], 'deleted': 0, 'email_changes': [], 'games': [], 'game_players': []}
 def _q(url, key):
     import urllib.parse as up; qs = up.parse_qs(up.urlparse(url).query); v = qs.get(key, [None])[0]; return v.split('.', 1)[1] if v and '.' in v else v
 def supabase_mock(route):
@@ -72,8 +72,13 @@ def supabase_mock(route):
         route.fulfill(status=200, content_type='application/json', body=json.dumps([{'id': FAKE_USER['id'], 'display_name': 'Tester'}]) if m == 'GET' else '[]'); return
     if '/rest/v1/club_members' in url and m == 'GET':
         route.fulfill(status=200, content_type='application/json', body=json.dumps([{'club': {'id': 'c1', 'name': 'Tuesday Pod', 'code': 'TUESD', 'created_at': '2026-10-01', 'owner_id': FAKE_USER['id'], 'discord_webhook': ''}}] if 'club:' in url or 'select=club' in url else [{'role': 'owner', 'profile': {'display_name': 'Tester'}}])); return
-    if '/rest/v1/games' in url and m == 'GET':
-        route.fulfill(status=200, content_type='application/json', body=json.dumps([{'ended_at': '2026-10-07T20:00:00Z', 'winner_name': 'Tester', 'players': [{'name': 'Tester'}, {'name': 'Mira'}], 'rounds': 9}])); return
+    if '/rest/v1/game_players' in url:
+        if m == 'POST': rows = json.loads(route.request.post_data or '[]'); STORE['game_players'] += rows if isinstance(rows, list) else [rows]; route.fulfill(status=201, content_type='application/json', body='[]'); return
+        route.fulfill(status=200, content_type='application/json', body=json.dumps(STORE['game_players'])); return
+    if '/rest/v1/games' in url:
+        if m == 'POST': g = json.loads(route.request.post_data or '{}'); g['id'] = f"g{len(STORE['games']) + 1}"; STORE['games'].append(g); route.fulfill(status=201, content_type='application/json', body=json.dumps(g)); return
+        if m == 'PATCH': patch = json.loads(route.request.post_data or '{}'); gid = _q(url, 'id'); [g.update(patch) for g in STORE['games'] if g['id'] == gid]; route.fulfill(status=204, body=''); return
+        route.fulfill(status=200, content_type='application/json', body=json.dumps(STORE['games'] or [{'ended_at': '2026-10-07T20:00:00Z', 'winner_name': 'Tester', 'players': [{'name': 'Tester'}, {'name': 'Mira'}], 'rounds': 9}])); return
     if '/rest/v1/rooms' in url and m == 'GET':
         rows = [{'code': 'ABCDE', 'host_name': 'Mira', 'seats': 4, 'bots': 1, 'bracket': 3, 'seated': 1, 'open_seats': 2, 'has_voice': True, 'locked': False, 'status': 'open', 'is_public': True, 'created_at': '2026-10-08T22:00:00Z'},
                 {'code': 'FULL1', 'host_name': 'Owen', 'seats': 3, 'bots': 0, 'bracket': 5, 'seated': 3, 'open_seats': 0, 'has_voice': False, 'locked': False, 'status': 'open', 'is_public': True, 'title': 'cEDH grinders', 'created_at': '2026-10-08T22:10:00Z'}]
@@ -173,7 +178,7 @@ with sync_playwright() as p:
     pg.fill('#nm', 'Tester'); pg.click('#guest'); pg.wait_for_timeout(900)
     check('guest sign-in updates the account nav', 'Tester' in pg.locator('#account').text_content())
     check('home page greets by name and links My decks and Open tables', 'Tester' in pg.locator('#greetTitle').text_content() and pg.locator('#tileDecks[href="/decks.html"]').count() == 1 and pg.locator('#tileTables[href="/tables.html"]').count() == 1)
-    check('home nav links Home / Tables / Decks', pg.locator('#account .navlink').count() == 3)
+    check('home nav links Home / Tables / Decks / Tournaments, name links to the profile', pg.locator('#account .navlink').count() == 4 and pg.locator('#account a.who[href="/profile.html"]').count() == 1)
     check('home previews open tables', 'Mira' in pg.locator('#openBody').text_content())
     check('clubs panel lists my club after sign-in', 'Tuesday Pod' in pg.locator('#clubsBody').text_content())
     pg.click('[data-club]'); pg.wait_for_timeout(600)

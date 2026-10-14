@@ -1,7 +1,7 @@
 /* EDH Club landing: the table's own system. Dark, cinematic, one glow color. */
 :root {
   --bg: #06080d; --glass: rgba(10, 13, 20, .72); --glass-2: rgba(16, 20, 30, .9); --line: rgba(255, 255, 255, .1); --line-2: rgba(255, 255, 255, .18);
-  --text: #eef1f6; --muted: #98a2b6; --dim: #6b7486; --gold: #e2b659; --gold-2: #f3d48c; --blue: #4fc3ff; --red: #ff5349;
+  --text: #eef1f6; --muted: #98a2b6; --dim: #6b7486; --gold: #e2b659; --gold-2: #f3d48c; --blue: #4fc3ff; --red: #ff5349; --green: #5fd38a; --blue-2: #1e7fd6;
   --f-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --f-display: 'Gloock', 'Palatino Linotype', Palatino, Georgia, serif; --f-logo: 'Gloock', 'Palatino Linotype', Palatino, Georgia, serif; --f-logo-i: 'Instrument Serif', 'Palatino Linotype', Palatino, Georgia, serif;
   color-scheme: dark;
 }
@@ -347,3 +347,35 @@ h1 .count { font: 700 16px var(--f-ui); color: var(--muted); margin-left: 12px; 
 .list li.full { opacity: .6; } .seatsopen { color: #7fd58a; }
 
 .btn.ghost.danger { background: transparent; color: var(--red); border-color: rgba(255, 83, 73, .5); box-shadow: none; }
+
+/* ---------- Profile: stats tracker ---------- */
+#account a.who { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px; } #account a.who:hover, #account a.who.on { background: rgba(255, 255, 255, .06); color: var(--text); }
+.profile-head h1 { display: flex; align-items: center; gap: 14px; } .profile-head .pfp.big { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; }
+.sfilters { margin: 0 0 14px; } .chipbtn { background: var(--glass); border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 7px 13px; font: 600 12px var(--f-ui); } .chipbtn.on { color: var(--text); border-color: rgba(79, 195, 255, .5); background: rgba(79, 195, 255, .12); }
+.stiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.stile { background: var(--glass); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 2px; } .stile b { font: 400 34px/1 var(--f-display); color: var(--gold-2); } .stile span { font: 600 12px var(--f-ui); color: var(--text); letter-spacing: .04em; text-transform: uppercase; } .stile small { color: var(--dim); font-size: 12px; }
+.sgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 14px; } .sgrid .panel { padding: 16px 18px; } .sgrid .panel p { margin: 0 0 6px; }
+.sbar { display: grid; grid-template-columns: 110px minmax(0, 1fr) 90px; align-items: center; gap: 10px; padding: 5px 0; font-size: 13px; } .sbar-l { color: var(--muted); } .sbar-t { height: 10px; border-radius: 999px; background: rgba(255, 255, 255, .06); overflow: hidden; } .sbar-t i { display: block; height: 100%; background: linear-gradient(90deg, var(--blue-2), var(--blue)); border-radius: 999px; } .sbar-v { text-align: right; font-variant-numeric: tabular-nums; } .sbar-v small { color: var(--dim); }
+.tscroll { overflow: auto; } .stab { width: 100%; border-collapse: collapse; font-size: 13px; } .stab th { text-align: left; font: 600 11px var(--f-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); cursor: pointer; white-space: nowrap; user-select: none; } .stab th.on { color: var(--text); } .stab td { padding: 9px 10px; border-bottom: 1px solid rgba(255, 255, 255, .05); vertical-align: top; font-variant-numeric: tabular-nums; }
+.wr { font-weight: 700; padding: 2px 7px; border-radius: 6px; } .wr.hi { color: #0d1f12; background: var(--green); } .wr.mid { color: #1a1408; background: var(--gold); } .wr.lo { color: var(--text); background: rgba(255, 255, 255, .08); }
+.glist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; } .glist li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; } .glist li.won { border-color: rgba(226, 182, 89, .45); } .gpl { font: 400 22px var(--f-display); color: var(--muted); } .glist li.won .gpl { color: var(--gold-2); }
+@media (max-width: 760px) { .sbar { grid-template-columns: 80px minmax(0, 1fr) 76px; } .stile b { font-size: 28px; } .profile-head .cta { flex-wrap: wrap; } }
+
+/* ---------- Tournaments ---------- */
+.tgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 18px; }
+.tcard { display: grid; gap: 8px; align-content: start; text-decoration: none; color: var(--text); background: var(--glass); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; transition: transform .15s, border-color .15s; } .tcard:hover { transform: translateY(-2px); border-color: var(--line-2); }
+.tcard h2 { font: 400 26px/1.15 var(--f-display); color: var(--gold-2); margin: 0; } .tcard p { color: var(--muted); margin: 0; font-size: 14px; } .tmeta { color: var(--dim); font-size: 12px; }
+.tstatus { justify-self: start; font: 700 10px var(--f-ui); letter-spacing: .14em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); }
+.tstatus.open { color: #0d1f12; background: var(--green); border-color: transparent; } .tstatus.live { color: #061018; background: var(--blue); border-color: transparent; } .tstatus.done { color: #1a1408; background: var(--gold); border-color: transparent; } .tstatus.soon { color: var(--text); background: rgba(255, 255, 255, .08); }
+.thead h2 { font: 400 34px/1.1 var(--f-display); color: var(--gold-2); margin: 8px 0 6px; }
+.thow .steps li h3 { margin: 6px 0 4px; }
+.pods { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.pod { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: rgba(255, 255, 255, .02); } .pod.mine { border-color: rgba(79, 195, 255, .5); } .pod.champ { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(226, 182, 89, .35); } .pod.free { border-style: dashed; }
+.pod-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; } .pod ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 13px; } .pod .code { font: 800 13px var(--f-ui); letter-spacing: .16em; color: var(--text); }
+.matches li.done { opacity: .85; } .matches .mstat { display: flex; align-items: center; gap: 8px; }
+.panel.champion { text-align: center; border-color: var(--gold); } .panel.champion h2 { font: 400 40px/1.1 var(--f-display); color: var(--gold-2); }
+.panel.admin { border-color: rgba(255, 83, 73, .4); } .panel.admin h3 { font: 700 14px var(--f-ui); margin: 16px 0 6px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); } .panel.admin .tm-row { list-style: none; } .panel.admin select { width: auto; min-width: 150px; padding: 6px 9px; }
+.panel .link { background: none; border: 0; color: var(--blue); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
+.panel.admin .tm-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; } .panel.admin .tm-who { display: grid; } .panel.admin .tm-who small { color: var(--dim); }
+/* grid children never grow past the viewport because of a wide table inside them */
+main > * { min-width: 0; } .tscroll { max-width: 100%; } .stab td, .stab th { white-space: nowrap; } .stab td:first-child { white-space: normal; min-width: 120px; }

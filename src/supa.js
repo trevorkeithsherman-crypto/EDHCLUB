@@ -159,6 +159,74 @@ export async function recordGame({ code, clubId, winnerName, players, rounds }) 
   if (!supa) return;
   await supa.from('games').insert({ room_code: code, club_id: clubId || null, winner_name: winnerName, players, rounds });
 }
+/* ---------- Stats: one games row + one game_players row per seat, recorded by the host (or the solo player vs bots) ---------- */
+export async function recordFullGame(game, players) {
+  if (!supa) return null;
+  const { data, error } = await supa.from('games').insert(game).select('id').single();
+  if (error) throw error;
+  const rows = players.map((pl) => ({ ...pl, game_id: data.id }));
+  const { error: e2 } = await supa.from('game_players').insert(rows); if (e2) throw e2;
+  return data.id;
+}
+export async function setWinMethod(gameId, method) { if (!supa || !gameId) return; await supa.from('games').update({ win_method: method }).eq('id', gameId); }
+export async function myGames(userId, limit = 500) {
+  if (!supa) return [];
+  const { data } = await supa.from('game_players').select('*, game:games(id, room_code, mode, seats, turns, winner_id, winner_deck_id, win_method, started_at, duration_s, bracket, vs_bots, ended_at)').eq('user_id', userId).order('created_at', { ascending: false }).limit(limit);
+  return (data || []).filter((r) => r.game);
+}
+export async function gameOpponents(gameIds) {
+  if (!supa || !gameIds.length) return [];
+  const { data } = await supa.from('game_players').select('game_id, user_id, name, bot, seat, placement, commander, deck_name, eliminated_by_seat').in('game_id', gameIds.slice(0, 300));
+  return data || [];
+}
+export async function gamesInRoom(code) { if (!supa) return []; const { data } = await supa.from('games').select('id, winner_id, winner_name, ended_at, turns, win_method, players').eq('room_code', code).order('ended_at', { ascending: false }).limit(5); return data || []; }
+/* ---------- Tournaments ---------- */
+export async function isAdmin() { if (!supa) return false; try { const { data } = await supa.rpc('is_admin'); return data === true; } catch { return false; } }
+export async function listTournaments() { if (!supa) return []; const { data } = await supa.from('tournaments').select('*').order('created_at', { ascending: false }); return data || []; }
+export async function getTournament(slug) {
+  if (!supa) return null;
+  const { data: t } = await supa.from('tournaments').select('*').eq('slug', slug).maybeSingle(); if (!t) return null;
+  const [{ data: pods }, { data: members }, { data: matches }, { data: interest }] = await Promise.all([
+    supa.from('tournament_pods').select('*').eq('tournament_id', t.id).order('created_at'),
+    supa.from('tournament_members').select('*').eq('tournament_id', t.id).order('created_at'),
+    supa.from('tournament_matches').select('*').eq('tournament_id', t.id).order('round').order('created_at'),
+    supa.from('tournament_interest').select('user_id').eq('tournament_id', t.id),
+  ]);
+  return { ...t, pods: pods || [], members: members || [], matches: matches || [], interest: (interest || []).map((x) => x.user_id) };
+}
+export async function createTournament({ name, slug, description, starts_at, pod_size, bracket, status }) { const u = await currentUser(); const { data, error } = await supa.from('tournaments').insert({ name, slug, description, starts_at: starts_at || null, pod_size: pod_size || 4, bracket: bracket || 3, status: status || 'coming_soon', created_by: u?.id }).select('*').single(); if (error) throw error; return data; }
+export async function updateTournament(id, patch) { const { error } = await supa.from('tournaments').update(patch).eq('id', id); if (error) throw error; }
+export async function deleteTournament(id) { const { error } = await supa.from('tournaments').delete().eq('id', id); if (error) throw error; }
+export async function setInterest(tournamentId, on) { const u = await currentUser(); if (!u) throw new Error('Sign in first'); if (on) { const { error } = await supa.from('tournament_interest').upsert({ tournament_id: tournamentId, user_id: u.id }); if (error) throw error; } else await supa.from('tournament_interest').delete().eq('tournament_id', tournamentId).eq('user_id', u.id); }
+const podCode = () => Array.from({ length: 6 }, () => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 31)]).join('');
+export async function createPod(tournamentId, name, member) {
+  const u = await currentUser(); if (!u) throw new Error('Sign in first');
+  const { data: pod, error } = await supa.from('tournament_pods').insert({ tournament_id: tournamentId, name, join_code: podCode(), captain_id: u.id }).select('*').single(); if (error) throw error;
+  await joinTournament(tournamentId, { ...member, pod_id: pod.id }); return pod;
+}
+export async function joinTournament(tournamentId, member) {
+  const u = await currentUser(); if (!u) throw new Error('Sign in first');
+  const row = { tournament_id: tournamentId, user_id: u.id, display_name: member.display_name, deck_id: member.deck_id || null, deck_name: member.deck_name || null, commander: member.commander || null, pod_id: member.pod_id || null };
+  const { error } = await supa.from('tournament_members').upsert(row, { onConflict: 'tournament_id,user_id' }); if (error) throw error;
+}
+export async function joinPodByCode(tournamentId, code, member) {
+  const { data: pod } = await supa.from('tournament_pods').select('*').eq('tournament_id', tournamentId).eq('join_code', String(code || '').trim().toUpperCase()).maybeSingle();
+  if (!pod) throw new Error('No pod has that code'); await joinTournament(tournamentId, { ...member, pod_id: pod.id }); return pod;
+}
+export async function leaveTournament(tournamentId) { const u = await currentUser(); if (!u) return; await supa.from('tournament_members').delete().eq('tournament_id', tournamentId).eq('user_id', u.id); }
+export async function updateMember(tournamentId, patch) { const u = await currentUser(); if (!u) return; const { error } = await supa.from('tournament_members').update(patch).eq('tournament_id', tournamentId).eq('user_id', u.id); if (error) throw error; }
+export async function adminSetMemberPod(memberId, podId) { const { error } = await supa.from('tournament_members').update({ pod_id: podId }).eq('id', memberId); if (error) throw error; }
+export async function adminCreatePod(tournamentId, name, seed) { const { data, error } = await supa.from('tournament_pods').insert({ tournament_id: tournamentId, name, join_code: podCode(), captain_id: (await currentUser())?.id, seed }).select('*').single(); if (error) throw error; return data; }
+export async function adminDeletePod(podId) { await supa.from('tournament_pods').delete().eq('id', podId); }
+export async function adminSetPodWinner(podId, winnerId) { const { error } = await supa.from('tournament_pods').update({ winner_id: winnerId }).eq('id', podId); if (error) throw error; }
+export async function createMatch({ tournamentId, round, kind, podId, players, hostId, hostName, title, bracket }) {
+  const code = roomCode();
+  const { error: re } = await supa.from('rooms').insert({ code, host_id: hostId, host_name: hostName, seats: Math.max(2, Math.min(4, players.length || 4)), bots: 0, bracket: bracket || 3, status: 'open', is_public: false, title, open_seats: 0, seated: 0 }); if (re) throw re;
+  const { data, error } = await supa.from('tournament_matches').insert({ tournament_id: tournamentId, round, kind, pod_id: podId || null, room_code: code, players, status: 'pending' }).select('*').single(); if (error) throw error;
+  await supa.from('rooms').update({ match_id: data.id }).eq('code', code); return data;
+}
+export async function updateMatch(id, patch) { const { error } = await supa.from('tournament_matches').update(patch).eq('id', id); if (error) throw error; }
+export async function deleteMatch(id) { await supa.from('tournament_matches').delete().eq('id', id); }
 
 /* ---------- Saved decks ---------- */
 const LAST_DECK_KEY = 'edhclub-last-deck';

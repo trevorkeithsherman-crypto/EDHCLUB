@@ -271,11 +271,9 @@ def ui_tick(v):
     x = mix(highpass(noise(0.006) * env_ad(sec(0.006), 0.0002, 0.006, 6), 2500) * 0.7, modal([(2400 + v * 300, 0.5, 0.02)], 0.05, 0.0005))
     return finish(to_stereo(x), -20)
 def your_turn(v):
-    """it's your turn: a low drum and a rising shimmer — a nudge, not an alarm"""
-    drum = mix(modal([(70, 1, 0.5), (105, 0.4, 0.3), (140, 0.2, 0.2)], 1.0, 0.002), lowpass(noise(0.04) * env_ad(sec(0.04), 0.0005, 0.04, 5), 400) * 0.8)
-    n = sec(0.9); shimmer = np.zeros(n)
-    for k, f in enumerate([523.2, 659.3, 784, 1046.5]): shimmer += fit(at(np.sin(2 * np.pi * f * t(sec(0.7))) * env_ad(sec(0.7), 0.03, 0.7, 3), k * 0.07), n) * 0.25
-    return finish(reverb(to_stereo(mix(drum, at(shimmer, 0.1)), 0.8), 1.8, 0.35, 0.02, 0.5), -7)
+    """it's your turn: one soft, low drum tap under the turn banner - half a second, nothing ringing"""
+    drum = mix(modal([(68, 1, 0.22), (102, 0.35, 0.12), (150, 0.15, 0.08)], 0.6, 0.002), lowpass(noise(0.03) * env_ad(sec(0.03), 0.0005, 0.03, 5), 350) * 0.7)
+    return finish(reverb(to_stereo(drum, 0.6), 0.7, 0.2, 0.012, 0.3), -9)
 def pop(v):
     """a token or copy appearing"""
     return token(v)

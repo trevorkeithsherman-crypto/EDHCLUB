@@ -1141,9 +1141,12 @@ function banner(text, sub, pi) {
   if (!motionMul()) return;
   $$('.banner').forEach((b) => b.remove());
   const b = document.createElement('div'); b.className = 'banner';
-  const c = commandersOf(pi)[0]; b.style.setProperty('--bc', c ? colorHex(c) : css('--candle'));
-  b.innerHTML = `<span>${esc(text)}<small>${esc(sub)}</small></span>`;
-  $('#layer').appendChild(b); setTimeout(() => b.remove(), 1700);
+  const p = P(pi); const c = commandersOf(pi)[0]; const col = c ? colorHex(c) : css('--candle'); b.style.setProperty('--bc', col);
+  // the sweep comes in from the side of the table the player sits on
+  const seat = seatEl(pi); const r = seat && visRect(seat); const fromRight = r ? r.left + r.width / 2 > innerWidth / 2 : false; b.classList.toggle('from-right', fromRight);
+  const pic = !p.bot && p.avatar; const av = `<span class="bav ${p.bot ? 'bot' : ''}" style="--ring:${col}${pic ? `;background-image:url(${esc(pic)})` : ''}">${pic ? '' : esc((p.name || '?')[0].toUpperCase())}</span>`;
+  b.innerHTML = `<div class="bsweep"></div><div class="bcard">${av}<span class="btext"><b>${esc(text)}</b><small>${esc(sub)}${c ? ` · ${esc(c.name.split(',')[0])}` : ''}</small></span></div>`;
+  $('#layer').appendChild(b); setTimeout(() => b.remove(), 2000);
 }
 
 /* ---------- Side panel ---------- */

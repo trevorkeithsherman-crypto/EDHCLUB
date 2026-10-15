@@ -213,7 +213,7 @@ function identityPips(i) {
   if (!cs.length) return '<span class="pips"><i class="ms ms-c ms-cost"></i></span>';
   return `<span class="pips">${cs.map((k) => `<i class="ms ms-${k.toLowerCase()} ms-cost"></i>`).join('')}</span>`;
 }
-const ptModified = (c) => !!(c.p1 || c.tp || c.tt || (c.zone === 'battlefield' && Rules.ptOf(c).join('/') !== String(c.pt)));
+const ptModified = (c) => !!(c.p1 || c.mp || c.mt || c.tp || c.tt || (c.zone === 'battlefield' && Rules.ptOf(c).join('/') !== String(c.pt)));
 function ptOf(c) {
   if (!c.pt) return null;
   const m = c.pt.match(/^(\d+|\*)\/(\d+|\*)$/); if (!m || !ptModified(c)) return c.pt;
@@ -232,8 +232,8 @@ function cardHTML(c, o = {}) {
   const idA = o.noid ? '' : `data-id="${c.id}"`;
   if (hidden) return `<div class="${cls} facedown" ${idA} style="${st}"><div class="ci back ${backOk ? 'pic' : ''}"><span>EC</span>${backOk ? `<img src="${CARD_BACK}" alt="" draggable="false" decoding="async">` : ''}</div></div>`;
   const host = c.attachedTo ? S.cards[c.attachedTo] : null; const tether = host ? `<div class="tether" title="Attached to ${esc(host.name)}">⟶ ${esc(host.name.split(',')[0].slice(0, 14))}</div>` : '';
-  const sg = c.p1 > 0 ? '+' : '';
-  const over = `${c.p1 ? `<div class="bp">${sg}${c.p1}/${sg}${c.p1}</div>` : ''}${c.ctr ? `<div class="bc" title="${c.ctr} ${esc(mainKind(c) || 'counter')}">${c.ctr}</div>` : ''}${c.cn ? Object.entries(c.cn).map(([k, v]) => `<div class="bn" title="${v} ${esc(k)} counter${v > 1 ? 's' : ''}">${v} ${esc(k.slice(0, 6))}</div>`).join('') : ''}${c.kwc ? kwcList(c).map((k) => `<div class="bn kw" title="${esc(k)} counter">${esc(k.split(' ').map((w) => w.slice(0, 3)).join(' '))}</div>`).join('') : ''}${c.dmg ? `<div class="dmg" title="Damage marked this turn">${c.dmg}</div>` : ''}${c.sick && c.zone === 'battlefield' && isCreature(c) && !Rules.has(c, 'haste') ? '<div class="zz" title="Summoning sick: can\'t attack until your next turn">zz</div>' : ''}${c.token ? '<div class="tk">Token</div>' : ''}${tether}`;
+  const bpP = (c.p1 || 0) + (c.mp || 0), bpT = (c.p1 || 0) + (c.mt || 0); const sgn = (n) => (n > 0 ? `+${n}` : `${n}`);
+  const over = `${bpP || bpT ? `<div class="bp" title="${c.p1 ? `${sgn(c.p1)}/${sgn(c.p1)} counters` : ''}${c.mp || c.mt ? ` ${sgn(c.mp || 0)}/${sgn(c.mt || 0)} modifier` : ''}">${sgn(bpP)}/${sgn(bpT)}</div>` : ''}${c.ctr ? `<div class="bc" title="${c.ctr} ${esc(mainKind(c) || 'counter')}">${c.ctr}</div>` : ''}${c.cn ? Object.entries(c.cn).map(([k, v]) => `<div class="bn" title="${v} ${esc(k)} counter${v > 1 ? 's' : ''}">${v} ${esc(k.slice(0, 6))}</div>`).join('') : ''}${c.kwc ? kwcList(c).map((k) => `<div class="bn kw" title="${esc(k)} counter">${esc(k.split(' ').map((w) => w.slice(0, 3)).join(' '))}</div>`).join('') : ''}${c.dmg ? `<div class="dmg" title="Damage marked this turn">${c.dmg}</div>` : ''}${c.sick && c.zone === 'battlefield' && isCreature(c) && !Rules.has(c, 'haste') ? '<div class="zz" title="Summoning sick: can\'t attack until your next turn">zz</div>' : ''}${c.token ? '<div class="tk">Token</div>' : ''}${tether}`;
   const src = faceSrc(c, o.big);
   if (src) {
     const mod = c.pt && ptModified(c) ? ptOf(c) : null;
@@ -331,7 +331,7 @@ function moveCard(id, pi, zone, o = {}) {
   const fromZone = c.zone;
   detach(c);
   if (c.token && zone !== 'battlefield' && zone !== 'stack') { delete S.cards[id]; S.attacks = S.attacks.filter((a) => a.id !== id); render(); FX.puff(from, colorHex(c)); SFX.play('pop'); return; }
-  if (fromZone === 'battlefield' && zone !== 'battlefield') { dropAttachments(c); c.attachedTo = null; c.kwc = ''; c.goad = null; c.animUntil = 0; c._dying = false; c.tapped = false; c.p1 = 0; c.ctr = 0; c.cn = null; c.dmg = 0; c.sick = false; c.faceDown = false; c.flipped = false; S.attacks = S.attacks.filter((a) => a.id !== id); S.attacks.forEach((a) => { if (a.blockers && a.blockers.includes(id)) { a.blockers = a.blockers.filter((b) => b !== id); } }); }
+  if (fromZone === 'battlefield' && zone !== 'battlefield') { dropAttachments(c); c.attachedTo = null; c.kwc = ''; c.goad = null; c.animUntil = 0; c._dying = false; c.tapped = false; c.p1 = 0; c.mp = 0; c.mt = 0; c.ctr = 0; c.cn = null; c.dmg = 0; c.sick = false; c.faceDown = false; c.flipped = false; S.attacks = S.attacks.filter((a) => a.id !== id); S.attacks.forEach((a) => { if (a.blockers && a.blockers.includes(id)) { a.blockers = a.blockers.filter((b) => b !== id); } }); }
   if (fromZone === 'command' && c.isCmdr && o.cast) c.casts = (c.casts || 0) + 1;
   c.controller = (zone === 'battlefield' || zone === 'stack' || zone === 'hand') ? pi : c.owner;
   c.zone = zone;
@@ -510,7 +510,7 @@ function keepHand(k) {
   if (owe) { pick.forEach((id) => { p.zones.hand = p.zones.hand.filter((x) => x !== id); S.cards[id].zone = 'library'; p.zones.library.push(id); }); }
   p.kept = true; opening = null;
   log(`${p.name} keeps ${p.zones.hand.length}${owe ? ` (put ${owe} on the bottom)` : ''}${p.mulls ? ` after ${p.mulls} mulligan${p.mulls > 1 ? 's' : ''}` : ''}`);
-  SFX.play('chime', 'U'); render();
+  SFX.play('thud'); render();
 }
 function renderOpening() {
   let ov = $('#opening'); const k = openingSeat();
@@ -562,6 +562,8 @@ const kwcList = (c) => String(c.kwc || '').split(',').map((x) => x.trim()).filte
 function counterCount(c, kind) { if (kind === '+1/+1') return Math.max(0, c.p1 || 0); if (kind === '-1/-1') return Math.max(0, -(c.p1 || 0)); if (KW_CTR.has(kind)) return kwcList(c).includes(kind) ? 1 : 0; if (kind === (mainKind(c) || 'counter')) return c.ctr || 0; return (c.cn && c.cn[kind]) || 0; }
 function addCounter(c, kind, d) {
   if (kind === 'pt' || kind === '+1/+1') c.p1 = (c.p1 || 0) + d;
+  else if (kind === 'pow') c.mp = (c.mp || 0) + d;
+  else if (kind === 'tou') c.mt = (c.mt || 0) + d;
   else if (kind === '-1/-1') c.p1 = (c.p1 || 0) - d;
   else if (KW_CTR.has(kind)) { const l = kwcList(c).filter((k) => k !== kind); if (d > 0) l.push(kind); c.kwc = l.join(','); }
   else if (kind === (mainKind(c) || 'counter')) c.ctr = Math.max(0, (c.ctr || 0) + d);
@@ -570,18 +572,19 @@ function addCounter(c, kind, d) {
 // all kinds worth a row for this card: what its text names, what it already has, plus +1/+1 and -1/-1 for creatures
 function counterRows(c) {
   const out = []; const push = (k) => { if (k && !out.includes(k)) out.push(k); };
-  push('pt');   // +1/+1 and -1/-1 are one dial: it reads +3/+3 or -2/-2 and moves freely through zero, on any permanent
+  push('pt'); if (c.pt) push('pow'); if (c.pt) push('tou');   // +1/+1 and -1/-1 are one dial: it reads +3/+3 or -2/-2 and moves freely through zero, on any permanent
   push(mainKind(c)); if (c.ctr && !mainKind(c)) push('counter');
   counterKinds(c).filter((k) => !/^[+-]1\//.test(k)).forEach(push); Object.keys(c.cn || {}).forEach(push); kwcList(c).forEach(push);
   return out;
 }
 const OTHER_KINDS = ['charge', 'stun', 'shield', 'oil', 'time', 'age', 'fade', 'quest', 'verse', 'spore', 'storage', 'gold', 'ice', 'blood', 'brick', 'coin', 'finality', 'flood', 'ki', 'knowledge', 'omen', 'page', 'pressure', 'soul', 'study', 'task', 'tide', 'training', 'velocity', 'wish', 'flying', 'first strike', 'double strike', 'deathtouch', 'lifelink', 'trample', 'vigilance', 'menace', 'hexproof', 'indestructible', 'reach', 'haste'];
-function counterSummary(c) { const parts = []; if (c.p1) parts.push(`${c.p1 > 0 ? '+' : ''}${c.p1}/${c.p1 > 0 ? '+' : ''}${c.p1}`); const mk = mainKind(c) || 'counter'; if (c.ctr) parts.push(`${c.ctr} ${mk}`); Object.entries(c.cn || {}).forEach(([k, v]) => parts.push(`${v} ${k}`)); kwcList(c).forEach((k) => parts.push(k)); return parts.join(', '); }
+function counterSummary(c) { const parts = []; if (c.p1) parts.push(`${c.p1 > 0 ? '+' : ''}${c.p1}/${c.p1 > 0 ? '+' : ''}${c.p1}`); if (c.mp || c.mt) parts.push(`${c.mp > 0 ? '+' : ''}${c.mp || 0}/${c.mt > 0 ? '+' : ''}${c.mt || 0} modifier`); const mk = mainKind(c) || 'counter'; if (c.ctr) parts.push(`${c.ctr} ${mk}`); Object.entries(c.cn || {}).forEach(([k, v]) => parts.push(`${v} ${k}`)); kwcList(c).forEach((k) => parts.push(k)); return parts.join(', '); }
 // The adjustable counter panel: every kind gets − count +; closing logs what changed as one line.
 function counterPanel(c, opt = {}) {
   const before = counterSummary(c); let extra = [];
   const ptRow = () => { const n = c.p1 || 0; const lbl = n > 0 ? `+${n}/+${n}` : n < 0 ? `${n}/${n}` : '0'; return `<div class="dmgrow ctrrow ptrow" data-kind="pt"><span><b>+1/+1 · −1/−1</b> counters<br><small class="muted">− below zero means −1/−1 counters</small></span><div class="ctl"><button type="button" class="mini" data-cp="pt" data-d="-5" aria-label="Five -1/-1 counters">−5</button><button type="button" class="mini" data-cp="pt" data-d="-1" aria-label="One -1/-1 counter">−</button><span class="v ${n > 0 ? 'pos' : n < 0 ? 'neg' : ''}">${lbl}</span><button type="button" class="mini" data-cp="pt" data-d="1" aria-label="One +1/+1 counter">+</button><button type="button" class="mini" data-cp="pt" data-d="5" aria-label="Five +1/+1 counters">+5</button></div></div>`; };
-  const row = (k) => { if (k === 'pt') return ptRow(); const n = counterCount(c, k); const kw = KW_CTR.has(k); return `<div class="dmgrow ctrrow" data-kind="${esc(k)}"><span><b>${esc(k)}</b> counter${kw ? '' : 's'}</span><div class="ctl"><button type="button" class="mini" data-cp="${esc(k)}" data-d="-1" ${n <= 0 ? 'disabled' : ''} aria-label="Remove a ${esc(k)} counter">−</button><span class="v">${n}</span><button type="button" class="mini" data-cp="${esc(k)}" data-d="1" ${kw && n ? 'disabled' : ''} aria-label="Add a ${esc(k)} counter">+</button></div></div>`; };
+  const modRow = (k) => { const n = k === 'pow' ? (c.mp || 0) : (c.mt || 0); const s2 = (x) => (x > 0 ? `+${x}` : `${x}`); return `<div class="dmgrow ctrrow modrow" data-kind="${k}"><span><b>${k === 'pow' ? 'Power' : 'Toughness'}</b> only<br><small class="muted">${k === 'pow' ? 'e.g. +2/+0 from an aura' : 'e.g. −1 toughness from an effect'}</small></span><div class="ctl"><button type="button" class="mini" data-cp="${k}" data-d="-1" aria-label="Lower ${k}">−</button><span class="v ${n > 0 ? 'pos' : n < 0 ? 'neg' : ''}">${s2(n)}</span><button type="button" class="mini" data-cp="${k}" data-d="1" aria-label="Raise ${k}">+</button></div></div>`; };
+  const row = (k) => { if (k === 'pt') return ptRow(); if (k === 'pow' || k === 'tou') return modRow(k); const n = counterCount(c, k); const kw = KW_CTR.has(k); return `<div class="dmgrow ctrrow" data-kind="${esc(k)}"><span><b>${esc(k)}</b> counter${kw ? '' : 's'}</span><div class="ctl"><button type="button" class="mini" data-cp="${esc(k)}" data-d="-1" ${n <= 0 ? 'disabled' : ''} aria-label="Remove a ${esc(k)} counter">−</button><span class="v">${n}</span><button type="button" class="mini" data-cp="${esc(k)}" data-d="1" ${kw && n ? 'disabled' : ''} aria-label="Add a ${esc(k)} counter">+</button></div></div>`; };
   const body = () => { const kinds = counterRows(c); extra.forEach((k) => { if (!kinds.includes(k)) kinds.push(k); }); return kinds.map(row).join('') + `<div class="dmgrow ctradd"><span class="muted small">Another kind</span><select id="cpOther" aria-label="Add another kind of counter"><option value="">Choose…</option>${OTHER_KINDS.filter((k) => !kinds.includes(k)).map((k) => `<option value="${k}">${k}</option>`).join('')}<option value="__custom">Type a name…</option></select></div>`; };
   const pt = () => (c.pt ? `<span class="muted small" id="cpPt">Now ${esc(ptOf(c))}</span>` : '');
   openModal(`<h2>Counters on ${esc(c.name)}</h2><p>${opt.x ? `<b>${esc(c.name)} enters with X counters.</b> Set X now — nothing happens to it until you press Done.` : 'Press − or + on any kind. Cards that enter with counters already have them; bots add theirs from the card text.'}</p><div class="dmgrows" id="cpBody">${body()}</div><div class="row" style="justify-content:space-between;align-items:center">${pt()}<button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'narrow', onClose: () => { c.ctrPending = false; const after = counterSummary(c); if (after !== before) log(`${P(c.controller).name}: ${c.name} counters — ${after || 'none'}`); render(); } });
@@ -827,7 +830,7 @@ function wipeLocal(kind) {
 }
 
 /* ---------- Room sync ---------- */
-const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'cn', 'dmg', 'kw', 'sick', 'anim', 'set', 'num', 'foil', 'tp', 'tt', 'tkw', 'attachedTo', 'kwc', 'goad', 'loyalty', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts', 'img', 'big', 'art', 'artist', 'printed'];
+const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'mp', 'mt', 'ctr', 'cn', 'dmg', 'kw', 'sick', 'anim', 'set', 'num', 'foil', 'tp', 'tt', 'tkw', 'attachedTo', 'kwc', 'goad', 'loyalty', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts', 'img', 'big', 'art', 'artist', 'printed'];
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
@@ -1287,7 +1290,7 @@ async function artworkModal(c) {
   $$('[data-pr]').forEach((b) => { b.onclick = () => {
     const e = prints[+b.dataset.pr]; const foil = $('#artFoil').checked || (e.finishes && !/nonfoil/.test(e.finishes));
     Object.values(S.cards).forEach((x) => { if (x.owner === c.owner && x.name === c.name && !x.token) { Object.assign(x, { set: e.set, num: e.num, img: e.img, big: e.big, art: e.art, artist: e.artist, foil, _printed: true, printed: true }); } });
-    $$('[data-pr]').forEach((o) => o.classList.toggle('on', o === b)); $('#artFoil').checked = foil; render(); SFX.play('chime', firstColor(c));
+    $$('[data-pr]').forEach((o) => o.classList.toggle('on', o === b)); $('#artFoil').checked = foil; render(); SFX.play('flip');
     P(c.owner).deckText = rewriteDeckText(P(c.owner).deckText, c.name, e.set, e.num, foil);
     // remembered on the saved deck right away, so it's the art next time too (and for everyone at the table now, via sync)
     const did = P(c.owner).deckId; if (did && online) { clearTimeout(artworkModal.saveT); artworkModal.saveT = setTimeout(() => updateDeckMeta(did, { list: P(c.owner).deckText }).then(() => toast('Artwork saved to your deck', 2200)).catch(() => {}), 600); }
@@ -1322,7 +1325,7 @@ function cardMenu(c, x, y) {
     if (canSee(c)) add('Look closer', () => closerModal(c));
     openMenu(items.length ? items : [{ label: 'Not your card', fn: () => {} }], x, y, `${P(c.controller).name}'s card`); return;
   }
-  if (canSee(c)) { add('Look closer', () => closerModal(c)); if (!c.token && net.isMine(c.controller)) { add('Choose artwork…', () => artworkModal(c)); add(c.foil ? 'Make it non-foil' : 'Make it foil', () => { c.foil = !c.foil; render(); SFX.play('chime', firstColor(c)); }); } sep(); }
+  if (canSee(c)) { add('Look closer', () => closerModal(c)); if (!c.token && net.isMine(c.controller)) { add('Choose artwork…', () => artworkModal(c)); add(c.foil ? 'Make it non-foil' : 'Make it foil', () => { c.foil = !c.foil; render(); SFX.play('tap'); }); } sep(); }
   if (c.isCmdr && !c.token) { add(`Commander tax: {${2 * (c.casts || 0)}} — raise`, () => adjustTax(c, 1)); if (c.casts) add('Commander tax — lower', () => adjustTax(c, -1)); sep(); }
   if (c.zone === 'command') commandersOf(c.owner).filter((x) => x.zone === 'command' && x.id !== c.id).forEach((x) => { add(`Cast ${x.name} (tax +${2 * (x.casts || 0)})`, () => castToStack(x.id)); add(`Put ${x.name} onto battlefield (no tax)`, () => moveCard(x.id, x.owner, 'battlefield', { anim: 'commander' })); sep(); });
   if (c.zone === 'battlefield' && /Aura|Equipment/.test(c.type) && net.isMine(c.controller)) { add(c.attachedTo ? `Move to another creature… (now on ${S.cards[c.attachedTo]?.name || '?'})` : 'Attach to a creature…', () => startAttaching(c)); if (c.attachedTo) add('Unattach', () => { c.attachedTo = null; render(); log(`${c.name} is unattached`); }); sep(); }
@@ -1510,7 +1513,7 @@ async function runEffects(src, effects, ctx = {}) {
       case 'gyExile': { const who = e.who === 'opponents' ? oppsOf(i) : [oppsOf(i).sort((a, b) => P(b).zones.graveyard.length - P(a).zones.graveyard.length)[0]].filter((k) => k != null); who.forEach((k) => { const ids = P(k).zones.graveyard.slice(); ids.forEach((id) => { if (net.isMine(k)) moveCard(id, k, 'exile', { anim: 'none' }); else request(k, 'cardTo', id, 'exile'); }); done.push(`exile ${P(k).name}'s graveyard (${ids.length})`); }); break; }
       case 'counterspell': { done.push('(counter: nothing to counter at sorcery speed)'); break; }
       case 'steal': { const t = pickTarget(i, e.what === 'nonland permanent' ? 'nonland permanent' : e.what, true); if (!t) break; const from = t.controller; moveCard(t.id, i, 'battlefield', { anim: 'fly', x: 0.5, y: 0.3 }); t.sick = !e.haste; if (e.untap) t.tapped = false; if (e.temp) t.stolenFrom = { seat: from, turn: S.turn.number }; done.push(`gain control of ${t.name}${e.temp ? ' until end of turn' : ''}`); break; }
-      case 'flicker': { const t = pickTarget(i, 'creature', true) || seatCards(i, isCreature)[0]; if (t) { t.tapped = false; t.dmg = 0; t.p1 = 0; t.cn = null; t.kwc = ''; done.push(`blink ${t.name}`); } break; }
+      case 'flicker': { const t = pickTarget(i, 'creature', true) || seatCards(i, isCreature)[0]; if (t) { t.tapped = false; t.dmg = 0; t.p1 = 0; t.mp = 0; t.mt = 0; t.cn = null; t.kwc = ''; done.push(`blink ${t.name}`); } break; }
       case 'kwcounter': { const targets = e.on === 'target' ? [seatCards(i, isCreature).sort((a, b) => valueOf(b) - valueOf(a))[0]].filter(Boolean) : [src]; targets.forEach((c) => { c.kwc = `${c.kwc || ''},${e.kw}`; }); if (targets.length) done.push(`${e.kw} counter on ${targets[0].name}`); break; }
       case 'ctr': { const hostile = (/^(stun|age|time|fade|vanishing|doom|hatchling|plague|infection)/.test(e.kw) || /opponent controls|don't control/.test(e.what || '')) && /creature/.test(e.what || ''); const mine = (f) => seatCards(i, f).sort((a, b) => valueOf(b) - valueOf(a))[0]; const targets = e.on === 'target' ? [hostile ? pickTarget(i, 'creature', true) : /artifact/.test(e.what || '') ? mine((c) => /Artifact/.test(c.type)) : /creature/.test(e.what || '') ? mine(isCreature) : /land/.test(e.what || '') ? mine((c) => /Land/.test(c.type)) : mine(() => true)].filter(Boolean) : [src]; targets.forEach((c) => addCounter(c, e.kw, n)); done.push(`${n} ${e.kw} counter${n > 1 ? 's' : ''}${targets[0] && targets[0] !== src ? ` on ${targets[0].name}` : ''}`); break; }
       case 'doubleCounters': { const targets = e.on === 'mine' ? seatCards(i, (c) => c.p1 > 0) : e.on === 'target' ? [seatCards(i, (c) => c.p1 > 0).sort((a, b) => b.p1 - a.p1)[0]].filter(Boolean) : [src]; targets.forEach((c) => { c.p1 = (c.p1 || 0) * 2; }); done.push('double the counters'); break; }

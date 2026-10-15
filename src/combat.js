@@ -12,7 +12,8 @@ const grant = (c) => (ctxFn && c && c.zone === 'battlefield' ? ctxFn(c) : null) 
 export function ptOf(c) {
   if (!c || !c.pt) return [0, 0];
   const m = String(c.pt).split('/'); const p1 = c.p1 || 0; const g = grant(c);
-  return [num(m[0]) + p1 + (c.tp || 0) + g.p, num(m[1]) + p1 + (c.tt || 0) + g.t];
+  // p1 = +1/+1 counters; mp/mt = hand-set power/toughness modifiers that stay (a -1 toughness effect, a +2/+0 aura)
+  return [num(m[0]) + p1 + (c.mp || 0) + (c.tp || 0) + g.p, num(m[1]) + p1 + (c.mt || 0) + (c.tt || 0) + g.t];
 }
 export const powerOf = (c) => Math.max(0, ptOf(c)[0]);
 export const toughnessOf = (c) => ptOf(c)[1];

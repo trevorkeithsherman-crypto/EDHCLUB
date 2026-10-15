@@ -39,6 +39,14 @@ with sync_playwright() as p:
     check('−5 goes straight through zero to −2/−2 (two −1/−1 counters), readout in red', card(pg, x)['p1'] == -2 and pg.locator('#cpBody [data-kind="pt"] .v').text_content() == '-2/-2' and pg.locator('#cpBody [data-kind="pt"] .v.neg').count() == 1)
     pg.click('#cpBody [data-cp="pt"][data-d="5"]'); pg.wait_for_timeout(60)
     check('+5 brings it back to +3/+3', card(pg, x)['p1'] == 3)
+    # power and toughness can move on their own: +3/+3 → +3/+2 (a -1 toughness effect) → +5/+2
+    check('panel has separate Power-only and Toughness-only rows', pg.locator('#cpBody [data-kind="pow"]').count() == 1 and pg.locator('#cpBody [data-kind="tou"]').count() == 1)
+    pg.click('#cpBody [data-cp="tou"][data-d="-1"]'); pg.wait_for_timeout(80)
+    check('toughness −1 alone: the card reads +3/+2 and is 3/2 on the badge', pg.evaluate(f"__edhState().cards['{x}'].mt") == -1 and pg.locator(f'.card[data-id="{x}"] .bp').text_content().strip() == '+3/+2' and 'Now 3/2' in pg.locator('#cpPt').text_content())
+    pg.click('#cpBody [data-cp="pow"][data-d="1"]'); pg.click('#cpBody [data-cp="pow"][data-d="1"]'); pg.wait_for_timeout(80)
+    check('power +2 alone: +5/+2', pg.locator(f'.card[data-id="{x}"] .bp').text_content().strip() == '+5/+2' and 'Now 5/2' in pg.locator('#cpPt').text_content())
+    pg.click('#cpBody [data-cp="tou"][data-d="1"]'); pg.click('#cpBody [data-cp="pow"][data-d="-1"]'); pg.click('#cpBody [data-cp="pow"][data-d="-1"]'); pg.wait_for_timeout(80)
+    check('…and back to a plain +3/+3', pg.locator(f'.card[data-id="{x}"] .bp').text_content().strip() == '+3/+3')
     pg.select_option('#cpOther', 'stun'); pg.wait_for_timeout(200)
     check('"Another kind" adds a stun counter row with one on it', card(pg, x)['cn'] == {'stun': 1} and pg.locator('#cpBody [data-kind="stun"] .v').text_content() == '1')
     pg.click('#cpBody [data-cp="stun"][data-d="1"]'); pg.wait_for_timeout(60)
@@ -69,7 +77,7 @@ with sync_playwright() as p:
     pg.keyboard.press('Escape'); pg.wait_for_timeout(200)
     # counters clear when the card leaves the battlefield
     pg.evaluate(f"__edhApi().moveCard('{x}', 0, 'graveyard')"); pg.wait_for_timeout(300)
-    check('leaving the battlefield clears every kind of counter', card(pg, x) == {'p1': 0, 'ctr': 0, 'cn': None, 'kwc': '', 'zone': 'graveyard'}, str(card(pg, x)))
+    check('leaving the battlefield clears every kind of counter and modifier', card(pg, x) == {'p1': 0, 'ctr': 0, 'cn': None, 'kwc': '', 'zone': 'graveyard'} and pg.evaluate(f"[__edhState().cards['{x}'].mp, __edhState().cards['{x}'].mt]") == [0, 0], str(card(pg, x)))
     # ---- bots read counter text ----
     bk = give(pg, 1, 'Everflowing Chalice', 'Artifact', 'hand', 'Multikicker {2}\nEverflowing Chalice enters with a charge counter on it for each time it was kicked.\n{T}: Add {C} for each charge counter on Everflowing Chalice.')
     pg.evaluate(f"__edhApi().moveCard('{bk}', 1, 'battlefield')"); pg.wait_for_timeout(400)

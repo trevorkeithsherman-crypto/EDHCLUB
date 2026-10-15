@@ -242,7 +242,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round
 .bp { position: absolute; left: 5%; top: 46%; z-index: 3; font: 800 calc(var(--cw) * .11)/1 var(--f-ui); background: var(--gold-2); color: #1a1408; border-radius: 999px; padding: 2px 5px; box-shadow: 0 1px 3px rgba(0, 0, 0, .7); }
 .bn { position: absolute; right: 5%; bottom: 4%; z-index: 3; font: 800 calc(var(--cw) * .085)/1 var(--f-ui); background: #0b0e15; color: var(--gold-2); border: 1px solid rgba(226, 182, 89, .55); border-radius: 999px; padding: 2px 5px; white-space: nowrap; text-transform: lowercase; }
 .bn + .bn { bottom: calc(4% + var(--cw) * .2); } .bn + .bn + .bn { bottom: calc(4% + var(--cw) * .4); }
-.ptrow .v { min-width: 5ch; } .ptrow .v.pos { color: var(--gold-2); } .ptrow .v.neg { color: var(--red); } .ptrow .ctl .mini { min-width: 30px; padding: 2px 6px; }
+.ptrow .v { min-width: 5ch; } .modrow .v { min-width: 3ch; } .modrow .v.pos { color: var(--gold-2); } .modrow .v.neg { color: var(--red); } .ptrow .v.pos { color: var(--gold-2); } .ptrow .v.neg { color: var(--red); } .ptrow .ctl .mini { min-width: 30px; padding: 2px 6px; }
 .ctrrow span b { text-transform: capitalize; color: var(--text); font-weight: 700; } .ctrrow .mini { min-width: 34px; height: 30px; font-size: 15px; } .ctrrow .mini:disabled { opacity: .35; cursor: default; }
 .ctradd select { width: auto; min-width: 160px; padding: 6px 9px; }
 .bc { position: absolute; left: 5%; bottom: 4%; z-index: 3; min-width: calc(var(--cw) * .22); height: calc(var(--cw) * .22); display: grid; place-items: center; font: 800 calc(var(--cw) * .11)/1 var(--f-ui); background: #0b0e15; color: var(--blue); border: 1px solid rgba(79, 195, 255, .6); border-radius: 999px; padding: 0 4px; }

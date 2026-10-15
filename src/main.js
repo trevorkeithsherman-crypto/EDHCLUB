@@ -561,7 +561,7 @@ function mainKind(c) { if (/Planeswalker/.test(c.type || '')) return 'loyalty'; 
 const kwcList = (c) => String(c.kwc || '').split(',').map((x) => x.trim()).filter(Boolean);
 function counterCount(c, kind) { if (kind === '+1/+1') return Math.max(0, c.p1 || 0); if (kind === '-1/-1') return Math.max(0, -(c.p1 || 0)); if (KW_CTR.has(kind)) return kwcList(c).includes(kind) ? 1 : 0; if (kind === (mainKind(c) || 'counter')) return c.ctr || 0; return (c.cn && c.cn[kind]) || 0; }
 function addCounter(c, kind, d) {
-  if (kind === '+1/+1') c.p1 = (c.p1 || 0) + d;
+  if (kind === 'pt' || kind === '+1/+1') c.p1 = (c.p1 || 0) + d;
   else if (kind === '-1/-1') c.p1 = (c.p1 || 0) - d;
   else if (KW_CTR.has(kind)) { const l = kwcList(c).filter((k) => k !== kind); if (d > 0) l.push(kind); c.kwc = l.join(','); }
   else if (kind === (mainKind(c) || 'counter')) c.ctr = Math.max(0, (c.ctr || 0) + d);
@@ -570,9 +570,9 @@ function addCounter(c, kind, d) {
 // all kinds worth a row for this card: what its text names, what it already has, plus +1/+1 and -1/-1 for creatures
 function counterRows(c) {
   const out = []; const push = (k) => { if (k && !out.includes(k)) out.push(k); };
-  if (isCreature(c) || c.p1) { push('+1/+1'); push('-1/-1'); }
+  push('pt');   // +1/+1 and -1/-1 are one dial: it reads +3/+3 or -2/-2 and moves freely through zero, on any permanent
   push(mainKind(c)); if (c.ctr && !mainKind(c)) push('counter');
-  counterKinds(c).forEach(push); Object.keys(c.cn || {}).forEach(push); kwcList(c).forEach(push);
+  counterKinds(c).filter((k) => !/^[+-]1\//.test(k)).forEach(push); Object.keys(c.cn || {}).forEach(push); kwcList(c).forEach(push);
   return out;
 }
 const OTHER_KINDS = ['charge', 'stun', 'shield', 'oil', 'time', 'age', 'fade', 'quest', 'verse', 'spore', 'storage', 'gold', 'ice', 'blood', 'brick', 'coin', 'finality', 'flood', 'ki', 'knowledge', 'omen', 'page', 'pressure', 'soul', 'study', 'task', 'tide', 'training', 'velocity', 'wish', 'flying', 'first strike', 'double strike', 'deathtouch', 'lifelink', 'trample', 'vigilance', 'menace', 'hexproof', 'indestructible', 'reach', 'haste'];
@@ -580,7 +580,8 @@ function counterSummary(c) { const parts = []; if (c.p1) parts.push(`${c.p1 > 0 
 // The adjustable counter panel: every kind gets − count +; closing logs what changed as one line.
 function counterPanel(c, opt = {}) {
   const before = counterSummary(c); let extra = [];
-  const row = (k) => { const n = counterCount(c, k); const kw = KW_CTR.has(k); return `<div class="dmgrow ctrrow" data-kind="${esc(k)}"><span><b>${esc(k)}</b> counter${kw ? '' : 's'}</span><div class="ctl"><button type="button" class="mini" data-cp="${esc(k)}" data-d="-1" ${n <= 0 ? 'disabled' : ''} aria-label="Remove a ${esc(k)} counter">−</button><span class="v">${n}</span><button type="button" class="mini" data-cp="${esc(k)}" data-d="1" ${kw && n ? 'disabled' : ''} aria-label="Add a ${esc(k)} counter">+</button></div></div>`; };
+  const ptRow = () => { const n = c.p1 || 0; const lbl = n > 0 ? `+${n}/+${n}` : n < 0 ? `${n}/${n}` : '0'; return `<div class="dmgrow ctrrow ptrow" data-kind="pt"><span><b>+1/+1 · −1/−1</b> counters<br><small class="muted">− below zero means −1/−1 counters</small></span><div class="ctl"><button type="button" class="mini" data-cp="pt" data-d="-5" aria-label="Five -1/-1 counters">−5</button><button type="button" class="mini" data-cp="pt" data-d="-1" aria-label="One -1/-1 counter">−</button><span class="v ${n > 0 ? 'pos' : n < 0 ? 'neg' : ''}">${lbl}</span><button type="button" class="mini" data-cp="pt" data-d="1" aria-label="One +1/+1 counter">+</button><button type="button" class="mini" data-cp="pt" data-d="5" aria-label="Five +1/+1 counters">+5</button></div></div>`; };
+  const row = (k) => { if (k === 'pt') return ptRow(); const n = counterCount(c, k); const kw = KW_CTR.has(k); return `<div class="dmgrow ctrrow" data-kind="${esc(k)}"><span><b>${esc(k)}</b> counter${kw ? '' : 's'}</span><div class="ctl"><button type="button" class="mini" data-cp="${esc(k)}" data-d="-1" ${n <= 0 ? 'disabled' : ''} aria-label="Remove a ${esc(k)} counter">−</button><span class="v">${n}</span><button type="button" class="mini" data-cp="${esc(k)}" data-d="1" ${kw && n ? 'disabled' : ''} aria-label="Add a ${esc(k)} counter">+</button></div></div>`; };
   const body = () => { const kinds = counterRows(c); extra.forEach((k) => { if (!kinds.includes(k)) kinds.push(k); }); return kinds.map(row).join('') + `<div class="dmgrow ctradd"><span class="muted small">Another kind</span><select id="cpOther" aria-label="Add another kind of counter"><option value="">Choose…</option>${OTHER_KINDS.filter((k) => !kinds.includes(k)).map((k) => `<option value="${k}">${k}</option>`).join('')}<option value="__custom">Type a name…</option></select></div>`; };
   const pt = () => (c.pt ? `<span class="muted small" id="cpPt">Now ${esc(ptOf(c))}</span>` : '');
   openModal(`<h2>Counters on ${esc(c.name)}</h2><p>${opt.x ? `<b>${esc(c.name)} enters with X counters.</b> Set X now — nothing happens to it until you press Done.` : 'Press − or + on any kind. Cards that enter with counters already have them; bots add theirs from the card text.'}</p><div class="dmgrows" id="cpBody">${body()}</div><div class="row" style="justify-content:space-between;align-items:center">${pt()}<button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'narrow', onClose: () => { c.ctrPending = false; const after = counterSummary(c); if (after !== before) log(`${P(c.controller).name}: ${c.name} counters — ${after || 'none'}`); render(); } });
@@ -1344,7 +1345,7 @@ function cardMenu(c, x, y) {
       if (Rules.canAttack(c).ok) S.players.forEach((p, k) => { if (k !== c.controller && !p.out && k < S.seats) add(`Attack ${p.name}`, () => attack(c, k)); });
     }
     sep();
-    add(`Counters…${counterSummary(c) ? ` (${counterSummary(c)})` : ''}`, () => counterPanel(c));
+    add(`Counters…${counterSummary(c) ? ` (${counterSummary(c)})` : ''}`, () => counterPanel(c)); add('+1/+1 counter', () => counter(c, 'p1', 1)); add('−1/−1 counter', () => counter(c, 'p1', -1));
     add(c.faceDown ? 'Turn face up' : 'Turn face down', () => { c.faceDown = !c.faceDown; render(); });
     add('Copy as token', () => createTokens(c.controller, { name: c.name, cost: '', type: /Token/.test(c.type) ? c.type : 'Token ' + c.type, pt: c.pt, colors: c.colors, img: c.img, big: c.big, backImg: c.backImg, backBig: c.backBig, artist: c.artist, copyOf: c.name }, 1));
     sep();

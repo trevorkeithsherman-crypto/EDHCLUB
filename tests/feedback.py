@@ -37,9 +37,9 @@ with sync_playwright() as p:
     for _ in range(3):
         rclick(pg, cid); pg.wait_for_timeout(200); pg.locator('#menu .mi:has-text("Counters")').click(); pg.wait_for_timeout(250); pg.keyboard.press('Escape'); pg.wait_for_timeout(150)
     rclick(pg, cid); pg.wait_for_timeout(200); pg.locator('#menu .mi:has-text("Counters")').click(); pg.wait_for_timeout(250)
-    pg.click('#cpBody [data-cp="+1/+1"][data-d="1"]'); pg.wait_for_timeout(150)
+    pg.click('#cpBody [data-cp="pt"][data-d="1"]'); pg.wait_for_timeout(150)
     check('after opening the Counters panel four times, one press adds exactly one counter', state(pg)['cards'][cid]['p1'] == 1, str(state(pg)['cards'][cid]['p1']))
-    pg.click('#cpBody [data-cp="+1/+1"][data-d="1"]'); pg.wait_for_timeout(150)
+    pg.click('#cpBody [data-cp="pt"][data-d="1"]'); pg.wait_for_timeout(150)
     check('…and a second press makes two', state(pg)['cards'][cid]['p1'] == 2)
     pg.keyboard.press('Escape')
     # sound check panel had the same listener pile-up: opening it twice and clicking play fires one sound

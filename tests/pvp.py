@@ -21,6 +21,8 @@ with sync_playwright() as p:
     host, he = setup(ctx); guest, ge = setup(ctx)
     host.goto(BASE + '/table.html?room=PVP01&host=1&name=Host&seats=2&bots=0'); host.wait_for_timeout(2000)
     guest.goto(BASE + '/table.html?room=PVP01&name=Guest'); guest.wait_for_timeout(2600)
+    # the response window on people's spells is a table option now (off by default); this suite tests it on
+    host.evaluate("__edhMut(st => { st.respondWindow = true; })"); host.wait_for_timeout(600)
     host.evaluate("__edhMut(st=>{ st.turn.active=0; st.turn.phase=1; st.turn.number=3; })"); host.wait_for_timeout(600)
     # ---- 1. instant: waits on the stack for the guest ----
     bolt = give(host, 0, 'Lightning Bolt', 'Instant', '{R}', '', 'Lightning Bolt deals 3 damage to any target.')

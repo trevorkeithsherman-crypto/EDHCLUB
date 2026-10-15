@@ -32,7 +32,7 @@ def collection(route):
 
 FAKE_USER = {'id': '11111111-1111-4111-8111-111111111111', 'aud': 'authenticated', 'role': 'authenticated', 'is_anonymous': True, 'user_metadata': {'display_name': 'Tester'}, 'app_metadata': {}, 'created_at': '2026-10-08T00:00:00Z'}
 # In-memory server tables for persistence tests: room_state (one row per room) and room_players.
-STORE = {'room_state': {}, 'room_players': {}, 'blocks': [], 'reports': [], 'room_patches': [], 'club_patches': [], 'deleted': 0, 'email_changes': [], 'games': [], 'game_players': []}
+STORE = {'room_state': {}, 'room_players': {}, 'blocks': [], 'reports': [], 'room_patches': [], 'club_patches': [], 'deleted': 0, 'email_changes': [], 'games': [], 'game_players': [], 'deck_patches': []}
 def _q(url, key):
     import urllib.parse as up; qs = up.parse_qs(up.urlparse(url).query); v = qs.get(key, [None])[0]; return v.split('.', 1)[1] if v and '.' in v else v
 def supabase_mock(route):
@@ -87,6 +87,7 @@ def supabase_mock(route):
     if '/rest/v1/decks' in url:
         if m == 'GET': route.fulfill(status=200, content_type='application/json', body=json.dumps([{'id': 'd1', 'user_id': FAKE_USER['id'], 'name': 'Krenko Goblins', 'commander': 'Krenko, Mob Boss', 'colors': 'R', 'card_count': 100, 'mat': 'ember', 'list': 'Commander\n1 Krenko, Mob Boss\n\nDeck\n1 Goblin Chieftain\n98 Mountain', 'updated_at': '2026-10-08T00:00:00Z'}] if 'id=eq.d1' in url or True else [])); return
         if m == 'POST': route.fulfill(status=201, content_type='application/json', body=json.dumps({'id': 'd2', 'name': 'Saved Deck'})); return
+        if m == 'PATCH': STORE['deck_patches'].append((_q(url, 'id'), json.loads(route.request.post_data or '{}'))); route.fulfill(status=204, body=''); return
         route.fulfill(status=204, body=''); return
     if '/rest/v1/clubs' in url and m == 'POST':
         route.fulfill(status=201, content_type='application/json', body=json.dumps({'id': 'c2', 'name': 'New Club', 'code': 'NEWCL'})); return

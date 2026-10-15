@@ -8,7 +8,7 @@ import { parseList, deckStats, deckText } from './decklist.js';
 import { parseAbilities, parseEffects, staticGrant, boardRules, castTax, castBlock, spellKind, manaValue, counterKinds, entersWith, KW_COUNTERS } from './effects.js';
 import { deckLink, fetchLinkedDeck } from './deckimport.js';
 import { registerSW, canInstall, install, onInstallable, isIOS, toggleFullscreen, fullscreenOn, fullscreenSupported } from './pwa.js';
-import { online, currentUser, recordGame, recordFullGame, setWinMethod, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId, saveRoomState, loadRoomState, setRoomVoice, touchRoomPlayer, updateRoomLive, myBlocks, blockUser, unblockUser, fileReport } from './supa.js';
+import { online, currentUser, recordGame, recordFullGame, setWinMethod, updateDeckMeta, setRoomStatus, localName, localAvatar, defaultDeckId, bumpDeckPlays, listDecks, getDeck, saveDeck, deleteDeck, lastDeckId, setLastDeckId, saveRoomState, loadRoomState, setRoomVoice, touchRoomPlayer, updateRoomLive, myBlocks, blockUser, unblockUser, fileReport } from './supa.js';
 
 /* ---------- Mode from the URL ---------- */
 const Q = new URLSearchParams(location.search);
@@ -125,6 +125,7 @@ function hydrate() {
   for (const c of Object.values(S.cards)) {
     if (c.token && !c.copyOf && !c.img && !c._tokenTried) { c._tokenTried = true; fetchToken(c.name, c.pt, c.colors).then((t) => { if (t && S.cards[c.id] && !c.img) { Object.assign(c, { img: t.img, big: t.big, art: t.art, artist: t.artist }); render(); } }); continue; }
     if (c.token && !c.copyOf) continue;
+    if (c.printed && c.img) continue;   // a printing someone chose by hand (synced with its art): never swap it back
     if (c.img && !(c.set && c.num && !c._printed)) continue;
     const e = cached(c.copyOf || c.name, c.set, c.num); if (c.set && c.num && e && e.set === c.set && String(e.num) === String(c.num)) c._printed = true; else if (c.img && !e) continue;
     if (e) { applyEntry(c, e); if (c.token) c.type = /Token/.test(e.type) ? e.type : 'Token ' + e.type; n++; }
@@ -390,7 +391,8 @@ function castToStack(id, fromRect) {
   if (MODE !== 'hotseat') { const nth = noteCast(c.controller); if (net.active && !net.isHost) net.send('all', { fn: 'cast', seat: c.controller, cardId: c.id, nth, type: c.type }); else { fireEvent('opponentCasts', { caster: c.controller, card: c, nth }); fireEvent('youCast', { caster: c.controller, card: c, nth }); } }
   if (fromCmd) c.casts = (c.casts || 0) + 1;
   // Other people at the table: the spell waits on the stack until they let it resolve (same window bots give).
-  if (MODE !== 'hotseat' && net.active && humanSeats().some((k) => !net.isMine(k))) { humanCast(c, fromRect); return; }
+  // Only when the table has turned it on: by default people's spells resolve straight away (as at a real table); bots always give the window.
+  if (MODE !== 'hotseat' && net.active && S.respondWindow && humanSeats().some((k) => !net.isMine(k))) { humanCast(c, fromRect); return; }
   finishCast(c, fromRect, fromCmd);
   if (!P(c.controller).bot && net.isMine(c.controller) && parseAbilities(c).some((a) => a.kind === 'cascade')) humanCascade(c);
 }
@@ -582,7 +584,7 @@ function counterPanel(c, opt = {}) {
   const body = () => { const kinds = counterRows(c); extra.forEach((k) => { if (!kinds.includes(k)) kinds.push(k); }); return kinds.map(row).join('') + `<div class="dmgrow ctradd"><span class="muted small">Another kind</span><select id="cpOther" aria-label="Add another kind of counter"><option value="">Choose…</option>${OTHER_KINDS.filter((k) => !kinds.includes(k)).map((k) => `<option value="${k}">${k}</option>`).join('')}<option value="__custom">Type a name…</option></select></div>`; };
   const pt = () => (c.pt ? `<span class="muted small" id="cpPt">Now ${esc(ptOf(c))}</span>` : '');
   openModal(`<h2>Counters on ${esc(c.name)}</h2><p>${opt.x ? `<b>${esc(c.name)} enters with X counters.</b> Set X now — nothing happens to it until you press Done.` : 'Press − or + on any kind. Cards that enter with counters already have them; bots add theirs from the card text.'}</p><div class="dmgrows" id="cpBody">${body()}</div><div class="row" style="justify-content:space-between;align-items:center">${pt()}<button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'narrow', onClose: () => { c.ctrPending = false; const after = counterSummary(c); if (after !== before) log(`${P(c.controller).name}: ${c.name} counters — ${after || 'none'}`); render(); } });
-  const m = $('#modal');
+  const m = $('#modal .mpanel');
   const refresh = () => { $('#cpBody').innerHTML = body(); const p = $('#cpPt'); if (p && c.pt) p.textContent = `Now ${ptOf(c)}`; render(); };
   m.addEventListener('click', (e) => { const b = e.target.closest('[data-cp]'); if (!b) return; addCounter(c, b.dataset.cp, +b.dataset.d); SFX.play('ui'); refresh(); FX.bounce(cardEl(c.id)?.querySelector('.bp, .bc, .bn')); });
   m.addEventListener('change', (e) => { if (e.target.id !== 'cpOther') return; let k = e.target.value; if (k === '__custom') k = (prompt('Counter name (e.g. "verse"):') || '').trim().toLowerCase().replace(/ counters?$/, ''); if (!k) { e.target.value = ''; return; } extra.push(k); addCounter(c, k, 1); refresh(); });
@@ -824,13 +826,13 @@ function wipeLocal(kind) {
 }
 
 /* ---------- Room sync ---------- */
-const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'cn', 'dmg', 'kw', 'sick', 'anim', 'set', 'num', 'foil', 'tp', 'tt', 'tkw', 'attachedTo', 'kwc', 'goad', 'loyalty', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts'];
+const CARD_FIELDS = ['id', 'name', 'cost', 'type', 'pt', 'colors', 'owner', 'controller', 'zone', 'tapped', 'faceDown', 'flipped', 'p1', 'ctr', 'cn', 'dmg', 'kw', 'sick', 'anim', 'set', 'num', 'foil', 'tp', 'tt', 'tkw', 'attachedTo', 'kwc', 'goad', 'loyalty', 'token', 'copyOf', 'x', 'y', 'isCmdr', 'casts', 'img', 'big', 'art', 'artist', 'printed'];
 function seatSnap(i) {
   const p = P(i);
   const cards = Object.values(S.cards).filter((c) => c.owner === i).map((c) => { const o = {}; CARD_FIELDS.forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; }); return o; });
   return { seat: i, player: { name: p.name, life: p.life, poison: p.poison, cmdDmg: p.cmdDmg, out: p.out, outAt: p.outAt, mulls: p.mulls, kept: p.kept !== false, away: !!p.away, mat: p.mat, bot: p.bot, avatar: p.avatar || '', empty: !!p.empty, takenFrom: p.takenFrom || {}, cmdTakenFrom: p.cmdTakenFrom || {}, outBy: p.outBy ?? null, outHow: p.outHow || null, outTurn: p.outTurn ?? null, deckId: p.deckId || '', deckName: p.deckName || '' }, zones: p.zones, cards };
 }
-function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, pending: S.pending || null, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40), seatsBy: S.seatsBy || {}, voice: S.voice || '', locked: !!S.locked }; }
+function sharedSnap() { return { turn: S.turn, stack: S.stack, attacks: S.attacks, pending: S.pending || null, over: S.over, outOrder: S.outOrder, stats: S.stats, log: S.log.slice(0, 40), seatsBy: S.seatsBy || {}, voice: S.voice || '', locked: !!S.locked, respondWindow: !!S.respondWindow }; }
 /* ---------- Game persistence ----------
    The host saves the whole table (every seat's cards and zones, the shared state, who sits where, the voice link)
    to the server a few seconds after anything changes. If everyone leaves, the first one back restores it and
@@ -890,6 +892,7 @@ function applyShared(sn) {
   if (sn.seatsBy) { S.seatsBy = { ...(S.seatsBy || {}), ...sn.seatsBy }; if (net.seat != null && S.seatsBy[net.seat] && S.seatsBy[net.seat].cid && S.seatsBy[net.seat].cid !== net.clientId && !net.isMine(net.seat)) { /* someone else claims my seat: keep mine */ } }
   if (typeof sn.voice === 'string' && sn.voice !== (S.voice || '')) { S.voice = sn.voice; roomBar(); }
   if (typeof sn.locked === 'boolean') S.locked = sn.locked;
+  if (typeof sn.respondWindow === 'boolean') S.respondWindow = sn.respondWindow;
   if (turnChanged) { clearDamage(); clearPumps(); clearSick(S.turn.active); }
   botDefend();
   const was = S.over; S.over = sn.over;
@@ -1282,9 +1285,11 @@ async function artworkModal(c) {
   $('#artFoil').onchange = (e) => { Object.values(S.cards).forEach((x) => { if (x.owner === c.owner && x.name === c.name && !x.token) x.foil = e.target.checked; }); render(); };
   $$('[data-pr]').forEach((b) => { b.onclick = () => {
     const e = prints[+b.dataset.pr]; const foil = $('#artFoil').checked || (e.finishes && !/nonfoil/.test(e.finishes));
-    Object.values(S.cards).forEach((x) => { if (x.owner === c.owner && x.name === c.name && !x.token) { Object.assign(x, { set: e.set, num: e.num, img: e.img, big: e.big, art: e.art, artist: e.artist, foil, _printed: true }); } });
+    Object.values(S.cards).forEach((x) => { if (x.owner === c.owner && x.name === c.name && !x.token) { Object.assign(x, { set: e.set, num: e.num, img: e.img, big: e.big, art: e.art, artist: e.artist, foil, _printed: true, printed: true }); } });
     $$('[data-pr]').forEach((o) => o.classList.toggle('on', o === b)); $('#artFoil').checked = foil; render(); SFX.play('chime', firstColor(c));
     P(c.owner).deckText = rewriteDeckText(P(c.owner).deckText, c.name, e.set, e.num, foil);
+    // remembered on the saved deck right away, so it's the art next time too (and for everyone at the table now, via sync)
+    const did = P(c.owner).deckId; if (did && online) { clearTimeout(artworkModal.saveT); artworkModal.saveT = setTimeout(() => updateDeckMeta(did, { list: P(c.owner).deckText }).then(() => toast('Artwork saved to your deck', 2200)).catch(() => {}), 600); }
   }; });
 }
 // Keep the seat's decklist text in step with artwork choices so "Save to my decks" remembers them.
@@ -1873,8 +1878,9 @@ function tableModal() {
   openModal(`<h2>Table</h2><p>${MODE === 'room' ? 'Open seats can be taken by anyone with the invite code. Kick a bot to make room for a friend, or add one when a seat stays empty. Bots keep the same turn order as the seat they sit in.' : 'Add or remove practice bots and pick what they play. A removed seat sits out until you fill it again.'}</p>
   <div class="tm-head"><span>Seats</span><span class="seg">${[2, 3, 4].map((n) => `<button type="button" class="${S.seats === n ? 'on' : ''}" data-tm="seats" data-k="${n}">${n}</button>`).join('')}</span></div>
   <ul class="tm-list">${rows}</ul>
-  ${MODE === 'room' ? `<div class="tm-foot"><label class="chk"><input type="checkbox" id="tmLock" ${S.locked ? 'checked' : ''}> Lock the table (no new players; it leaves the open-tables list)</label><button type="button" class="btn ghost sm" id="tmAnnounce" title="Post this table to the connected Discord channel">Post to Discord</button></div>` : ''}
+  ${MODE === 'room' ? `<div class="tm-foot"><label class="chk"><input type="checkbox" id="tmLock" ${S.locked ? 'checked' : ''}> Lock the table (no new players; it leaves the open-tables list)</label><label class="chk"><input type="checkbox" id="tmRespond" ${S.respondWindow ? 'checked' : ''}> Ask the table before each spell resolves (OK / Respond / Counter)</label><button type="button" class="btn ghost sm" id="tmAnnounce" title="Post this table to the connected Discord channel">Post to Discord</button></div>` : ''}
   <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="close">Done</button></div>`);
+  const rw = $('#tmRespond'); if (rw) rw.onchange = () => { S.respondWindow = rw.checked; log(rw.checked ? 'The host turned on the response window for spells' : 'The host turned off the response window: spells resolve right away'); render(); };
   const lk = $('#tmLock'); if (lk) lk.onchange = () => { S.locked = lk.checked; log(lk.checked ? 'The host locked the table' : 'The host unlocked the table'); render(); pushListing(true); };
   const an = $('#tmAnnounce'); if (an) an.onclick = async () => { an.disabled = true; an.textContent = 'Posting…'; try { const r = await fetch(`/api/announce/${ROOM.code}`, { method: 'POST' }); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.statusText); toast(j.posted ? `Posted to ${j.posted} Discord channel${j.posted > 1 ? 's' : ''}` : (j.note || 'Nothing posted'), 6000); } catch (e) { toast(`Couldn't post: ${e.message}`, 6000); } an.disabled = false; an.textContent = 'Post to Discord'; };
   $('#modal .mpanel').addEventListener('click', async (e) => {
@@ -1987,7 +1993,7 @@ async function deckLibraryHTML() {
   if (!online) return '';
   const user = await currentUser(); if (!user) return '<div class="summary">Sign in on the <a href="/home.html">home page</a> to keep decks on your account.</div>';
   const decks = await listDecks(); const last = lastDeckId();
-  return `<div class="decklib"><div class="eyebrow">Your decks <a class="link" href="/decks.html" style="margin-left:8px;font-size:12px;letter-spacing:0;text-transform:none">Manage decks</a></div>${decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · last used' : ''}</small></span><span class="row"><button type="button" class="btn sm" data-deck-load="${d.id}">Load</button><button type="button" class="btn ghost sm" data-deck-del="${d.id}">Delete</button></span></li>`).join('')}</ul>` : '<p class="muted">No saved decks yet. Paste a list below and save it, or <a href="/decks.html">pick one of the top 100</a>.</p>'}</div>`;
+  return `<div class="decklib"><div class="eyebrow">Your decks <a class="link" href="/decks.html" style="margin-left:8px;font-size:12px;letter-spacing:0;text-transform:none">Manage decks</a></div>${decks.length ? `<ul class="list">${decks.map((d) => `<li><span><b>${esc(d.name)}</b> <small>· ${esc(d.commander || '')}${d.card_count ? ` · ${d.card_count} cards` : ''}${d.id === last ? ' · last used' : ''}</small></span><span class="row"><button type="button" class="btn sm" data-deck-play="${d.id}" title="Seat this deck now: shuffle up and draw 7">Play</button><button type="button" class="btn ghost sm" data-deck-load="${d.id}" title="Open the list below to edit it first">Edit</button><button type="button" class="btn ghost sm" data-deck-del="${d.id}">Delete</button></span></li>`).join('')}</ul>` : '<p class="muted">No saved decks yet. Paste a list below and save it, or <a href="/decks.html">pick one of the top 100</a>.</p>'}</div>`;
 }
 async function importModal(pi) {
   const lib = await deckLibraryHTML();
@@ -2026,7 +2032,9 @@ async function importModal(pi) {
     } catch (err) { toast(`Couldn't load that deck: ${err.message}`, 5000); b.disabled = false; b.textContent = b.dataset.topSeat ? 'Seat' : 'Load'; }
   };
   $('#impDeckName').value = P(pi).deckName || '';
-  $$('[data-deck-load]').forEach((b) => { b.onclick = async () => { const d = await getDeck(b.dataset.deckLoad); if (!d) return; ta.value = d.list; $('#impDeckName').value = d.name; editingId = d.id; $('#impCmd').value = ''; sum(); toast(`Loaded ${d.name}`); }; });
+  $$('[data-deck-load]').forEach((b) => { b.onclick = async () => { const d = await getDeck(b.dataset.deckLoad); if (!d) return; ta.value = d.list; $('#impDeckName').value = d.name; editingId = d.id; $('#impCmd').value = ''; sum(); toast(`Loaded ${d.name} — edit below, then Shuffle up and seat`); ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); }; });
+  // one tap: the saved deck is seated as-is (list, name, playmat), no second step
+  $$('[data-deck-play]').forEach((b) => { b.onclick = async () => { b.disabled = true; b.textContent = 'Seating…'; const d = await getDeck(b.dataset.deckPlay); if (!d) { b.disabled = false; b.textContent = 'Play'; return; } ta.value = d.list; $('#impDeckName').value = d.name; editingId = d.id; $('#impCmd').value = ''; if (d.mat && d.mat !== 'auto') P(+$('#impSeat').value).mat = d.mat; $('#impGo').click(); }; });
   $$('[data-deck-del]').forEach((b) => { b.onclick = async () => { await deleteDeck(b.dataset.deckDel); toast('Deck deleted'); importModal(pi); }; });
   const saveBtn = $('#impSave'); if (saveBtn) saveBtn.onclick = async () => {
     const d = parseDeck(ta.value, $('#impCmd').value); const nm = $('#impDeckName').value.trim() || d.cmd[0] || 'Untitled deck';
@@ -2421,7 +2429,7 @@ function soundModal() {
   <label>Volume <input type="range" id="sndVol" min="0" max="1" step="0.02" value="${SFX.vol}"></label>
   <ul class="snd-list">${rows}</ul>
   <div class="row" style="justify-content:space-between;align-items:center"><span class="muted small" id="sndState">${SFX.state === 'ready' ? 'Sounds loaded' : 'Loading sounds…'}</span><button type="button" class="btn" data-act="close">Done</button></div>`, { cls: 'narrow' });
-  const m = $('#modal');
+  const m = $('#modal .mpanel');
   m.addEventListener('input', (e) => { if (e.target.id === 'sndVol') SFX.setVolume(parseFloat(e.target.value)); });
   m.addEventListener('click', (e) => { const b = e.target.closest('[data-snd]'); if (!b) return; const cue = b.dataset.snd; SFX.play(cue.startsWith('cast_') ? 'cast' : cue, cue.startsWith('cast_') ? cue.slice(5) : undefined, { force: true }); });
   const tick = setInterval(() => { const st = $('#sndState'); if (!st) { clearInterval(tick); return; } st.textContent = SFX.state === 'ready' ? 'Sounds loaded' : SFX.state === 'failed' ? 'Sound files could not be loaded — using fallback tones' : 'Loading sounds…'; }, 400);

@@ -379,6 +379,7 @@ body.is-drag, body.is-drag * { cursor: grabbing !important; }
   .turnbar { gap: 6px 10px; padding: 6px 10px; } .ph { padding: 4px 9px; } .ticker { max-width: clamp(120px, 16vw, 320px); }
   .side .fan { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 }
+@media (max-width: 1600px) and (min-width: 761px) and (min-height: 521px) { .turnbar .ticker { display: none; } .turnbar .tn { display: none; } }
 @media (max-height: 820px) { .side .fan { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .side-tabs { padding-top: 6px; } }
 /* Narrow windows and tablets: the panel becomes a toggle (rail → Panel) and sits in the grid when shown. */
 @media (max-width: 1100px) { #app { grid-template-columns: var(--rail) minmax(0, 1fr) 0; } .side { display: none; } #app.show-side { grid-template-columns: var(--rail) minmax(0, 1fr) var(--side); } #app.show-side .side { display: grid; } }
@@ -713,3 +714,41 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .hosttag { font: 700 9px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); border: 1px solid rgba(226, 182, 89, .5); border-radius: 999px; padding: 2px 7px; }
 .chip.away { color: #ffb86b; border-color: rgba(255, 184, 107, .5); }
 .tm-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin: 12px 0 4px; padding-top: 10px; border-top: 1px solid var(--line); }
+
+/* ---------- Roomy board (desktop): the battlefield is the product; everything else floats over it, shrinks, or
+   waits for a hover. Compact (phone) layouts keep their own rules above. ---------- */
+@media (min-width: 761px) and (min-height: 521px) {
+  :root { --rail: 60px; }
+  .rail { padding: 10px 4px calc(8px + env(safe-area-inset-bottom, 0px)); gap: 2px; } .rail-btn { width: 50px; padding: 7px 0 6px; font-size: 9px; gap: 3px; } .rail-btn svg { width: 20px; height: 20px; } .logo .crest { width: 38px; height: 38px; }
+  /* opponents: a glance strip, not a quarter of the screen; the turn strip no longer owns a band of its own */
+  .table { grid-template-rows: minmax(120px, 24%) 0 minmax(0, 1fr); }
+  .table[data-opps="1"] { grid-template-rows: minmax(180px, 38%) 0 minmax(0, 1fr); }
+  .table[data-opps="2"] { grid-template-rows: minmax(150px, 30%) 0 minmax(0, 1fr); }
+  .table[data-opps="0"] { grid-template-rows: 0 0 minmax(0, 1fr); }
+  .mid { height: 0; overflow: visible; z-index: 6; }
+  .turnbar { position: absolute; left: 250px; top: 0; transform: translate(0, 6px); flex: none; flex-wrap: nowrap; width: max-content; max-width: calc(100% - 262px); border-radius: 999px; border: 1px solid var(--line-2); padding: 4px 8px 4px 12px; gap: 6px 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, .55), 0 0 0 1px rgba(0, 0, 0, .6); }
+  .turnbar.mine { border-color: rgba(79, 195, 255, .55); box-shadow: 0 12px 32px rgba(0, 0, 0, .55), 0 0 22px rgba(79, 195, 255, .25); }
+  .ticker { max-width: 190px; } .turnbar .tb-who, .turnbar .tn, .turnbar .who, .turnbar .ph, .turnbar .midtools { white-space: nowrap; flex-wrap: nowrap; } .turnbar .midtools { flex: none; }
+  /* seats: lighter vignette, smaller plates, no zone labels, hairline seams */
+  .seat::before { background: radial-gradient(ellipse 80% 70% at 50% 50%, rgba(0, 0, 0, .04), rgba(0, 0, 0, .42)); }
+  .opps .seat + .seat { box-shadow: inset 1px 0 0 rgba(255, 255, 255, .06); }
+  .opps .avatar { width: 36px; height: 36px; } .opps .avatar .init { font-size: 15px; } .opps .lifebadge { height: 22px; font-size: 13px; min-width: 26px; right: -12px; bottom: -6px; }
+  .opps .plate { left: 8px; top: 8px; gap: 8px; } .opps .pname { font-size: 13px; } .opps .cmdn { font-size: 11px; } .opps .bf { margin-top: 46px; }
+  .table[data-opps="1"] .opps .avatar { width: 46px; height: 46px; } .table[data-opps="1"] .opps .bf { margin-top: 58px; }
+  .minipiles { opacity: .55; transition: opacity .15s; } .seat:hover .minipiles { opacity: 1; }
+  .bf .zl { display: none; } .bf:has(.bf-empty) .zl { display: block; }
+  .bf-empty { font-size: 12px; color: rgba(255, 255, 255, .22); }
+  .me .avatar { width: 46px; height: 46px; } .me .avatar .init { font-size: 17px; } .me .lifebadge { height: 26px; font-size: 15px; right: -14px; } .me .plate { left: 12px; top: 10px; } .me .bf { margin-top: 60px; }
+  /* my seat: the battlefield runs to the bottom edge; the dock floats over it */
+  .me .seat { grid-template-rows: minmax(0, 1fr); }
+  .me .bf { margin-bottom: var(--dock-reserve, 118px); }
+  .dock { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; pointer-events: none; padding: 0 12px 6px 10px; gap: 10px; background: linear-gradient(to bottom, transparent, rgba(4, 6, 10, .6) 70%); --cw: clamp(48px, min(4.6vw, 7.5vh), 72px); }
+  .dock > * { pointer-events: auto; }
+  .piles { gap: 6px; } .pile { gap: 2px; } .pile .pl, .pile .tax { font-size: 8px; letter-spacing: .06em; } .slot .empty { font-size: 9px; } .slot .cnt { min-width: 18px; height: 18px; font-size: 10px; right: -6px; top: -6px; }
+  .handwrap { --cw: clamp(72px, min(7vw, 11.5vh), 112px); }
+  .handbar { font-size: 9px; letter-spacing: .1em; opacity: .75; } .handbar .btn.sm { padding: 3px 8px; font-size: 10px; }
+  .hand { margin-bottom: 2px; }
+  .actions { min-width: 0; flex-direction: column; gap: 5px; }
+  .endturn { padding: 11px 18px; font-size: 13px; min-width: 132px; }
+  .actions .btn.sm { padding: 4px 8px; font-size: 11px; }
+}

@@ -1120,13 +1120,14 @@ function sizeBattlefields() {
   const nOpp = +($('#table')?.dataset.opps || 3);
   const mineMax = Math.round(Math.min(130, Math.max(56, Math.min(innerWidth * 0.075, innerHeight * 0.13))));
   const fit = (el, max) => Math.max(30, Math.min(max, Math.floor((el.clientHeight * 0.45) / RATIO)));
-  let myCw = 0; const me = $('.me .bf'); if (me && me.clientHeight) { myCw = fit(me, mineMax); me.style.setProperty('--cw', myCw + 'px'); }
-  $$('.opps .bf').forEach((el) => {
-    if (!el.clientHeight) return;
-    // 1v1 and 1v2: opponents' cards are the same size as mine (a fair split board); 1v3 keeps the compact strip
-    const max = nOpp <= 2 ? (myCw || mineMax) : Math.round(Math.min(80, Math.max(40, innerWidth * 0.048, innerHeight * 0.075)));
-    el.style.setProperty('--cw', fit(el, max) + 'px');
-  });
+  // desktop: the dock floats over my battlefield; reserve just enough of the bottom for the hand (the gradient above it stays usable)
+  const me = $('.me .bf'); const dock = $('.me .dock');
+  if (me && dock && !isCompact()) { const reserve = Math.max(90, dock.offsetHeight - 26); me.style.setProperty('--dock-reserve', reserve + 'px'); }
+  let myCw = 0; if (me && me.clientHeight) { myCw = fit(me, mineMax); me.style.setProperty('--cw', myCw + 'px'); }
+  const opps = $$('.opps .bf').filter((el) => el.clientHeight);
+  // 1v1 and 1v2: everyone's cards are the same size (a fair split board), the smaller of the two fits; 1v3 keeps the compact strip
+  if (nOpp <= 2 && opps.length && me && myCw) { const shared = Math.min(myCw, ...opps.map((el) => fit(el, myCw))); me.style.setProperty('--cw', shared + 'px'); opps.forEach((el) => el.style.setProperty('--cw', shared + 'px')); return; }
+  opps.forEach((el) => { const max = Math.round(Math.min(80, Math.max(40, innerWidth * 0.048, innerHeight * 0.075))); el.style.setProperty('--cw', fit(el, max) + 'px'); });
 }
 function drawArrows() {
   const svg = $('#arrows'); const W = innerWidth, H = innerHeight; svg.setAttribute('viewBox', `0 0 ${W} ${H}`);

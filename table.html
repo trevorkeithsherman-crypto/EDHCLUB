@@ -33,7 +33,7 @@
       <div class="rail-sp"></div>
       <button type="button" class="rail-btn" id="newBtn" title="New game"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0113.7-5.7L20 8M20 4v4h-4M20 12a8 8 0 01-13.7 5.7L4 16M4 20v-4h4"/></svg><span>New</span></button>
       <button type="button" class="rail-btn" id="fsBtn" title="Full screen (Shift+F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Full</span></button>
-      <button type="button" class="rail-btn" id="sideBtn" title="Log and card preview"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg><span>Panel</span></button>
+      <button type="button" class="rail-btn" id="sideBtn" title="Game log and chat (P)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg><span>Panel</span></button>
       <label class="rail-seat" for="viewSel" hidden><span>Seat</span><select id="viewSel"></select></label>
     </nav>
     <main class="table" id="table">
@@ -42,7 +42,7 @@
       <section class="me" id="me" aria-label="Your seat"></section>
     </main>
     <aside class="side" id="side" aria-label="Game log and card preview">
-      <div class="side-tabs"><button type="button" class="tab on" data-tab="log">Game log</button><button type="button" class="tab" data-tab="chat">Chat</button><div id="roomBar"></div></div>
+      <div class="side-tabs"><button type="button" class="tab on" data-tab="log">Game log</button><button type="button" class="tab" data-tab="chat">Chat</button><div id="roomBar"></div><button type="button" class="side-x" id="sideClose" title="Close the panel (P)" aria-label="Close the panel">×</button></div>
       <div class="side-body" id="sideLog"></div>
       <div class="side-body chat" id="sideChat" hidden><div class="chatlist" id="chatList"></div><form class="chatform" id="chatForm" autocomplete="off"><input id="chatInput" maxlength="300" placeholder="Say something to the table…" aria-label="Chat message"><button type="submit" class="btn sm" id="chatSend">Send</button></form></div>
       <div class="side-card" id="sideCard"><div class="side-empty">Point at a card to see it here.</div></div>

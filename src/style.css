@@ -193,6 +193,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round
 .side-tabs { display: flex; align-items: center; gap: 2px; padding: 10px 10px 0; border-bottom: 1px solid var(--line); }
 .tab { background: none; border: 0; padding: 8px 12px; font: 600 12px var(--f-ui); color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab.on { color: var(--text); border-bottom-color: var(--blue); }
+
+.side-x { flex: none; width: 28px; height: 28px; margin: 0 0 6px 6px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); font: 500 18px/1 var(--f-ui); display: grid; place-items: center; } .side-x:hover { color: var(--text); border-color: var(--line-2); }
 #roomBar { margin-left: auto; display: flex; align-items: center; gap: 6px; padding-bottom: 6px; font: 600 11px var(--f-ui); color: var(--muted); }
 #roomBar .code { font: 800 12px var(--f-ui); letter-spacing: .16em; color: var(--text); background: rgba(79, 195, 255, .12); border: 1px solid rgba(79, 195, 255, .4); border-radius: 6px; padding: 3px 8px; }
 .side-body { overflow: auto; padding: 8px 10px; }
@@ -736,7 +738,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
   .opps .plate { left: 8px; top: 8px; gap: 8px; } .opps .pname { font-size: 13px; } .opps .cmdn { font-size: 11px; } .opps .bf { margin-top: 46px; }
   .table[data-opps="1"] .opps .avatar { width: 46px; height: 46px; } .table[data-opps="1"] .opps .bf { margin-top: 58px; }
   .minipiles { opacity: .55; transition: opacity .15s; } .seat:hover .minipiles { opacity: 1; }
-  .bf .zl { display: none; } .bf:has(.bf-empty) .zl { display: block; }
+  .bf .zl { display: none; } .bf:not(:has(.card)) .zl { display: block; }
   .bf-empty { font-size: 12px; color: rgba(255, 255, 255, .22); }
   .me .avatar { width: 46px; height: 46px; } .me .avatar .init { font-size: 17px; } .me .lifebadge { height: 26px; font-size: 15px; right: -14px; } .me .plate { left: 12px; top: 10px; } .me .bf { margin-top: 60px; }
   /* my seat: the battlefield runs to the bottom edge; the dock floats over it */

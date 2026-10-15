@@ -40,7 +40,7 @@ with sync_playwright() as p:
     pg.set_viewport_size({'width': 1000, 'height': 700}); pg.wait_for_timeout(300); pg.click('#sideBtn'); pg.wait_for_timeout(200)
     check('back to narrow with the panel hidden: one press shows it (classes were reset on the way down)', pg.evaluate("getComputedStyle(document.getElementById('side')).display") == 'grid')
     pg.set_viewport_size({'width': 1920, 'height': 1080}); pg.wait_for_timeout(300)
-    check('full screen at 1920×1080: panel visible, 300px wide', pg.evaluate("()=>{const r=document.getElementById('side').getBoundingClientRect(); return [getComputedStyle(document.getElementById('side')).display, r.width, r.right]}") == ['grid', 300, 1920])
+    check('full screen at 1920×1080: the panel comes back as it was last left on desktop (hidden), and one press shows it 300px wide', pg.evaluate("getComputedStyle(document.getElementById('side')).display") == 'none' and (pg.click('#sideBtn'), pg.wait_for_timeout(200), pg.evaluate("()=>{const r=document.getElementById('side').getBoundingClientRect(); return [getComputedStyle(document.getElementById('side')).display, r.width, r.right]}"))[-1] == ['grid', 300, 1920])
     check('no JS errors', not errs, str(errs)[:300])
     browser.close()
 fails = [r for r in results if not r[1]]

@@ -122,6 +122,8 @@ def setup(ctx):
     ctx.add_init_script("if (!window.__edhDeviceSet) { Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8, configurable: true }); Object.defineProperty(navigator, 'deviceMemory', { get: () => 8, configurable: true }); }")
     # suites that predate the opening-hand screen start with hands already kept; tests/opening.py opts back in
     ctx.add_init_script("if (!window.__edhOpening) window.__edhSkipOpening = true;")
+    # the desktop side panel is closed by default now; suites written with it open keep it open unless they opt out
+    ctx.add_init_script("if (!window.__edhSideDefault) { try { localStorage.setItem('edhclub-side', 'open'); } catch (e) {} }")
     pg = ctx.new_page(); pg.set_viewport_size({'width': 1440, 'height': 900})
     errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.route('https://api.scryfall.com/**', collection)

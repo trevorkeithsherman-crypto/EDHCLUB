@@ -1007,7 +1007,7 @@ function seatHTML(i, full) {
     <div class="pstat">${(maxCmd || p.poison || warn) ? `<button type="button" class="chip ${warn ? 'warn' : ''}" data-act="dmg" data-p="${i}">Cmdr ${maxCmd} · Poison ${p.poison}</button>` : ''}<span class="lifectl"><button type="button" data-act="life" data-p="${i}" data-d="-1" title="−1 (shift: −5)">−</button><button type="button" data-act="life" data-p="${i}" data-d="1" title="+1 (shift: +5)">+</button></span></div>
   </div></div>`;
   const crack = p.out ? `<svg class="crack ${Date.now() - p.outAt < 1200 ? 'fresh' : ''}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M52 0 L47 22 L58 35 L44 55 L55 72 L49 100"/><path d="M47 22 L30 30 L18 26"/><path d="M58 35 L76 40 L90 33"/><path d="M44 55 L26 62 L12 74"/><path d="M55 72 L72 80 L86 92"/></svg>` : '';
-  const empty = p.zones.battlefield.length ? '' : `<div class="bf-empty">${full ? (matchMedia('(hover: none)').matches ? 'Drag cards here. Tap a card for actions; press and hold a pile for more.' : 'Drag cards here. Click to tap, right-click for more.') : ''}</div>`;
+  const empty = '';   // no placeholder copy on an empty mat: the zone labels say what the space is
   let dock = '';
   if (full) {
     const slot = (z, label) => {
@@ -2482,7 +2482,13 @@ function bindUI() {
   $('#chatForm').onsubmit = (e) => { e.preventDefault(); const inp = $('#chatInput'); sendChat(inp.value); inp.value = ''; inp.focus(); };
   renderChat();
   $('#importBtn').onclick = () => { if (SPECTATE) { toast('Spectators don\'t bring a deck. Join with the table code to play.'); return; } importModal(S.view); };
-  $('#sideBtn').onclick = () => { const app = $('#app'); if (sideIsToggle()) app.classList.toggle('show-side'); else app.classList.toggle('no-side'); if (sideTab === 'chat' && (app.classList.contains('show-side') || !app.classList.contains('no-side'))) { chatUnread = 0; renderChat(); } requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); };
+  // Desktop: the panel is closed by default so hovering a card shows the big floating preview; open it from the rail
+  // (Panel) and the preview moves into the panel instead. The choice is remembered on this device. Phones/tablets keep their drawer.
+  const sidePref = () => { try { return localStorage.getItem('edhclub-side') === 'open'; } catch { return false; } };
+  const applySidePref = () => { if (!sideIsToggle()) $('#app').classList.toggle('no-side', !sidePref()); };
+  applySidePref();
+  $('#sideClose').onclick = () => $('#sideBtn').click();
+  $('#sideBtn').onclick = () => { const app = $('#app'); if (sideIsToggle()) app.classList.toggle('show-side'); else { app.classList.toggle('no-side'); try { localStorage.setItem('edhclub-side', app.classList.contains('no-side') ? 'closed' : 'open'); } catch { /* ignore */ } hideZoom(); } if (sideTab === 'chat' && (app.classList.contains('show-side') || !app.classList.contains('no-side'))) { chatUnread = 0; renderChat(); } requestAnimationFrame(() => { sizeBattlefields(); fanHand(); drawArrows(); }); };
   $('#newBtn').onclick = () => { if (SPECTATE) { toast('You\'re watching this table'); return; } if (net.active && !net.isHost) { toast('Only the host can start a new game'); return; } confirmModal('Life totals and the board reset. Everyone keeps their deck and draws a fresh 7.', 'New game', () => { if (net.active) net.send('all', { fn: 'newGame' }); newGame(true); render(); clearChat('New game — chat cleared.'); SFX.play('shuffle'); ensureArt(allNames(), { quiet: true }); }); };
   document.addEventListener('pointerdown', (e) => { if (S.sound) SFX.init(); onDown(e); });
   document.addEventListener('pointermove', onMove, { passive: false });
@@ -2499,7 +2505,7 @@ function bindUI() {
   const probe = new Image(); probe.onerror = () => { backOk = false; render(); }; probe.src = CARD_BACK;
   // crossing the panel breakpoint (window resize, full screen, zoom) resets the toggle so the panel never gets stuck hidden
   let wasToggle = sideIsToggle();
-  addEventListener('resize', () => requestAnimationFrame(() => { const t = sideIsToggle(); if (t !== wasToggle) { wasToggle = t; $('#app').classList.remove('show-side', 'no-side'); } sizeBattlefields(); fanHand(); drawArrows(); }));
+  addEventListener('resize', () => requestAnimationFrame(() => { const t = sideIsToggle(); if (t !== wasToggle) { wasToggle = t; $('#app').classList.remove('show-side', 'no-side'); applySidePref(); } sizeBattlefields(); fanHand(); drawArrows(); }));
   addEventListener('pagehide', () => { if (net.active) net.leave(); });
   $('#table').addEventListener('scroll', () => requestAnimationFrame(drawArrows), true);
   addEventListener('scroll', () => requestAnimationFrame(drawArrows));
